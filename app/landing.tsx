@@ -1,9 +1,11 @@
-import { View, Text, Image } from "react-native"
+import { View, Text, Image, Pressable } from "react-native"
 import React from "react"
 import Colors from "@/data/Colors"
 import Button from "@/components/Shared/Button"
+import { useRouter } from "expo-router"
 
 export default function LandingScreen() {
+  const router = useRouter()
   return (
     <View>
       <Image
@@ -43,19 +45,21 @@ export default function LandingScreen() {
 
         <Button
           text="Започни сега"
-          onPress={() => console.log("Button Press")}
+          onPress={() => router.push("/(auth)/SignUp")}
         />
 
-        <Text
-          style={{
-            fontSize: 16,
-            textAlign: "center",
-            marginTop: 7,
-            color: Colors.GRAY,
-          }}
-        >
-          Вече имате акаунт? Влезте тук!
-        </Text>
+        <Pressable onPress={() => router.push("/(auth)/SignIn")}>
+          <Text
+            style={{
+              fontSize: 16,
+              textAlign: "center",
+              marginTop: 7,
+              color: Colors.GRAY,
+            }}
+          >
+            Вече имате акаунт? Влезте тук!
+          </Text>
+        </Pressable>
       </View>
     </View>
   )
