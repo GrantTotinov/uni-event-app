@@ -30,6 +30,7 @@ export default function TextInputField({
         placeholder={label}
         style={styles.textInput}
         secureTextEntry={password}
+        onChangeText={onChangeText}
       />
     </View>
   )
