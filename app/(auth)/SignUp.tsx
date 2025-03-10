@@ -14,6 +14,8 @@ import Button from "@/components/Shared/Button"
 import * as ImagePicker from "expo-image-picker"
 import { createUserWithEmailAndPassword } from "firebase/auth"
 import { auth } from "@/configs/FirebaseConfig"
+import { upload } from "cloudinary-react-native"
+import { cld, options } from "@/configs/CloudinaryConfig"
 
 export default function SignUp() {
   const [profileImage, setProfileImage] = useState<string | undefined>("")
@@ -30,6 +32,18 @@ export default function SignUp() {
       .then(async (userCredentials) => {
         console.log(userCredentials)
         // Upload Profile Image
+        await upload(cld, {
+          file: profileImage,
+          options: options,
+          callback: async (error: any, response: any) => {
+            if (error) {
+              console.log(error)
+            }
+            if (response) {
+              console.log(response)
+            }
+          },
+        })
 
         // Save to Database
       })
