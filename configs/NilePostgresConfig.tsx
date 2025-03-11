@@ -1,4 +1,4 @@
-import { Client } from "node-postgres";
+import { Client } from "node-postgres"
 
 export const client = new Client({
   user: process.env.EXPO_PUBLIC_DB_USERNAME,
@@ -6,4 +6,4 @@ export const client = new Client({
   host: "us-west-2.db.thenile.dev",
   port: 5432,
   database: "uni_event_app",
-});
+})

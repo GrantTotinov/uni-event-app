@@ -16,6 +16,14 @@ export default function RootLayout() {
           headerTitle: "",
         }}
       />
+
+      <Stack.Screen
+        name="(auth)/SignIn"
+        options={{
+          headerTransparent: true,
+          headerTitle: "",
+        }}
+      />
     </Stack>
   )
 }
