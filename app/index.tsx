@@ -1,13 +1,14 @@
 import { auth } from "@/configs/FirebaseConfig"
 import { AuthContext } from "@/context/AuthContext"
 import axios from "axios"
-import { Redirect } from "expo-router"
+import { Redirect, useRouter } from "expo-router"
 import { onAuthStateChanged } from "firebase/auth"
 import { useContext } from "react"
-import { Text, View } from "react-native"
+import { ActivityIndicator, Text, View } from "react-native"
 
 export default function Index() {
   const { user, setUser } = useContext(AuthContext)
+  const router = useRouter()
   onAuthStateChanged(auth, async (userData) => {
     //console.log(userData?.email)
     if (userData && userData?.email) {
@@ -16,6 +17,9 @@ export default function Index() {
       )
       console.log(result.data)
       setUser(result?.data)
+      router.replace("/(tabs)/Home")
+    } else {
+      router.replace("/landing")
     }
   })
   return (
@@ -26,7 +30,7 @@ export default function Index() {
         alignItems: "center",
       }}
     >
-      <Redirect href={"/landing"} />
+      <ActivityIndicator />
     </View>
   )
 }

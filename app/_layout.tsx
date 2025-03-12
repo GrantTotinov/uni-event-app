@@ -34,6 +34,12 @@ export default function RootLayout() {
             headerTitle: "",
           }}
         />
+        <Stack.Screen
+          name="(tabs)"
+          options={{
+            headerShown: false,
+          }}
+        />
       </Stack>
     </AuthContext.Provider>
   )
