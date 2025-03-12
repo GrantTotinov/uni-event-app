@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   ToastAndroid,
 } from "react-native"
-import React, { useState } from "react"
+import React, { useContext, useState } from "react"
 import Ionicons from "@expo/vector-icons/Ionicons"
 import Colors from "@/data/Colors"
 import TextInputField from "@/components/Shared/TextInputField"
@@ -19,6 +19,7 @@ import { cld, options } from "@/configs/CloudinaryConfig"
 import axios from "axios"
 import { name } from "@cloudinary/url-gen/actions/namedTransformation"
 import { useRouter } from "expo-router"
+import { AuthContext } from "@/context/AuthContext"
 
 export default function SignUp() {
   const [profileImage, setProfileImage] = useState<string | undefined>("")
@@ -27,8 +28,9 @@ export default function SignUp() {
   const [password, setPassword] = useState<string | undefined>("")
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const { user, setUser } = useContext(AuthContext)
   const onBtnPress = () => {
-    if (!email || !password || !fullName) {
+    if (!email || !password || !fullName || !profileImage) {
       ToastAndroid.show("Моля попълнете всички полета", ToastAndroid.BOTTOM)
       return
     }
@@ -46,16 +48,27 @@ export default function SignUp() {
             }
             if (response) {
               console.log(response?.url)
-              const result = await axios.post(
-                process.env.EXPO_PUBLIC_HOST_URL + "/user",
-                {
+              try {
+                const result = await axios.post(
+                  process.env.EXPO_PUBLIC_HOST_URL + "/user",
+                  {
+                    name: fullName,
+                    email: email,
+                    image: response?.url ?? "",
+                  }
+                )
+                console.log(result)
+                setUser({
                   name: fullName,
                   email: email,
-                  image: response?.url,
-                }
-              )
-              console.log(result)
-              router.push("/landing")
+                  image: response?.url ?? "",
+                })
+                router.push("/landing")
+                setLoading(false)
+              } catch (e) {
+                console.log(e)
+                setLoading(false)
+              }
             }
           },
         })
