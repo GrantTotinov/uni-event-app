@@ -1,8 +1,40 @@
-import { View, Text, TextInput, StyleSheet, Image } from "react-native"
-import React from "react"
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+} from "react-native"
+import React, { useState } from "react"
 import Colors from "@/data/Colors"
+import DropDownPicker from "react-native-dropdown-picker"
+import Button from "../Shared/Button"
+import * as ImagePicker from "expo-image-picker"
 
 export default function WritePost() {
+  const [selectedImage, setSelectedImage] = useState<string | undefined>()
+  const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [value, setValue] = useState(null)
+  const [item, setItems] = useState([
+    { label: "Public", value: "Public" },
+    { label: "ABC Club", value: "ABC Club" },
+  ])
+  const onPostBtnClick = () => {}
+  const pickImage = async () => {
+    // No permissions request is necessary for launching the image library
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [4, 4],
+      quality: 0.5,
+    })
+
+    if (!result.canceled) {
+      setSelectedImage(result.assets[0].uri)
+    }
+  }
   return (
     <View>
       <TextInput
@@ -13,9 +45,38 @@ export default function WritePost() {
         maxLength={1000}
       />
 
-      <Image
-        source={require("./../../assets/images/image.png")}
-        style={styles.image}
+      <TouchableOpacity onPress={pickImage}>
+        {selectedImage ? (
+          <Image source={{ uri: selectedImage }} style={styles.image} />
+        ) : (
+          <Image
+            source={require("./../../assets/images/image.png")}
+            style={styles.image}
+          />
+        )}
+      </TouchableOpacity>
+      <View
+        style={{
+          marginTop: 15,
+        }}
+      >
+        <DropDownPicker
+          items={item}
+          open={open}
+          value={value}
+          setOpen={setOpen}
+          setValue={setValue}
+          setItems={setItems}
+          style={{
+            borderWidth: 0,
+            elevation: 3,
+          }}
+        />
+      </View>
+      <Button
+        text="Публикувай"
+        onPress={() => onPostBtnClick()}
+        loading={loading}
       />
     </View>
   )
@@ -36,5 +97,6 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 15,
     marginTop: 15,
+    marginLeft: -10,
   },
 })
