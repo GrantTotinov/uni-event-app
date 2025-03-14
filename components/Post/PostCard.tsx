@@ -1,7 +1,9 @@
-import { View, Text, Image } from "react-native"
+import { View, Text, Image, StyleSheet } from "react-native"
 import React from "react"
 import UserAvatar from "./UserAvatar"
 import Colors from "@/data/Colors"
+import AntDesign from "@expo/vector-icons/AntDesign"
+import FontAwesome from "@expo/vector-icons/FontAwesome"
 
 export default function PostCard({ post }: any) {
   return (
@@ -38,6 +40,54 @@ export default function PostCard({ post }: any) {
           }}
         />
       )}
+      <View
+        style={{
+          marginTop: 10,
+          display: "flex",
+          flexDirection: "row",
+          gap: 20,
+          alignItems: "center",
+        }}
+      >
+        <View style={styles.subContainer}>
+          <AntDesign name="like2" size={24} color="black" />
+          <Text
+            style={{
+              fontSize: 17,
+              color: Colors.GRAY,
+            }}
+          >
+            25
+          </Text>
+        </View>
+        <View style={styles.subContainer}>
+          <FontAwesome name="commenting-o" size={24} color="black" />
+          <Text
+            style={{
+              fontSize: 17,
+              color: Colors.GRAY,
+            }}
+          >
+            25
+          </Text>
+        </View>
+      </View>
+      <Text
+        style={{
+          marginTop: 7,
+          color: Colors.GRAY,
+        }}
+      >
+        Виж всички коментари
+      </Text>
     </View>
   )
 }
+const styles = StyleSheet.create({
+  subContainer: {
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+})

@@ -2,6 +2,7 @@ import { View, Text, Image } from "react-native"
 import React from "react"
 import Colors from "@/data/Colors"
 import Ionicons from "@expo/vector-icons/Ionicons"
+import moment from "moment"
 
 type USER_AVATAR = {
   name: string
@@ -49,7 +50,7 @@ export default function UserAvatar({ name, image, date }: USER_AVATAR) {
               color: Colors.GRAY,
             }}
           >
-            {date}
+            {moment(date).fromNow()}
           </Text>
         </View>
       </View>

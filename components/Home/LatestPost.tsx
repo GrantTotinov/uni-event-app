@@ -7,17 +7,19 @@ import PostList from "../Post/PostList"
 export default function LatestPost() {
   const [selectedTab, setSelectedTab] = useState(0)
   const [posts, setPosts] = useState()
+  const [loading, setLoading] = useState(false)
   useEffect(() => {
     GetPosts()
   })
   const GetPosts = async () => {
     // Fetch all post from the database
+    setLoading(true)
     const result = await axios.get(
       process.env.EXPO_PUBLIC_HOST_URL +
         "/post?visibleIn=Public&orderField=post.id"
     )
-    console.log(result.data)
     setPosts(result.data)
+    setLoading(false)
   }
 
   return (
@@ -62,7 +64,7 @@ export default function LatestPost() {
           </Text>
         </Pressable>
       </View>
-      <PostList posts={posts} />
+      <PostList posts={posts} loading={loading} onRefresh={GetPosts} />
     </View>
   )
 }
