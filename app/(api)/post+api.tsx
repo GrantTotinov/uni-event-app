@@ -12,3 +12,19 @@ export async function POST(request: Request) {
 
   return Response.json(result)
 }
+
+export async function GET(request: Request) {
+  const visibleIn = new URL(request.url).searchParams.get("visibleIn")
+  const orderField = new URL(request.url).searchParams.get("orderField")
+
+  await client.connect()
+
+  const result = await client.query(`
+    SELECT * FROM post
+    INNER JOIN users
+    on post.createdby=users.email
+    WHERE visablein='${visibleIn}' ORDER BY ${orderField} DESC ;
+    `)
+  await client.end()
+  return Response.json(result.rows)
+}
