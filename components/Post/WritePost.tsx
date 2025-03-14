@@ -5,23 +5,71 @@ import {
   StyleSheet,
   Image,
   TouchableOpacity,
+  ToastAndroid,
 } from "react-native"
-import React, { useState } from "react"
+import React, { useContext, useState } from "react"
 import Colors from "@/data/Colors"
 import DropDownPicker from "react-native-dropdown-picker"
 import Button from "../Shared/Button"
 import * as ImagePicker from "expo-image-picker"
+import { upload } from "cloudinary-react-native"
+import { cld, options } from "@/configs/CloudinaryConfig"
+import axios from "axios"
+import { AuthContext } from "@/context/AuthContext"
+import { useRouter } from "expo-router"
 
 export default function WritePost() {
   const [selectedImage, setSelectedImage] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState(null)
+  const [content, setContent] = useState<string | null>()
+  const { user } = useContext(AuthContext)
+  const router = useRouter()
   const [item, setItems] = useState([
     { label: "Public", value: "Public" },
     { label: "ABC Club", value: "ABC Club" },
   ])
-  const onPostBtnClick = () => {}
+  const onPostBtnClick = async () => {
+    if (!content) {
+      ToastAndroid.show(
+        "Полето е празно. Моля въведете текст",
+        ToastAndroid.BOTTOM
+      )
+      return
+    }
+    setLoading(true)
+    // Upload image
+    let uploadImageUrl = ""
+    if (selectedImage) {
+      const resultData: any = await new Promise(async (resolve, reject) => {
+        await upload(cld, {
+          file: selectedImage,
+          options: options,
+          callback: (error: any, response: any) => {
+            if (error) {
+              reject(error)
+            } else {
+              resolve(response)
+            }
+          },
+        })
+      })
+      uploadImageUrl = resultData && resultData?.url
+    }
+    const result = await axios.post(
+      process.env.EXPO_PUBLIC_HOST_URL + "/post",
+      {
+        content: content,
+        imageUrl: uploadImageUrl,
+        visibleIn: value,
+        email: user.email,
+      }
+    )
+    console.log(result.data)
+    setLoading(false)
+    router.replace("/(tabs)/Home")
+  }
   const pickImage = async () => {
     // No permissions request is necessary for launching the image library
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -43,6 +91,7 @@ export default function WritePost() {
         multiline={true}
         numberOfLines={5}
         maxLength={1000}
+        onChangeText={(value) => setContent(value)}
       />
 
       <TouchableOpacity onPress={pickImage}>
