@@ -11,7 +11,7 @@ import Colors from "@/data/Colors"
 type ButtonProps = {
   text: string
   onPress: () => void
-  loading: boolean
+  loading?: boolean
 }
 
 export default function Button({

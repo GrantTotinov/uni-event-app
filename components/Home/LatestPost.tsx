@@ -10,7 +10,7 @@ export default function LatestPost() {
   const [loading, setLoading] = useState(false)
   useEffect(() => {
     GetPosts()
-  })
+  }, [])
   const GetPosts = async () => {
     // Fetch all post from the database
     setLoading(true)
