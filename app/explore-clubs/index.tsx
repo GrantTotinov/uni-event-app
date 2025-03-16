@@ -1,10 +1,11 @@
 import { View, Text, FlatList } from "react-native"
-import React, { useEffect, useState } from "react"
+import React, { useContext, useEffect, useState } from "react"
 import axios from "axios"
 import ClubCard from "@/components/Clubs/ClubCard"
 import Button from "@/components/Shared/Button"
 import Colors from "@/data/Colors"
 import { useRouter } from "expo-router"
+import { AuthContext } from "@/context/AuthContext"
 
 export type CLUB = {
   id: number
@@ -12,10 +13,14 @@ export type CLUB = {
   club_logo: string
   about: string
   createdon: string
+  isFollowed: boolean
+  refreshData: () => void
 }
 
 export default function ExploreClubs() {
   const router = useRouter()
+  const { user } = useContext(AuthContext)
+  const [followedClub, setFollowedClub] = useState<any>()
   const onAddClubBtnClick = () => {}
   const [clubList, setClubList] = useState<CLUB[] | []>([])
   useEffect(() => {
@@ -25,6 +30,19 @@ export default function ExploreClubs() {
     const result = await axios.get(process.env.EXPO_PUBLIC_HOST_URL + "/clubs")
     console.log(result.data)
     setClubList(result.data)
+    GetUserFollowedClubs()
+  }
+  const GetUserFollowedClubs = async () => {
+    const result = await axios.get(
+      process.env.EXPO_PUBLIC_HOST_URL + "/clubfollower?u_email=" + user?.email
+    )
+    console.log(result?.data)
+    setFollowedClub(result?.data)
+  }
+  const isFollowed = (clubId: number) => {
+    const record =
+      followedClub && followedClub?.find((item: any) => item.club_id == clubId)
+    return record ? true : false
   }
   return (
     <View>
@@ -54,7 +72,13 @@ export default function ExploreClubs() {
       <FlatList
         numColumns={2}
         data={clubList}
-        renderItem={({ item: CLUB, index }) => <ClubCard {...CLUB} />}
+        renderItem={({ item: CLUB, index }) => (
+          <ClubCard
+            {...CLUB}
+            isFollowed={isFollowed(CLUB.id)}
+            refreshData={GetAllClubs}
+          />
+        )}
       />
     </View>
   )

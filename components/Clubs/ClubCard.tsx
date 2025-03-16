@@ -1,16 +1,41 @@
 import { View, Text, Image } from "react-native"
-import React from "react"
+import React, { useContext, useState } from "react"
 import { CLUB } from "@/app/explore-clubs"
 import Colors from "@/data/Colors"
 import Button from "../Shared/Button"
+import { AuthContext } from "@/context/AuthContext"
+import axios from "axios"
 
 export default function ClubCard(club: CLUB) {
-  const onFollowBtnClick = () => {}
+  const { user } = useContext(AuthContext)
+  const [loading, setLoading] = useState(false)
+  const onFollowBtnClick = async () => {
+    setLoading(true)
+    if (club.isFollowed) {
+      const result = await axios.delete(
+        process.env.EXPO_PUBLIC_HOST_URL +
+          "/clubfollower?u_email=" +
+          user?.email +
+          "&club_id=" +
+          club.id
+      )
+    } else {
+      const result = await axios.post(
+        process.env.EXPO_PUBLIC_HOST_URL + "/clubfollower",
+        {
+          u_email: user?.email,
+          clubId: club?.id,
+        }
+      )
+    }
+    club.refreshData()
+    setLoading(false)
+  }
   return (
     <View
       style={{
         flex: 1,
-        padding: 10,
+        padding: 15,
         backgroundColor: Colors.WHITE,
         margin: 10,
         display: "flex",
@@ -42,7 +67,13 @@ export default function ClubCard(club: CLUB) {
       >
         {club.about}
       </Text>
-      <Button text="Последвай" onPress={() => onFollowBtnClick()} />
+
+      <Button
+        text={club.isFollowed ? "Отпоследвай" : "Последвай"}
+        onPress={() => onFollowBtnClick()}
+        outline={club.isFollowed}
+        loading={loading}
+      />
     </View>
   )
 }

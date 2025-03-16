@@ -10,7 +10,7 @@ export async function GET(request: Response) {
 }
 
 export async function POST(request: Response) {
-  const { imageUrl, clubName, about, email } = await request.json()
+  const { imageUrl, clubName, about } = await request.json()
   await client.connect()
   const result = await client.query(`
     insert into clubs values

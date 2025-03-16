@@ -14,10 +14,13 @@ import Button from "@/components/Shared/Button"
 import { upload } from "cloudinary-react-native"
 import { cld, options } from "@/configs/CloudinaryConfig"
 import axios from "axios"
+import { useRouter } from "expo-router"
 
 export default function ClubInfo() {
   const [name, setName] = useState<string | null>()
   const [about, setAbout] = useState<string | null>()
+  const [loading, setLoading] = useState(false)
+  const router = useRouter()
   const [selectedImage, setSelectedImage] = useState<string | undefined>()
   const onAddClubBtnClick = async () => {
     if (!name) {
@@ -28,6 +31,7 @@ export default function ClubInfo() {
       ToastAndroid.show("Моля попълнете полетата", ToastAndroid.BOTTOM)
       return
     }
+    setLoading(true)
     // Upload Image
     let uploadImageUrl = ""
     if (selectedImage) {
@@ -55,6 +59,8 @@ export default function ClubInfo() {
       }
     )
     console.log(result.data)
+    setLoading(false)
+    router.replace("/(tabs)/Club")
   }
   const pickImage = async () => {
     // No permissions request is necessary for launching the image library
@@ -104,7 +110,11 @@ export default function ClubInfo() {
         onChangeText={(value) => setAbout(value)}
       />
 
-      <Button text=" + Създай" onPress={() => onAddClubBtnClick()} />
+      <Button
+        text=" + Създай"
+        onPress={() => onAddClubBtnClick()}
+        loading={loading}
+      />
     </View>
   )
 }
