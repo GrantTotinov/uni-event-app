@@ -4,6 +4,7 @@ import axios from "axios"
 import ClubCard from "@/components/Clubs/ClubCard"
 import Button from "@/components/Shared/Button"
 import Colors from "@/data/Colors"
+import { useRouter } from "expo-router"
 
 export type CLUB = {
   id: number
@@ -14,6 +15,7 @@ export type CLUB = {
 }
 
 export default function ExploreClubs() {
+  const router = useRouter()
   const onAddClubBtnClick = () => {}
   const [clubList, setClubList] = useState<CLUB[] | []>([])
   useEffect(() => {
@@ -47,7 +49,7 @@ export default function ExploreClubs() {
         >
           Създайте нов Клуб / Група
         </Text>
-        <Button text="+ Добави" onPress={() => onAddClubBtnClick()} />
+        <Button text="+ Добави" onPress={() => router.push("/add-club")} />
       </View>
       <FlatList
         numColumns={2}

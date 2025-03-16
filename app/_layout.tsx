@@ -52,6 +52,12 @@ export default function RootLayout() {
             headerTitle: "Открии Клубове / Групи",
           }}
         />
+        <Stack.Screen
+          name="add-club/index"
+          options={{
+            headerTitle: "Създай Клуб / Група",
+          }}
+        />
       </Stack>
     </AuthContext.Provider>
   )

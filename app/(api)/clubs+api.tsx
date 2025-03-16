@@ -8,3 +8,15 @@ export async function GET(request: Response) {
   await client.end()
   return Response.json(result.rows)
 }
+
+export async function POST(request: Response) {
+  const { imageUrl, clubName, about, email } = await request.json()
+  await client.connect()
+  const result = await client.query(`
+    insert into clubs values
+    (DEFAULT,'${clubName}','${imageUrl}','${about}',DEFAULT)
+    `)
+  await client.end()
+
+  return Response.json(result.rows)
+}
