@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ToastAndroid,
 } from "react-native"
-import React, { useContext, useState } from "react"
+import React, { useContext, useEffect, useState } from "react"
 import Colors from "@/data/Colors"
 import DropDownPicker from "react-native-dropdown-picker"
 import Button from "../Shared/Button"
@@ -26,10 +26,11 @@ export default function WritePost() {
   const [content, setContent] = useState<string | null>()
   const { user } = useContext(AuthContext)
   const router = useRouter()
-  const [item, setItems] = useState([
-    { label: "Public", value: "Public" },
-    { label: "ABC Club", value: "ABC Club" },
-  ])
+  const [item, setItems] = useState([{ label: "ПУБЛИЧНО", value: 0 }])
+
+  useEffect(() => {
+    user && GetUserFollowedClubs()
+  }, [user])
   const onPostBtnClick = async () => {
     if (!content) {
       ToastAndroid.show(
@@ -82,6 +83,18 @@ export default function WritePost() {
     if (!result.canceled) {
       setSelectedImage(result.assets[0].uri)
     }
+  }
+  const GetUserFollowedClubs = async () => {
+    const result = await axios.get(
+      process.env.EXPO_PUBLIC_HOST_URL + "/clubfollower?u_email=" + user?.email
+    )
+    console.log(result?.data)
+    const data = result.data?.map((item: any) => ({
+      label: item?.name,
+      value: item.club_id,
+    }))
+    console.log(data)
+    setItems((prev) => [...prev, ...data])
   }
   return (
     <View>

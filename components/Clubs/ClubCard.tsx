@@ -5,6 +5,7 @@ import Colors from "@/data/Colors"
 import Button from "../Shared/Button"
 import { AuthContext } from "@/context/AuthContext"
 import axios from "axios"
+import { center } from "@cloudinary/url-gen/qualifiers/textAlignment"
 
 export default function ClubCard(club: CLUB) {
   const { user } = useContext(AuthContext)
@@ -52,9 +53,13 @@ export default function ClubCard(club: CLUB) {
         }}
       />
       <Text
+        numberOfLines={2}
         style={{
           fontSize: 15,
           fontWeight: "bold",
+          minHeight: 40,
+          textAlign: "center",
+          minWidth: 180,
         }}
       >
         {club.name}
@@ -63,6 +68,7 @@ export default function ClubCard(club: CLUB) {
         numberOfLines={2}
         style={{
           color: Colors.GRAY,
+          minHeight: 40,
         }}
       >
         {club.about}

@@ -15,8 +15,7 @@ export default function LatestPost() {
     // Fetch all post from the database
     setLoading(true)
     const result = await axios.get(
-      process.env.EXPO_PUBLIC_HOST_URL +
-        "/post?visibleIn=Public&orderField=post.id"
+      process.env.EXPO_PUBLIC_HOST_URL + "/post?club=0&orderField=post.id"
     )
     setPosts(result.data)
     setLoading(false)

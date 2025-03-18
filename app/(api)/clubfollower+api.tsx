@@ -15,7 +15,10 @@ export async function GET(request: Request) {
   const u_email = new URL(request.url).searchParams.get("u_email")
   await client.connect()
   const result = await client.query(`
-        select * from clubfollowers where u_email ='${u_email}'
+        select clubs.name,clubfollowers.* from clubs
+        inner join clubfollowers
+        on clubs.id=clubfollowers.club_id
+        where clubfollowers.u_email='${u_email}'
         `)
   await client.end()
   return Response.json(result.rows)

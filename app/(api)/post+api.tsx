@@ -5,7 +5,7 @@ export async function POST(request: Request) {
 
   await client.connect()
   const result = await client.query(
-    `insert into post values(DEFAULT,'${content}','${imageUrl}','${visibleIn}',DEFAULT,'${email}')
+    `insert into post values(DEFAULT,'${content}','${imageUrl}',DEFAULT,'${email}',${visibleIn})
     `
   )
   await client.end()
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const visibleIn = new URL(request.url).searchParams.get("visibleIn")
+  const club = new URL(request.url).searchParams.get("club")
   const orderField = new URL(request.url).searchParams.get("orderField")
 
   await client.connect()
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     SELECT * FROM post
     INNER JOIN users
     on post.createdby=users.email
-    WHERE visablein='${visibleIn}' ORDER BY ${orderField} DESC ;
+    WHERE club in (${club}) ORDER BY ${orderField} DESC ;
     `)
   await client.end()
   return Response.json(result.rows)
