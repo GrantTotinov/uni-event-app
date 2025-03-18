@@ -58,6 +58,12 @@ export default function RootLayout() {
             headerTitle: "Създай Клуб / Група",
           }}
         />
+        <Stack.Screen
+          name="add-event/index"
+          options={{
+            headerTitle: "Създай Ново Събитие",
+          }}
+        />
       </Stack>
     </AuthContext.Provider>
   )
