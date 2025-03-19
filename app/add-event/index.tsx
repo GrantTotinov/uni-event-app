@@ -1,4 +1,11 @@
-import { View, Text, TouchableOpacity, Image, StyleSheet } from "react-native"
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  Alert,
+} from "react-native"
 import * as ImagePicker from "expo-image-picker"
 import React, { useContext, useState } from "react"
 import Colors from "@/data/Colors"
@@ -8,6 +15,10 @@ import DateTimePicker from "@react-native-community/datetimepicker"
 import RNDateTimePicker from "@react-native-community/datetimepicker"
 import Button from "@/components/Shared/Button"
 import moment from "moment"
+import axios from "axios"
+import { cld, options } from "@/configs/CloudinaryConfig"
+import { upload } from "cloudinary-react-native"
+import { useRouter } from "expo-router"
 
 export default function AddEvent() {
   const [image, setImage] = useState<string>()
@@ -16,10 +27,12 @@ export default function AddEvent() {
   const [link, setLink] = useState<string>()
   const [time, setTime] = useState("Избери час")
   const [date, setDate] = useState("Избери дата")
+  const [selectedTime, setSelectedTime] = useState<string>()
   const [selectedDate, setSelectedDate] = useState<string>()
   const [openTimePicker, setOpenTimePicker] = useState(false)
   const [openDatePicker, setOpenDatePicker] = useState(false)
   const { user } = useContext(AuthContext)
+  const router = useRouter()
   const pickImage = async () => {
     // No permissions request is necessary for launching the image library
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -33,15 +46,46 @@ export default function AddEvent() {
       setImage(result.assets[0].uri)
     }
   }
-  const onTimeChange = (event: any, selectedDate: any) => {
+  const onTimeChange = (event: any, selectedTime: any) => {
     setOpenTimePicker(false)
-    console.log(selectedDate)
-    setTime(moment(selectedDate).format("hh:mm a"))
+    console.log(selectedTime)
+    setSelectedTime(selectedTime)
+    setTime(moment(selectedTime).format("hh:mm a"))
   }
   const onDateChange = (event: any, selectedDate: any) => {
     setOpenDatePicker(false)
     console.log(selectedDate)
+    setSelectedDate(selectedDate)
     setDate(moment(selectedDate).format("MMMM Do YYYY"))
+  }
+  const onSubmitBtnPress = async () => {
+    upload(cld, {
+      file: image,
+      options: options,
+      callback: async (error, resp) => {
+        if (resp) {
+          const result = await axios.post(
+            process.env.EXPO_PUBLIC_HOST_URL + "/events",
+            {
+              eventName: eventName,
+              bannerUrl: resp.url,
+              location: location,
+              link: link,
+              eventDate: selectedDate,
+              eventTime: selectedDate,
+              email: user?.email,
+            }
+          )
+          console.log(result)
+          Alert.alert("Чудесно!", "Ново събитие беше добавено!", [
+            {
+              text: "OK",
+              onPress: () => router.replace("/Event"),
+            },
+          ])
+        }
+      },
+    })
   }
   return (
     <View
@@ -75,10 +119,10 @@ export default function AddEvent() {
         label="Име на събитието"
         onChangeText={(v) => setEventName(v)}
       />
-      <TextInputField label="Локация" onChangeText={(v) => setEventName(v)} />
+      <TextInputField label="Локация" onChangeText={(v) => setLocation(v)} />
       <TextInputField
         label="Линк за детайли"
-        onChangeText={(v) => setEventName(v)}
+        onChangeText={(v) => setLink(v)}
       />
       <View>
         <Button
@@ -106,6 +150,7 @@ export default function AddEvent() {
           onChange={onDateChange}
         />
       )}
+      <Button text="Създай" onPress={() => onSubmitBtnPress()} />
     </View>
   )
 }
