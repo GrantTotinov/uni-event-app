@@ -15,12 +15,14 @@ import DateTimePicker from "@react-native-community/datetimepicker"
 import RNDateTimePicker from "@react-native-community/datetimepicker"
 import Button from "@/components/Shared/Button"
 import moment from "moment"
+import "moment/locale/bg"
 import axios from "axios"
 import { cld, options } from "@/configs/CloudinaryConfig"
 import { upload } from "cloudinary-react-native"
 import { useRouter } from "expo-router"
 
 export default function AddEvent() {
+  moment.locale("bg")
   const [image, setImage] = useState<string>()
   const [eventName, setEventName] = useState<string>()
   const [location, setLocation] = useState<string>()
@@ -31,8 +33,10 @@ export default function AddEvent() {
   const [selectedDate, setSelectedDate] = useState<string>()
   const [openTimePicker, setOpenTimePicker] = useState(false)
   const [openDatePicker, setOpenDatePicker] = useState(false)
+  const [dayInBulgarian, setDayInBulgarian] = useState<string>("")
   const { user } = useContext(AuthContext)
   const router = useRouter()
+  //let dayInBulgarian = ""
   const pickImage = async () => {
     // No permissions request is necessary for launching the image library
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -50,15 +54,22 @@ export default function AddEvent() {
     setOpenTimePicker(false)
     console.log(selectedTime)
     setSelectedTime(selectedTime)
-    setTime(moment(selectedTime).format("hh:mm a"))
+    setTime(moment(selectedTime).format("HH:mm"))
   }
   const onDateChange = (event: any, selectedDate: any) => {
     setOpenDatePicker(false)
     console.log(selectedDate)
     setSelectedDate(selectedDate)
-    setDate(moment(selectedDate).format("MMMM Do YYYY"))
+    const dayInBulgarian = moment(selectedDate).format("dddd")
+    setDayInBulgarian(dayInBulgarian)
+    //setDate(moment(selectedDate).format("MMMM Do YYYY"))
+    setDate(`${dayInBulgarian},${moment(selectedDate).format("YYYY-MM-DD")}`)
   }
   const onSubmitBtnPress = async () => {
+    if (!eventName || !image || !location || !date || !time) {
+      Alert.alert("Моля въведете всички полета")
+      return
+    }
     upload(cld, {
       file: image,
       options: options,
@@ -71,8 +82,10 @@ export default function AddEvent() {
               bannerUrl: resp.url,
               location: location,
               link: link,
-              eventDate: selectedDate,
-              eventTime: selectedDate,
+              eventDate: `${dayInBulgarian},${moment(selectedDate).format(
+                "YYYY-MM-DD"
+              )}`,
+              eventTime: moment(selectedTime).format("HH:mm"),
               email: user?.email,
             }
           )
