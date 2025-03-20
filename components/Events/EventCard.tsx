@@ -1,9 +1,11 @@
-import { View, Text, Image, StyleSheet } from "react-native"
-import React from "react"
+import { View, Text, Image, StyleSheet, Alert } from "react-native"
+import React, { useContext } from "react"
 import Colors from "@/data/Colors"
 import Entypo from "@expo/vector-icons/Entypo"
 import Ionicons from "@expo/vector-icons/Ionicons"
 import Button from "../Shared/Button"
+import axios from "axios"
+import { AuthContext } from "@/context/AuthContext"
 
 type EVENT = {
   id: number
@@ -18,6 +20,35 @@ type EVENT = {
 }
 
 export default function EventCard(event: EVENT) {
+  const { user } = useContext(AuthContext)
+  const RegisterForEvent = () => {
+    Alert.alert("Регистрация за събитие!", "Потвърди регистрацията!", [
+      {
+        text: "Потвърждавам",
+        onPress: () => {
+          SaveEventRegistration()
+        },
+      },
+      {
+        text: "Отказ",
+        style: "cancel",
+      },
+    ])
+  }
+
+  const SaveEventRegistration = async () => {
+    const result = await axios.post(
+      process.env.EXPO_PUBLIC_HOST_URL + "/event-register",
+      {
+        eventId: event.id,
+        userEmail: user?.email,
+      }
+    )
+    console.log(result)
+    if (result) {
+      Alert.alert("Чудесно!", "Успешно се регистрирахте за събитието!")
+    }
+  }
   return (
     <View
       style={{
@@ -81,7 +112,7 @@ export default function EventCard(event: EVENT) {
         }}
       >
         <Button text="Сподели" outline={true} onPress={() => console.log()} />
-        <Button text="Регистрирай се" onPress={() => console.log()} />
+        <Button text="Регистрирай се" onPress={() => RegisterForEvent()} />
       </View>
     </View>
   )
