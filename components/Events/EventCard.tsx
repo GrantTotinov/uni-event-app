@@ -6,6 +6,8 @@ import Ionicons from "@expo/vector-icons/Ionicons"
 import Button from "../Shared/Button"
 import axios from "axios"
 import { AuthContext } from "@/context/AuthContext"
+import * as FileSystem from "expo-file-system"
+import * as Sharing from "expo-sharing"
 
 type EVENT = {
   id: number
@@ -17,6 +19,7 @@ type EVENT = {
   event_time: string
   createdby: string
   username: string
+  isRegistered: boolean
 }
 
 export default function EventCard(event: EVENT) {
@@ -47,6 +50,26 @@ export default function EventCard(event: EVENT) {
     console.log(result)
     if (result) {
       Alert.alert("Чудесно!", "Успешно се регистрирахте за събитието!")
+    }
+  }
+  const shareImage = async () => {
+    try {
+      const fileUri = (await FileSystem.documentDirectory) + "shared-image.jpg"
+
+      const { uri } = await FileSystem.downloadAsync(event.bannerurl, fileUri)
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          dialogTitle: "Погледни новото интересно събитие",
+          mimeType: "image/jpeg",
+          UTI: "public.jpeg",
+        })
+      } else {
+        Alert.alert("Споделянето не е позволено на това устройство")
+      }
+    } catch (error) {
+      console.error("Error sharing image", error)
+      Alert.alert("Грешка", "Неуспешно споделяне на снимката")
     }
   }
   return (
@@ -104,16 +127,33 @@ export default function EventCard(event: EVENT) {
           {event.event_date} от {event.event_time}
         </Text>
       </View>
-      <View
-        style={{
-          display: "flex",
-          flexDirection: "row",
-          justifyContent: "space-between",
-        }}
-      >
-        <Button text="Сподели" outline={true} onPress={() => console.log()} />
-        <Button text="Регистрирай се" onPress={() => RegisterForEvent()} />
-      </View>
+      {!event.isRegistered ? (
+        <View
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            justifyContent: "space-between",
+          }}
+        >
+          <Button text="Сподели" outline={true} onPress={() => shareImage()} />
+          <Button text="Регистрирай се" onPress={() => RegisterForEvent()} />
+        </View>
+      ) : (
+        <View
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            justifyContent: "space-between",
+          }}
+        >
+          <Button text="Сподели" outline={true} onPress={() => shareImage()} />
+          <Button
+            text="Отпиши се"
+            onPress={() => console.log()}
+            outline={true}
+          />
+        </View>
+      )}
     </View>
   )
 }
