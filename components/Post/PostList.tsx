@@ -12,7 +12,8 @@ export default function PostList({ posts, OnRefresh, loading }: any) {
         data={posts}
         onRefresh={OnRefresh}
         refreshing={loading}
-        keyExtractor={(item) => item.id.toString()}
+        //keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item) => `${item.id}_${item.createdon}`}
         renderItem={({ item, index }) => <PostCard post={item} />}
       />
     </View>

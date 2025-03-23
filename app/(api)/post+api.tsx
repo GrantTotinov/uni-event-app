@@ -6,11 +6,11 @@ export async function POST(request: Request) {
   await client.connect()
   const result = await client.query(
     `insert into post values(DEFAULT,'${content}','${imageUrl}',DEFAULT,'${email}',${visibleIn})
-    `
+    RETURNING id`
   )
   await client.end()
 
-  return Response.json(result)
+  return Response.json({ newPostId: result.rows[0].id })
 }
 
 export async function GET(request: Request) {

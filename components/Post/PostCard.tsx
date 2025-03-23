@@ -4,8 +4,20 @@ import UserAvatar from "./UserAvatar"
 import Colors from "@/data/Colors"
 import AntDesign from "@expo/vector-icons/AntDesign"
 import FontAwesome from "@expo/vector-icons/FontAwesome"
+import moment from "moment-timezone"
+import "moment/locale/bg"
+
+moment.locale("bg")
 
 export default function PostCard({ post }: any) {
+  // Проверяваме дали има дата и я конвертираме с добавени 2 часа
+  const createdAt = post?.createdon
+    ? moment
+        .utc(post.createdon)
+        .tz("Europe/Sofia")
+        .add(2, "hours")
+        .toISOString()
+    : "Няма дата"
   return (
     <View
       style={{
@@ -15,11 +27,7 @@ export default function PostCard({ post }: any) {
         marginTop: 10,
       }}
     >
-      <UserAvatar
-        name={post?.name}
-        image={post?.image}
-        date={post?.createdon}
-      />
+      <UserAvatar name={post?.name} image={post?.image} date={createdAt} />
       <Text
         style={{
           fontSize: 18,
