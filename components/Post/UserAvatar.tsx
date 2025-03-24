@@ -14,16 +14,13 @@ type USER_AVATAR = {
 }
 
 export default function UserAvatar({ name, image, date }: USER_AVATAR) {
-  console.log("Received date:", date) // Проверка на входната стойност
+  //console.log("Received date:", date)
 
-  // Ако датата е "Now", заменяме я с текущото време
   const sanitizedDate = date === "Now" ? moment().toISOString() : date.trim()
 
-  // Преобразуваме датата в локално време (за България) и я валидираме
   const localDate = moment(sanitizedDate).tz("Europe/Sofia", true)
   const isValidDate = localDate.isValid()
 
-  // Ако датата е валидна, показваме относителния формат на български
   const formattedDate = isValidDate ? localDate.fromNow() : "Невалидна дата"
 
   return (

@@ -1,5 +1,5 @@
 import { View, Text, Image, StyleSheet, Alert } from "react-native"
-import React, { useContext } from "react"
+import React, { useContext, useState } from "react"
 import Colors from "@/data/Colors"
 import Entypo from "@expo/vector-icons/Entypo"
 import Ionicons from "@expo/vector-icons/Ionicons"
@@ -24,12 +24,27 @@ type EVENT = {
 
 export default function EventCard(event: EVENT) {
   const { user } = useContext(AuthContext)
-  const RegisterForEvent = () => {
+  const [isRegistered, setIsRegistered] = useState(event.isRegistered)
+
+  const handleRegister = () => {
     Alert.alert("Регистрация за събитие!", "Потвърди регистрацията!", [
       {
         text: "Потвърждавам",
-        onPress: () => {
-          SaveEventRegistration()
+        onPress: async () => {
+          try {
+            await axios.post(
+              `${process.env.EXPO_PUBLIC_HOST_URL}/event-register`,
+              {
+                eventId: event.id,
+                userEmail: user?.email,
+              }
+            )
+            setIsRegistered(true)
+            Alert.alert("Чудесно!", "Успешно се регистрирахте за събитието!")
+          } catch (error) {
+            console.error(error)
+            Alert.alert("Грешка!", "Неуспешна регистрация.")
+          }
         },
       },
       {
@@ -39,18 +54,35 @@ export default function EventCard(event: EVENT) {
     ])
   }
 
-  const SaveEventRegistration = async () => {
-    const result = await axios.post(
-      process.env.EXPO_PUBLIC_HOST_URL + "/event-register",
-      {
-        eventId: event.id,
-        userEmail: user?.email,
-      }
+  const handleUnregister = () => {
+    Alert.alert(
+      "Отписване от събитие!",
+      "Сигурни ли сте, че искате да се отпишете?",
+      [
+        {
+          text: "Да",
+          onPress: async () => {
+            try {
+              await axios.delete(
+                `${process.env.EXPO_PUBLIC_HOST_URL}/event-register`,
+                {
+                  data: { eventId: event.id, userEmail: user?.email },
+                }
+              )
+              setIsRegistered(false)
+              Alert.alert("Готово!", "Вече не сте записани за събитието.")
+            } catch (error) {
+              console.error(error)
+              Alert.alert("Грешка!", "Неуспешно отписване.")
+            }
+          },
+        },
+        {
+          text: "Отказ",
+          style: "cancel",
+        },
+      ]
     )
-    console.log(result)
-    if (result) {
-      Alert.alert("Чудесно!", "Успешно се регистрирахте за събитието!")
-    }
   }
   const shareImage = async () => {
     try {
@@ -136,7 +168,7 @@ export default function EventCard(event: EVENT) {
           }}
         >
           <Button text="Сподели" outline={true} onPress={() => shareImage()} />
-          <Button text="Регистрирай се" onPress={() => RegisterForEvent()} />
+          <Button text="Регистрирай се" onPress={handleRegister} />
         </View>
       ) : (
         <View
@@ -147,11 +179,7 @@ export default function EventCard(event: EVENT) {
           }}
         >
           <Button text="Сподели" outline={true} onPress={() => shareImage()} />
-          <Button
-            text="Отпиши се"
-            onPress={() => console.log()}
-            outline={true}
-          />
+          <Button text="Отпиши се" onPress={handleUnregister} outline={true} />
         </View>
       )}
     </View>

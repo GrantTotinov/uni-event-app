@@ -37,3 +37,16 @@ export async function GET(request: Request) {
   await client.end()
   return Response.json(result.rows)
 }
+
+export async function DELETE(request: Request) {
+  const { eventId, userEmail } = await request.json()
+
+  await client.connect()
+  await client.query(`
+    DELETE FROM event_registration 
+    WHERE event_id = ${eventId} AND user_email = '${userEmail}'
+  `)
+  await client.end()
+
+  return Response.json({ success: true })
+}
