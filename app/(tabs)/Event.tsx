@@ -1,4 +1,11 @@
-import { View, Text, FlatList, Pressable, StyleSheet } from "react-native"
+import {
+  View,
+  Text,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  ScrollView,
+} from "react-native"
 import React, { useContext, useEffect, useState } from "react"
 import Button from "@/components/Shared/Button"
 import { useRouter } from "expo-router"
@@ -14,24 +21,70 @@ export default function Event() {
   const [selectedTab, setSelectedTab] = useState(0)
   const { user } = useContext(AuthContext)
   useEffect(() => {
-    GetAllEvents()
-  }, [])
+    if (selectedTab === 1) {
+      GetUserEvents() // If in "Записани" tab, fetch registered events
+    } else {
+      GetAllEvents() // If in "Предстоящи" tab, fetch all events
+    }
+  }, [selectedTab])
+
   const GetAllEvents = async () => {
     setLoading(true)
-    const result = await axios.get(process.env.EXPO_PUBLIC_HOST_URL + "/events")
-    console.log(result.data)
-    setEventList(result.data)
-    setLoading(false)
+    try {
+      const eventsResult = await axios.get(
+        process.env.EXPO_PUBLIC_HOST_URL + "/events"
+      )
+      if (user?.email) {
+        const registeredResult = await axios.get(
+          process.env.EXPO_PUBLIC_HOST_URL +
+            "/event-register?email=" +
+            user.email
+        )
+
+        const registeredEventIds = registeredResult.data.map((e: any) => e.id)
+
+        const eventsWithRegistrationStatus = eventsResult.data.map(
+          (event: any) => ({
+            ...event,
+            isRegistered: registeredEventIds.includes(event.id),
+          })
+        )
+
+        setEventList(eventsWithRegistrationStatus)
+      } else {
+        setEventList(
+          eventsResult.data.map((event: any) => ({
+            ...event,
+            isRegistered: false,
+          }))
+        )
+      }
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const GetUserEvents = async () => {
     setLoading(true)
-    const result = await axios.get(
-      process.env.EXPO_PUBLIC_HOST_URL + "/event-register?email=" + user?.email
-    )
-    console.log(result.data)
-    setEventList(result.data)
-    setLoading(false)
+    try {
+      const result = await axios.get(
+        process.env.EXPO_PUBLIC_HOST_URL +
+          "/event-register?email=" +
+          user?.email
+      )
+      // Добавете isRegistered: true за всички върнати събития
+      const eventsWithRegistrationStatus = result.data.map((event: any) => ({
+        ...event,
+        isRegistered: true,
+      }))
+      setEventList(eventsWithRegistrationStatus)
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setLoading(false)
+    }
   }
   return (
     <View>
@@ -106,13 +159,26 @@ export default function Event() {
 
       <FlatList
         data={eventList}
-        onRefresh={GetAllEvents}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        onRefresh={() => {
+          if (selectedTab == 1) {
+            GetUserEvents()
+          } else {
+            GetAllEvents()
+          }
+        }}
         refreshing={loading}
         renderItem={({ item, index }) => (
           <EventCard
             {...item}
             key={index}
-            isRegistered={selectedTab == 1 ? true : false}
+            onUnregister={() => {
+              if (selectedTab == 1) {
+                GetUserEvents()
+              } else {
+                GetAllEvents()
+              }
+            }}
           />
         )}
       />

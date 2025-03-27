@@ -1,5 +1,5 @@
 import { View, Text, Image, StyleSheet, Alert } from "react-native"
-import React, { useContext, useState } from "react"
+import React, { useContext, useEffect, useState } from "react"
 import Colors from "@/data/Colors"
 import Entypo from "@expo/vector-icons/Entypo"
 import Ionicons from "@expo/vector-icons/Ionicons"
@@ -20,16 +20,21 @@ type EVENT = {
   createdby: string
   username: string
   isRegistered: boolean
+  onUnregister?: () => void
 }
 
-export default function EventCard(event: EVENT) {
+export default function EventCard({ onUnregister, ...event }: EVENT) {
   const { user } = useContext(AuthContext)
   const [isRegistered, setIsRegistered] = useState(event.isRegistered)
+
+  useEffect(() => {
+    setIsRegistered(event.isRegistered)
+  }, [event.isRegistered])
 
   const handleRegister = () => {
     Alert.alert("Регистрация за събитие!", "Потвърди регистрацията!", [
       {
-        text: "Потвърждавам",
+        text: "Потвърдете",
         onPress: async () => {
           try {
             await axios.post(
@@ -71,6 +76,7 @@ export default function EventCard(event: EVENT) {
               )
               setIsRegistered(false)
               Alert.alert("Готово!", "Вече не сте записани за събитието.")
+              if (onUnregister) onUnregister()
             } catch (error) {
               console.error(error)
               Alert.alert("Грешка!", "Неуспешно отписване.")
@@ -84,6 +90,7 @@ export default function EventCard(event: EVENT) {
       ]
     )
   }
+
   const shareImage = async () => {
     try {
       const fileUri = (await FileSystem.documentDirectory) + "shared-image.jpg"
@@ -159,7 +166,7 @@ export default function EventCard(event: EVENT) {
           {event.event_date} от {event.event_time}
         </Text>
       </View>
-      {!event.isRegistered ? (
+      {!isRegistered ? (
         <View
           style={{
             display: "flex",
