@@ -1,22 +1,17 @@
-import { client } from "@/configs/NilePostgresConfig"
+import { pool } from "@/configs/NilePostgresConfig"
 
-export async function GET(request: Response) {
-  await client.connect()
-  const result = await client.query(`
-        select * from clubs order by name asc
-        `)
-  await client.end()
+// GET - за извличане на всички клубове
+export async function GET(request: Request) {
+  const result = await pool.query(`SELECT * FROM clubs ORDER BY name ASC;`)
   return Response.json(result.rows)
 }
 
-export async function POST(request: Response) {
+// POST - за добавяне на нов клуб
+export async function POST(request: Request) {
   const { imageUrl, clubName, about } = await request.json()
-  await client.connect()
-  const result = await client.query(`
-    insert into clubs values
-    (DEFAULT,'${clubName}','${imageUrl}','${about}',DEFAULT)
-    `)
-  await client.end()
-
-  return Response.json(result.rows)
+  const result = await pool.query(
+    `INSERT INTO clubs (name, club_logo, about) VALUES ($1, $2, $3) RETURNING *;`,
+    [clubName, imageUrl, about]
+  )
+  return Response.json(result.rows[0])
 }

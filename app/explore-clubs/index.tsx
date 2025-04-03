@@ -39,11 +39,15 @@ export default function ExploreClubs() {
     console.log(result?.data)
     setFollowedClub(result?.data)
   }
-  const isFollowed = (clubId: number) => {
+  /*const isFollowed = (clubId: number) => {
     const record =
       followedClub && followedClub?.find((item: any) => item.club_id == clubId)
     return record ? true : false
+  }*/
+  const isFollowed = (clubId: number) => {
+    return followedClub?.some((item: any) => item.club_id === clubId)
   }
+
   return (
     <View>
       <View
@@ -70,6 +74,7 @@ export default function ExploreClubs() {
         <Button text="+ Добави" onPress={() => router.push("/add-club")} />
       </View>
       <FlatList
+        contentContainerStyle={{ paddingBottom: 120 }}
         numColumns={2}
         data={clubList}
         renderItem={({ item: CLUB, index }) => (

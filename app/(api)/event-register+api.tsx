@@ -1,52 +1,47 @@
-import { client } from "@/configs/NilePostgresConfig"
+import { pool } from "@/configs/NilePostgresConfig"
 
 export async function POST(request: Request) {
   const { eventId, userEmail } = await request.json()
 
-  await client.connect()
-  const isRegistered = await client.query(`
-    select * from event_registration 
-    where event_id = ${eventId} and user_email='${userEmail}'
-    `)
+  const isRegistered = await pool.query(
+    `SELECT * FROM event_registration WHERE event_id = $1 AND user_email = $2`,
+    [eventId, userEmail]
+  )
+
   if (isRegistered.rows?.length == 0) {
-    const result = await client.query(`
-                insert into event_registration values
-                (DEFAULT,${eventId},'${userEmail}',DEFAULT)
-                `)
-    return Response.json(result)
+    const result = await pool.query(
+      `INSERT INTO event_registration VALUES (DEFAULT, $1, $2, DEFAULT) RETURNING *;`,
+      [eventId, userEmail]
+    )
+    return Response.json(result.rows[0])
   }
 
-  await client.end()
   return Response.json(isRegistered.rows)
 }
 
 export async function GET(request: Request) {
   const email = new URL(request.url).searchParams.get("email")
 
-  await client.connect()
+  const result = await pool.query(
+    `SELECT events.*, users.name as username 
+     FROM events
+     INNER JOIN users ON events.createdby = users.email
+     INNER JOIN event_registration ON events.id = event_registration.event_id
+     WHERE event_registration.user_email = $1
+     ORDER BY event_registration.id DESC;`,
+    [email]
+  )
 
-  const result = await client.query(`
-    select events.*, users.name as username from events
-    inner join users
-    on events.createdby=users.email
-    inner join event_registration
-    on events.id=event_registration.event_id
-    where event_registration.user_email='${email}'
-    order by event_registration.id desc;
-    `)
-  await client.end()
   return Response.json(result.rows)
 }
 
 export async function DELETE(request: Request) {
   const { eventId, userEmail } = await request.json()
 
-  await client.connect()
-  await client.query(`
-    DELETE FROM event_registration 
-    WHERE event_id = ${eventId} AND user_email = '${userEmail}'
-  `)
-  await client.end()
+  await pool.query(
+    `DELETE FROM event_registration WHERE event_id = $1 AND user_email = $2`,
+    [eventId, userEmail]
+  )
 
   return Response.json({ success: true })
 }

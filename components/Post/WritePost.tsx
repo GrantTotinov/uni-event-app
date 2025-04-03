@@ -65,7 +65,8 @@ export default function WritePost() {
         imageUrl: uploadImageUrl,
         visibleIn: value,
         email: user.email,
-      }
+      },
+      { headers: { "Content-Type": "application/json" } }
     )
     console.log(result.data)
     setLoading(false)

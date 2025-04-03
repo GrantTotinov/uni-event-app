@@ -1,35 +1,25 @@
-import { client } from "@/configs/NilePostgresConfig"
+import { pool } from "@/configs/NilePostgresConfig"
 
 export async function POST(request: Request) {
-  await client.connect()
   const { eventName, bannerUrl, location, link, eventDate, eventTime, email } =
     await request.json()
-  const result = await client.query(`
+  const result = await pool.query(
+    `
         
-        INSERT INTO events VALUES(
-        DEFAULT,
-        '${eventName}',
-        '${location}',
-        '${link}',
-        '${bannerUrl}',
-        '${eventDate}',
-        '${eventTime}',
-        '${email}',
-        DEFAULT)
-        `)
-  await client.end()
+        INSERT INTO events (name, location, link, bannerurl, event_date, event_time, createdby) 
+        VALUES( VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [eventName, location, link, bannerUrl, eventDate, eventTime, email]
+  )
   return Response.json(result)
 }
 
 export async function GET(request: Request) {
-  await client.connect()
-  const result = await client.query(`
+  const result = await pool.query(`
     select events.*, users.name as username from events
     inner join users
     on events.createdby=users.email
     order by id desc;
     `)
-  await client.end()
 
   return Response.json(result.rows)
 }

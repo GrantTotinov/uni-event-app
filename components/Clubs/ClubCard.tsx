@@ -5,33 +5,44 @@ import Colors from "@/data/Colors"
 import Button from "../Shared/Button"
 import { AuthContext } from "@/context/AuthContext"
 import axios from "axios"
-import { center } from "@cloudinary/url-gen/qualifiers/textAlignment"
+
+import { useEffect } from "react"
 
 export default function ClubCard(club: CLUB) {
   const { user } = useContext(AuthContext)
   const [loading, setLoading] = useState(false)
+  const [isFollowed, setIsFollowed] = useState(club.isFollowed)
+
+  // Синхронизиране на локалното state с пропса
+  useEffect(() => {
+    setIsFollowed(club.isFollowed)
+  }, [club.isFollowed])
+
   const onFollowBtnClick = async () => {
     setLoading(true)
-    if (club.isFollowed) {
-      const result = await axios.delete(
-        process.env.EXPO_PUBLIC_HOST_URL +
-          "/clubfollower?u_email=" +
-          user?.email +
-          "&club_id=" +
-          club.id
-      )
-    } else {
-      const result = await axios.post(
-        process.env.EXPO_PUBLIC_HOST_URL + "/clubfollower",
-        {
+    try {
+      if (isFollowed) {
+        await axios.delete(
+          process.env.EXPO_PUBLIC_HOST_URL +
+            "/clubfollower?u_email=" +
+            user?.email +
+            "&club_id=" +
+            club.id
+        )
+      } else {
+        await axios.post(process.env.EXPO_PUBLIC_HOST_URL + "/clubfollower", {
           u_email: user?.email,
           clubId: club?.id,
-        }
-      )
+        })
+      }
+      setIsFollowed(!isFollowed) // Обновява локалното състояние
+      club.refreshData() // Обновява данните от родителския компонент
+    } catch (error) {
+      console.error("Error updating follow status:", error)
     }
-    club.refreshData()
     setLoading(false)
   }
+
   return (
     <View
       style={{
@@ -75,9 +86,9 @@ export default function ClubCard(club: CLUB) {
       </Text>
 
       <Button
-        text={club.isFollowed ? "Отпоследвай" : "Последвай"}
-        onPress={() => onFollowBtnClick()}
-        outline={club.isFollowed}
+        text={isFollowed ? "Отпоследвай" : "Последвай"}
+        onPress={onFollowBtnClick}
+        outline={isFollowed}
         loading={loading}
       />
     </View>
