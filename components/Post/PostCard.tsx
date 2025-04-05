@@ -1,16 +1,31 @@
-import { View, Text, Image, StyleSheet } from "react-native"
-import React from "react"
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+} from "react-native"
+import React, { useContext, useState } from "react"
 import UserAvatar from "./UserAvatar"
 import Colors from "@/data/Colors"
 import AntDesign from "@expo/vector-icons/AntDesign"
 import FontAwesome from "@expo/vector-icons/FontAwesome"
 import moment from "moment-timezone"
 import "moment/locale/bg"
+import axios from "axios"
+import { AuthContext } from "@/context/AuthContext"
 
 moment.locale("bg")
 
 export default function PostCard({ post }: any) {
-  // Проверяваме дали има дата и я конвертираме с добавени 2 часа
+  const { user } = useContext(AuthContext)
+
+  // Може да идват от бекенда дали потребителят вече е лайкнал поста
+  const [isLiked, setIsLiked] = useState(post?.isLiked || false)
+  const [likeCount, setLikeCount] = useState(post?.likeCount || 0)
+
+  // Преобразуване на датата
   const createdAt = post?.createdon
     ? moment
         .utc(post.createdon)
@@ -18,84 +33,95 @@ export default function PostCard({ post }: any) {
         .add(2, "hours")
         .toISOString()
     : "Няма дата"
-  return (
-    <View
-      style={{
-        padding: 15,
-        backgroundColor: Colors.WHITE,
-        borderRadius: 8,
-        marginTop: 10,
-      }}
-    >
-      <UserAvatar name={post?.name} image={post?.image} date={createdAt} />
-      <Text
-        style={{
-          fontSize: 18,
-          marginTop: 10,
-        }}
-      >
-        {post?.content}
-      </Text>
 
+  const toggleLike = async () => {
+    if (!user) {
+      Alert.alert("Моля, влезте в профила си, за да можете да лайквате.")
+      return
+    }
+    try {
+      if (!isLiked) {
+        // Изпращаме заявка за добавяне на лайк
+        await axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/post-like`, {
+          postId: post.post_id,
+          userEmail: user.email,
+        })
+        setIsLiked(true)
+        setLikeCount((prev: number) => prev + 1)
+      } else {
+        // Изпращаме заявка за премахване на лайк
+        await axios.delete(`${process.env.EXPO_PUBLIC_HOST_URL}/post-like`, {
+          data: { postId: post.post_id, userEmail: user.email },
+        })
+        setIsLiked(false)
+        setLikeCount((prev: number) => prev - 1)
+      }
+    } catch (error) {
+      console.error("Error toggling like", error)
+      Alert.alert("Грешка", "Нещо се обърка, моля опитайте отново.")
+    }
+  }
+
+  return (
+    <View style={styles.cardContainer}>
+      <UserAvatar name={post?.name} image={post?.image} date={createdAt} />
+      <Text style={styles.contentText}>{post?.content}</Text>
       {post.imageurl && (
-        <Image
-          source={{ uri: post.imageurl }}
-          style={{
-            width: "100%",
-            height: 300,
-            objectFit: "cover",
-            borderRadius: 10,
-          }}
-        />
+        <Image source={{ uri: post.imageurl }} style={styles.postImage} />
       )}
-      <View
-        style={{
-          marginTop: 10,
-          display: "flex",
-          flexDirection: "row",
-          gap: 20,
-          alignItems: "center",
-        }}
-      >
-        <View style={styles.subContainer}>
-          <AntDesign name="like2" size={24} color="black" />
-          <Text
-            style={{
-              fontSize: 17,
-              color: Colors.GRAY,
-            }}
-          >
-            25
-          </Text>
-        </View>
+      <View style={styles.actionsContainer}>
+        <TouchableOpacity onPress={toggleLike} style={styles.subContainer}>
+          <AntDesign
+            name="like2"
+            size={24}
+            color={isLiked ? Colors.PRIMARY : "black"}
+          />
+          <Text style={styles.actionText}>{likeCount}</Text>
+        </TouchableOpacity>
         <View style={styles.subContainer}>
           <FontAwesome name="commenting-o" size={24} color="black" />
-          <Text
-            style={{
-              fontSize: 17,
-              color: Colors.GRAY,
-            }}
-          >
-            25
-          </Text>
+          <Text style={styles.actionText}>25</Text>
         </View>
       </View>
-      <Text
-        style={{
-          marginTop: 7,
-          color: Colors.GRAY,
-        }}
-      >
-        Виж всички коментари
-      </Text>
+      <Text style={styles.commentsLink}>Виж всички коментари</Text>
     </View>
   )
 }
+
 const styles = StyleSheet.create({
+  cardContainer: {
+    padding: 15,
+    backgroundColor: Colors.WHITE,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  contentText: {
+    fontSize: 18,
+    marginTop: 10,
+  },
+  postImage: {
+    width: "100%",
+    height: 300,
+    resizeMode: "cover",
+    borderRadius: 10,
+  },
+  actionsContainer: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 20,
+    alignItems: "center",
+  },
   subContainer: {
-    display: "flex",
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
+  },
+  actionText: {
+    fontSize: 17,
+    color: Colors.GRAY,
+  },
+  commentsLink: {
+    marginTop: 7,
+    color: Colors.GRAY,
   },
 })
