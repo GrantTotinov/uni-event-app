@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native"
-import React, { useContext, useState } from "react"
+import React, { useContext, useEffect, useState } from "react"
 import UserAvatar from "./UserAvatar"
 import Colors from "@/data/Colors"
 import AntDesign from "@expo/vector-icons/AntDesign"
@@ -21,9 +21,9 @@ moment.locale("bg")
 export default function PostCard({ post }: any) {
   const { user } = useContext(AuthContext)
 
-  // Може да идват от бекенда дали потребителят вече е лайкнал поста
-  const [isLiked, setIsLiked] = useState(post?.isLiked || false)
-  const [likeCount, setLikeCount] = useState(post?.likeCount || 0)
+  // Започваме с начални стойности от 0/false (ако не са предадени от бекенда)
+  const [isLiked, setIsLiked] = useState(false)
+  const [likeCount, setLikeCount] = useState(0)
 
   // Преобразуване на датата
   const createdAt = post?.createdon
@@ -33,6 +33,31 @@ export default function PostCard({ post }: any) {
         .add(2, "hours")
         .toISOString()
     : "Няма дата"
+
+  // При mount на компонента, правим заявка за актуалните данни
+  useEffect(() => {
+    const fetchLikeStatus = async () => {
+      try {
+        // Вземаме броя лайкове за поста
+        const res = await axios.get(
+          `${process.env.EXPO_PUBLIC_HOST_URL}/post-like?postId=${post.post_id}`
+        )
+        setLikeCount(res.data.likeCount)
+
+        // Ако има логнат потребител, проверяваме дали е харесал поста
+        if (user) {
+          const resLiked = await axios.get(
+            `${process.env.EXPO_PUBLIC_HOST_URL}/post-like?postId=${post.post_id}&userEmail=${user.email}`
+          )
+          setIsLiked(resLiked.data.isLiked)
+        }
+      } catch (error) {
+        console.error("Error loading like status", error)
+      }
+    }
+
+    fetchLikeStatus()
+  }, [post.post_id, user])
 
   const toggleLike = async () => {
     if (!user) {

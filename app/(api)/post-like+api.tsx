@@ -19,6 +19,42 @@ export async function POST(request: Request) {
   }
 }
 
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const postId = searchParams.get("postId")
+  const userEmail = searchParams.get("userEmail") // ако идва - проверяваме isLiked
+
+  if (!postId) {
+    return Response.json({ error: "Missing postId" }, { status: 400 })
+  }
+
+  try {
+    // Ако има userEmail => връщаме дали е лайкнат от потребителя
+    if (userEmail) {
+      const result = await pool.query(
+        `SELECT COUNT(*) AS count FROM likes WHERE post_id = $1 AND user_email = $2`,
+        [postId, userEmail]
+      )
+
+      const isLiked = parseInt(result.rows[0].count, 10) > 0
+      return Response.json({ isLiked })
+    }
+
+    // Ако няма userEmail => връщаме броя лайкове
+    const result = await pool.query(
+      `SELECT COUNT(*) AS likeCount FROM likes WHERE post_id = $1`,
+      [postId]
+    )
+
+    return Response.json({
+      likeCount: parseInt(result.rows[0].likecount, 10),
+    })
+  } catch (error) {
+    console.error("Error fetching like info", error)
+    return Response.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
 // Премахване на лайк
 export async function DELETE(request: Request) {
   const { postId, userEmail } = await request.json()
