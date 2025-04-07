@@ -22,13 +22,19 @@ moment.locale("bg")
 export default function PostCard({ post }: any) {
   const { user } = useContext(AuthContext)
 
-  // Състояния за харесвания и коментари
+  // Състояния за харесвания
   const [isLiked, setIsLiked] = useState(false)
   const [likeCount, setLikeCount] = useState(0)
+
+  // Състояния за коментари
   const [commentCount, setCommentCount] = useState(0)
   const [commentText, setCommentText] = useState("")
+  // За да покажем/скрием секцията с коментари
+  const [commentsVisible, setCommentsVisible] = useState(false)
+  // Списък с коментари (детайлна информация за всеки коментар)
+  const [comments, setComments] = useState<any[]>([])
 
-  // Преобразуване на датата
+  // Преобразуваме датата на публикацията
   const createdAt = post?.createdon
     ? moment
         .utc(post.createdon)
@@ -37,17 +43,17 @@ export default function PostCard({ post }: any) {
         .toISOString()
     : "Няма дата"
 
+  // При монтиране на компонента зареждаме харесванията и броя коментари (резюме)
   useEffect(() => {
-    // Извличаме данни за лайковете и коментарите
-    const fetchData = async () => {
+    const fetchLikeAndCommentCount = async () => {
       try {
-        // Зареждаме броя на харесванията
+        // Зареждаме броя харесвания
         const likeRes = await axios.get(
           `${process.env.EXPO_PUBLIC_HOST_URL}/post-like?postId=${post.post_id}`
         )
         setLikeCount(likeRes.data.likeCount)
 
-        // Ако има логнат потребител, проверяваме дали е харесал поста
+        // Проверяваме дали е харесано от текущия потребител
         if (user) {
           const likedRes = await axios.get(
             `${process.env.EXPO_PUBLIC_HOST_URL}/post-like?postId=${post.post_id}&userEmail=${user.email}`
@@ -55,18 +61,47 @@ export default function PostCard({ post }: any) {
           setIsLiked(likedRes.data.isLiked)
         }
 
-        // Зареждаме броя коментари – API-то може да върне или броя или списък
-        const commentRes = await axios.get(
-          `${process.env.EXPO_PUBLIC_HOST_URL}/comment?postId=${post.post_id}`
-        )
-        setCommentCount(commentRes.data.commentCount || commentRes.data.length)
+        // Ако секцията с коментари не е отворена, вземаме само броя им
+        if (!commentsVisible) {
+          const commentRes = await axios.get(
+            `${process.env.EXPO_PUBLIC_HOST_URL}/comment?postId=${post.post_id}`
+          )
+          // Ако API връща списък, използваме дължината му, ако връща обект – очакваме свойството commentCount
+          if (Array.isArray(commentRes.data)) {
+            setCommentCount(commentRes.data.length)
+          } else {
+            setCommentCount(commentRes.data.commentCount)
+          }
+        }
       } catch (error) {
-        console.error("Error fetching post data", error)
+        console.error("Error fetching like/comment count", error)
       }
     }
-    fetchData()
-  }, [post.post_id, user])
+    fetchLikeAndCommentCount()
+  }, [post.post_id, user, commentsVisible])
 
+  // Когато секцията с коментари е отворена – вземаме детайлния списък с коментари
+  useEffect(() => {
+    if (commentsVisible) {
+      const fetchComments = async () => {
+        try {
+          const commentRes = await axios.get(
+            `${process.env.EXPO_PUBLIC_HOST_URL}/comment?postId=${post.post_id}`
+          )
+          // Очакваме списък с обекти: { id, comment, created_at, name, image }
+          setComments(commentRes.data)
+          setCommentCount(
+            Array.isArray(commentRes.data) ? commentRes.data.length : 0
+          )
+        } catch (error) {
+          console.error("Error fetching comments", error)
+        }
+      }
+      fetchComments()
+    }
+  }, [commentsVisible, post.post_id])
+
+  // Функция за лайкване/анлайкване
   const toggleLike = async () => {
     if (!user) {
       Alert.alert("Моля, влезте в профила си, за да можете да лайквате.")
@@ -74,7 +109,6 @@ export default function PostCard({ post }: any) {
     }
     try {
       if (!isLiked) {
-        // Изпращаме заявка за добавяне на лайк
         await axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/post-like`, {
           postId: post.post_id,
           userEmail: user.email,
@@ -82,7 +116,6 @@ export default function PostCard({ post }: any) {
         setIsLiked(true)
         setLikeCount((prev) => prev + 1)
       } else {
-        // Изпращаме заявка за премахване на лайк
         await axios.delete(`${process.env.EXPO_PUBLIC_HOST_URL}/post-like`, {
           data: { postId: post.post_id, userEmail: user.email },
         })
@@ -95,6 +128,7 @@ export default function PostCard({ post }: any) {
     }
   }
 
+  // Функция за добавяне на нов коментар
   const submitComment = async () => {
     if (!user) {
       Alert.alert("Моля, влезте в профила си, за да коментирате.")
@@ -102,14 +136,25 @@ export default function PostCard({ post }: any) {
     }
     if (commentText.trim() === "") return
     try {
-      // Изпращаме заявка за добавяне на коментар
       await axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/comment`, {
         postId: post.post_id,
         userEmail: user.email,
         comment: commentText,
       })
+      // Изчистваме полето и актуализираме броя
       setCommentText("")
       setCommentCount((prev) => prev + 1)
+      // Ако секцията е отворена, добавяме коментара локално (може и да се направи нов fetch)
+      if (commentsVisible) {
+        const newComment = {
+          id: Date.now(), // временно ID, ако не получаваме от бекенда
+          comment: commentText,
+          created_at: new Date().toISOString(),
+          name: user.name,
+          image: user.image,
+        }
+        setComments((prev) => [newComment, ...prev])
+      }
     } catch (error) {
       console.error("Error submitting comment", error)
       Alert.alert(
@@ -117,6 +162,11 @@ export default function PostCard({ post }: any) {
         "Неуспешно добавяне на коментар, моля опитайте отново."
       )
     }
+  }
+
+  // Функция за показване/скриване на секцията с коментари
+  const toggleCommentsView = () => {
+    setCommentsVisible((prev) => !prev)
   }
 
   return (
@@ -135,12 +185,17 @@ export default function PostCard({ post }: any) {
           />
           <Text style={styles.actionText}>{likeCount}</Text>
         </TouchableOpacity>
-        <View style={styles.subContainer}>
+        <TouchableOpacity
+          onPress={toggleCommentsView}
+          style={styles.subContainer}
+        >
           <FontAwesome name="commenting-o" size={24} color="black" />
           <Text style={styles.actionText}>{commentCount}</Text>
-        </View>
+        </TouchableOpacity>
       </View>
-      <Text style={styles.commentsLink}>Виж всички коментари</Text>
+      <TouchableOpacity onPress={toggleCommentsView}>
+        <Text style={styles.commentsLink}>Виж всички коментари</Text>
+      </TouchableOpacity>
       <View style={styles.commentInputContainer}>
         <TextInput
           style={styles.commentInput}
@@ -153,6 +208,23 @@ export default function PostCard({ post }: any) {
           <Text style={styles.submitButtonText}>Изпрати</Text>
         </TouchableOpacity>
       </View>
+      {commentsVisible && (
+        <View style={styles.commentsContainer}>
+          {comments.length > 0 ? (
+            comments.map((c) => (
+              <View key={c.id} style={styles.commentItem}>
+                <Text style={styles.commentAuthor}>{c.name}</Text>
+                <Text style={styles.commentText}>{c.comment}</Text>
+                <Text style={styles.commentDate}>
+                  {moment(c.created_at).fromNow()}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.noCommentsText}>Все още няма коментари.</Text>
+          )}
+        </View>
+      )}
     </View>
   )
 }
@@ -178,8 +250,8 @@ const styles = StyleSheet.create({
   actionsContainer: {
     marginTop: 10,
     flexDirection: "row",
-    gap: 20,
     alignItems: "center",
+    gap: 20,
   },
   subContainer: {
     flexDirection: "row",
@@ -206,7 +278,7 @@ const styles = StyleSheet.create({
   commentInput: {
     flex: 1,
     height: 40,
-    color: Colors.GRAY,
+    color: Colors.BLACK,
   },
   submitButton: {
     padding: 10,
@@ -214,5 +286,34 @@ const styles = StyleSheet.create({
   submitButtonText: {
     color: Colors.PRIMARY,
     fontWeight: "bold",
+  },
+  commentsContainer: {
+    marginTop: 15,
+    borderTopWidth: 1,
+    borderColor: Colors.LIGHT_GRAY,
+    paddingTop: 10,
+  },
+  commentItem: {
+    marginBottom: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderColor: Colors.LIGHT_GRAY,
+  },
+  commentAuthor: {
+    fontWeight: "bold",
+    fontSize: 16,
+    color: Colors.BLACK,
+  },
+  commentText: {
+    fontSize: 15,
+    color: Colors.BLACK,
+  },
+  commentDate: {
+    fontSize: 13,
+    color: Colors.GRAY,
+  },
+  noCommentsText: {
+    fontStyle: "italic",
+    color: Colors.GRAY,
   },
 })
