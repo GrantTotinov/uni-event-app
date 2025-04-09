@@ -5,6 +5,7 @@ import { Redirect, useRouter } from "expo-router"
 import { onAuthStateChanged } from "firebase/auth"
 import { useContext } from "react"
 import { ActivityIndicator, Text, View } from "react-native"
+import moment from "moment-timezone"
 
 export default function Index() {
   const { user, setUser } = useContext(AuthContext)
@@ -22,6 +23,7 @@ export default function Index() {
       router.replace("/landing")
     }
   })
+  //moment.tz.setDefault("Europe/Sofia")
   return (
     <View
       style={{

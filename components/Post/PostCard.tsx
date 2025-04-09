@@ -29,31 +29,26 @@ export default function PostCard({ post }: any) {
   // Състояния за коментари
   const [commentCount, setCommentCount] = useState(0)
   const [commentText, setCommentText] = useState("")
-  // За да покажем/скрием секцията с коментари
   const [commentsVisible, setCommentsVisible] = useState(false)
-  // Списък с коментари (детайлна информация за всеки коментар)
   const [comments, setComments] = useState<any[]>([])
 
-  // Преобразуваме датата на публикацията
+  // Преобразуваме датата на публикацията – премахваме .add(2, "hours")
   const createdAt = post?.createdon
     ? moment
         .utc(post.createdon)
         .tz("Europe/Sofia")
-        .add(2, "hours")
-        .toISOString()
+        .format("YYYY-MM-DD HH:mm:ss")
     : "Няма дата"
 
   // При монтиране на компонента зареждаме харесванията и броя коментари (резюме)
   useEffect(() => {
     const fetchLikeAndCommentCount = async () => {
       try {
-        // Зареждаме броя харесвания
         const likeRes = await axios.get(
           `${process.env.EXPO_PUBLIC_HOST_URL}/post-like?postId=${post.post_id}`
         )
         setLikeCount(likeRes.data.likeCount)
 
-        // Проверяваме дали е харесано от текущия потребител
         if (user) {
           const likedRes = await axios.get(
             `${process.env.EXPO_PUBLIC_HOST_URL}/post-like?postId=${post.post_id}&userEmail=${user.email}`
@@ -61,12 +56,10 @@ export default function PostCard({ post }: any) {
           setIsLiked(likedRes.data.isLiked)
         }
 
-        // Ако секцията с коментари не е отворена, вземаме само броя им
         if (!commentsVisible) {
           const commentRes = await axios.get(
             `${process.env.EXPO_PUBLIC_HOST_URL}/comment?postId=${post.post_id}`
           )
-          // Ако API връща списък, използваме дължината му, ако връща обект – очакваме свойството commentCount
           if (Array.isArray(commentRes.data)) {
             setCommentCount(commentRes.data.length)
           } else {
@@ -80,7 +73,7 @@ export default function PostCard({ post }: any) {
     fetchLikeAndCommentCount()
   }, [post.post_id, user, commentsVisible])
 
-  // Когато секцията с коментари е отворена – вземаме детайлния списък с коментари
+  // Зареждаме списъка с коментари, когато секцията е отворена
   useEffect(() => {
     if (commentsVisible) {
       const fetchComments = async () => {
@@ -88,7 +81,6 @@ export default function PostCard({ post }: any) {
           const commentRes = await axios.get(
             `${process.env.EXPO_PUBLIC_HOST_URL}/comment?postId=${post.post_id}`
           )
-          // Очакваме списък с обекти: { id, comment, created_at, name, image }
           setComments(commentRes.data)
           setCommentCount(
             Array.isArray(commentRes.data) ? commentRes.data.length : 0
@@ -101,7 +93,6 @@ export default function PostCard({ post }: any) {
     }
   }, [commentsVisible, post.post_id])
 
-  // Функция за лайкване/анлайкване
   const toggleLike = async () => {
     if (!user) {
       Alert.alert("Моля, влезте в профила си, за да можете да лайквате.")
@@ -128,7 +119,6 @@ export default function PostCard({ post }: any) {
     }
   }
 
-  // Функция за добавяне на нов коментар
   const submitComment = async () => {
     if (!user) {
       Alert.alert("Моля, влезте в профила си, за да коментирате.")
@@ -141,15 +131,16 @@ export default function PostCard({ post }: any) {
         userEmail: user.email,
         comment: commentText,
       })
-      // Изчистваме полето и актуализираме броя
       setCommentText("")
       setCommentCount((prev) => prev + 1)
-      // Ако секцията е отворена, добавяме коментара локално (може и да се направи нов fetch)
       if (commentsVisible) {
         const newComment = {
-          id: Date.now(), // временно ID, ако не получаваме от бекенда
+          id: Date.now(),
           comment: commentText,
-          created_at: new Date().toISOString(),
+          created_at: moment()
+            .tz("Europe/Sofia")
+            .format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
+
           name: user.name,
           image: user.image,
         }
@@ -164,7 +155,6 @@ export default function PostCard({ post }: any) {
     }
   }
 
-  // Функция за показване/скриване на секцията с коментари
   const toggleCommentsView = () => {
     setCommentsVisible((prev) => !prev)
   }
@@ -172,7 +162,7 @@ export default function PostCard({ post }: any) {
   return (
     <View style={styles.cardContainer}>
       <UserAvatar name={post?.name} image={post?.image} date={createdAt} />
-      <Text style={styles.contentText}>{post?.content}</Text>
+      <Text style={styles.contentText}>{post?.context}</Text>
       {post.imageurl && (
         <Image source={{ uri: post.imageurl }} style={styles.postImage} />
       )}
@@ -216,7 +206,7 @@ export default function PostCard({ post }: any) {
                 <Text style={styles.commentAuthor}>{c.name}</Text>
                 <Text style={styles.commentText}>{c.comment}</Text>
                 <Text style={styles.commentDate}>
-                  {moment(c.created_at).fromNow()}
+                  {moment.utc(c.created_at).tz("Europe/Sofia").fromNow()}
                 </Text>
               </View>
             ))
