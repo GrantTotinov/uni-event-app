@@ -20,7 +20,7 @@ export default function PostList({ posts = [], onRefresh, loading }: any) {
         initialNumToRender={10} // Рендерира първоначално 10 елемента
         maxToRenderPerBatch={10} // Рендерира по 10 елемента на "batch"
         windowSize={5} // Оптимизира размера на прозореца за виртуализация
-        renderItem={({ item }) => <PostCard post={item} />}
+        renderItem={({ item }) => <PostCard post={item} onUpdate={onRefresh} />}
       />
     </View>
   )

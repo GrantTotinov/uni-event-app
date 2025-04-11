@@ -89,3 +89,106 @@ export async function GET(request: Request) {
     return Response.json(result.rows)
   }
 }
+
+export async function PUT(request: Request) {
+  const body = await request.json()
+  const { postId, userEmail, content, imageUrl } = body
+
+  // Проверка за задължителните данни
+  if (!postId || !userEmail || (!content && !imageUrl)) {
+    console.error("Липсват задължителни данни:", body)
+    return Response.json(
+      { error: "Липсват задължителни данни" },
+      { status: 400 }
+    )
+  }
+
+  // Проверка за съществуването на поста и дали потребителя е автор
+  const postQuery = await pool.query(
+    "SELECT createdby FROM post WHERE id = $1",
+    [postId]
+  )
+
+  if (postQuery.rows.length === 0) {
+    return Response.json({ error: "Постът не съществува" }, { status: 404 })
+  }
+
+  const postAuthor = postQuery.rows[0].createdby
+  if (postAuthor !== userEmail) {
+    return Response.json(
+      { error: "Нямате права да редактирате този пост" },
+      { status: 403 }
+    )
+  }
+
+  // Изграждане на динамична UPDATE заявка
+  let updateFields: string[] = []
+  let updateValues: any[] = []
+  let parameterIdx = 1
+
+  if (content) {
+    updateFields.push(`context = $${parameterIdx++}`)
+    updateValues.push(content)
+  }
+  if (imageUrl) {
+    updateFields.push(`imageurl = $${parameterIdx++}`)
+    updateValues.push(imageUrl)
+  }
+  updateValues.push(postId) // последният параметър за WHERE условията
+
+  const updateQuery = `
+    UPDATE post
+    SET ${updateFields.join(", ")}
+    WHERE id = $${parameterIdx}
+    RETURNING id
+  `
+
+  try {
+    const updateRes = await pool.query(updateQuery, updateValues)
+    return Response.json({ updatedPostId: updateRes.rows[0].id })
+  } catch (error) {
+    console.error("Грешка при обновяване на поста", error)
+    return Response.json(
+      { error: "Грешка при обновяването на поста" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: Request) {
+  const body = await request.json()
+  const { postId, userEmail } = body
+
+  // Проверяваме дали са подадени необходимите данни
+  if (!postId || !userEmail) {
+    console.error("Липсват задължителни данни за изтриване:", body)
+    return Response.json(
+      { error: "Липсват задължителни данни" },
+      { status: 400 }
+    )
+  }
+
+  // Проверяваме дали постът съществува и дали потребителят е автор
+  const postQuery = await pool.query(
+    "SELECT createdby FROM post WHERE id = $1",
+    [postId]
+  )
+  if (postQuery.rows.length === 0) {
+    return Response.json({ error: "Постът не съществува" }, { status: 404 })
+  }
+
+  const postAuthor = postQuery.rows[0].createdby
+  if (postAuthor !== userEmail) {
+    return Response.json(
+      { error: "Нямате права да изтриете този пост" },
+      { status: 403 }
+    )
+  }
+
+  // Изтриваме поста
+  const result = await pool.query(
+    "DELETE FROM post WHERE id = $1 RETURNING id",
+    [postId]
+  )
+  return Response.json({ deletedPostId: result.rows[0].id })
+}
