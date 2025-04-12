@@ -21,9 +21,10 @@ type EVENT = {
   username: string
   isRegistered: boolean
   onUnregister?: () => void
+  onDelete?: () => void
 }
 
-export default function EventCard({ onUnregister, ...event }: EVENT) {
+export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
   const { user } = useContext(AuthContext)
   const [isRegistered, setIsRegistered] = useState(event.isRegistered)
 
@@ -111,82 +112,82 @@ export default function EventCard({ onUnregister, ...event }: EVENT) {
       Alert.alert("Грешка", "Неуспешно споделяне на снимката")
     }
   }
+
+  const deleteEvent = () => {
+    Alert.alert(
+      "Изтриване на събитие",
+      "Сигурни ли сте, че искате да изтриете това събитие?",
+      [
+        {
+          text: "Отказ",
+          style: "cancel",
+        },
+        {
+          text: "Изтрий",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const response = await axios.delete(
+                `${process.env.EXPO_PUBLIC_HOST_URL}/events`,
+                {
+                  data: { eventId: event.id, userEmail: user?.email },
+                }
+              )
+              console.log("Събитието е изтрито:", response.data)
+              Alert.alert("Успешно", "Събитието е изтрито.")
+              // Ако имате callback (например onDelete), извикайте го тук, за да обновите списъка
+              if (onDelete) onDelete()
+            } catch (error) {
+              console.error("Грешка при изтриване на събитието", error)
+              Alert.alert("Грешка", "Неуспешно изтриване на събитието.")
+            }
+          },
+        },
+      ]
+    )
+  }
+
   return (
     <View
-      style={{
-        padding: 20,
-        backgroundColor: Colors.WHITE,
-        marginBottom: 3,
-      }}
+      style={{ padding: 20, backgroundColor: Colors.WHITE, marginBottom: 3 }}
     >
       <Image
         source={{ uri: event.bannerurl }}
-        style={{
-          height: 250,
-          borderRadius: 15,
-        }}
+        style={{ height: 250, borderRadius: 15 }}
       />
-      <Text
-        style={{
-          fontSize: 23,
-          fontWeight: "bold",
-          marginTop: 7,
-        }}
-      >
+      <Text style={{ fontSize: 23, fontWeight: "bold", marginTop: 7 }}>
         {event.name}
       </Text>
-      <Text
-        style={{
-          color: Colors.GRAY,
-          fontSize: 16,
-        }}
-      >
+      <Text style={{ color: Colors.GRAY, fontSize: 16 }}>
         Създадено от: {event.username}
       </Text>
       <View style={styles.subContainer}>
         <Entypo name="location" size={24} color={Colors.GRAY} />
-        <Text
-          style={{
-            color: Colors.GRAY,
-            fontSize: 16,
-          }}
-        >
+        <Text style={{ color: Colors.GRAY, fontSize: 16 }}>
           {event.location}
         </Text>
       </View>
-
       <View style={styles.subContainer}>
         <Ionicons name="calendar-number" size={24} color={Colors.GRAY} />
-        <Text
-          style={{
-            color: Colors.GRAY,
-            fontSize: 16,
-          }}
-        >
+        <Text style={{ color: Colors.GRAY, fontSize: 16 }}>
           {event.event_date} от {event.event_time}
         </Text>
       </View>
       {!isRegistered ? (
-        <View
-          style={{
-            display: "flex",
-            flexDirection: "row",
-            justifyContent: "space-between",
-          }}
-        >
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
           <Button text="Сподели" outline={true} onPress={() => shareImage()} />
           <Button text="Регистрирай се" onPress={handleRegister} />
         </View>
       ) : (
-        <View
-          style={{
-            display: "flex",
-            flexDirection: "row",
-            justifyContent: "space-between",
-          }}
-        >
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
           <Button text="Сподели" outline={true} onPress={() => shareImage()} />
           <Button text="Отпиши се" onPress={handleUnregister} outline={true} />
+        </View>
+      )}
+      {/* Добавяне на бутон за изтриване, показан само за създателя */}
+      {user?.email === event.createdby && (
+        <View style={styles.eventActionsContainer}>
+          <Button text="Изтрий събитие" onPress={deleteEvent} outline={true} />
         </View>
       )}
     </View>
@@ -195,10 +196,14 @@ export default function EventCard({ onUnregister, ...event }: EVENT) {
 
 const styles = StyleSheet.create({
   subContainer: {
-    display: "flex",
     flexDirection: "row",
     alignItems: "center",
     marginTop: 5,
     gap: 5,
+  },
+  eventActionsContainer: {
+    marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "flex-end",
   },
 })

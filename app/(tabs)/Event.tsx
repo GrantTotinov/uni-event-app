@@ -179,6 +179,13 @@ export default function Event() {
                 GetAllEvents()
               }
             }}
+            onDelete={() => {
+              if (selectedTab == 1) {
+                GetUserEvents()
+              } else {
+                GetAllEvents()
+              }
+            }}
           />
         )}
       />
