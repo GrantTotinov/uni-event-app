@@ -1,47 +1,46 @@
-import { View, Text, Pressable, StyleSheet, processColor } from "react-native"
 import React, { useEffect, useState } from "react"
+import { View, Text, Pressable, StyleSheet } from "react-native"
 import Colors from "@/data/Colors"
 import axios from "axios"
 import PostList from "../Post/PostList"
 
 export default function LatestPost() {
   const [selectedTab, setSelectedTab] = useState(0)
-  const [posts, setPosts] = useState()
+  const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(false)
+
   useEffect(() => {
-    GetPosts()
-  }, [])
-  const GetPosts = async () => {
-    // Fetch all post from the database
+    getPosts()
+  }, [selectedTab])
+
+  const getPosts = async () => {
     setLoading(true)
-    const result = await axios.get(
-      process.env.EXPO_PUBLIC_HOST_URL + "/post?club=0&orderField=post.id"
-    )
-    setPosts(result.data)
+
+    // Определяме orderField според избрания таб
+    let orderField = selectedTab === 0 ? "post.createdon" : "likes_count"
+    // club може да остане същото или да бъде адаптирано спрямо логиката на вашето приложение
+    const url = `${process.env.EXPO_PUBLIC_HOST_URL}/post?club=0&orderField=${orderField}`
+
+    try {
+      const result = await axios.get(url)
+      setPosts(result.data)
+    } catch (error) {
+      console.error("Грешка при извличане на постовете", error)
+    }
     setLoading(false)
   }
 
   return (
-    <View
-      style={{
-        marginTop: 15,
-      }}
-    >
-      <View
-        style={{
-          display: "flex",
-          flexDirection: "row",
-          gap: 8,
-        }}
-      >
+    <View style={{ marginTop: 15 }}>
+      <View style={{ flexDirection: "row", gap: 8 }}>
         <Pressable onPress={() => setSelectedTab(0)}>
           <Text
             style={[
               styles.tabtext,
               {
                 backgroundColor:
-                  selectedTab == 0 ? Colors.PRIMARY : Colors.WHITE,
-                color: selectedTab == 0 ? Colors.WHITE : Colors.PRIMARY,
+                  selectedTab === 0 ? Colors.PRIMARY : Colors.WHITE,
+                color: selectedTab === 0 ? Colors.WHITE : Colors.PRIMARY,
               },
             ]}
           >
@@ -54,8 +53,8 @@ export default function LatestPost() {
               styles.tabtext,
               {
                 backgroundColor:
-                  selectedTab == 1 ? Colors.PRIMARY : Colors.WHITE,
-                color: selectedTab == 1 ? Colors.WHITE : Colors.PRIMARY,
+                  selectedTab === 1 ? Colors.PRIMARY : Colors.WHITE,
+                color: selectedTab === 1 ? Colors.WHITE : Colors.PRIMARY,
               },
             ]}
           >
@@ -63,10 +62,11 @@ export default function LatestPost() {
           </Text>
         </Pressable>
       </View>
-      <PostList posts={posts} loading={loading} onRefresh={GetPosts} />
+      <PostList posts={posts} loading={loading} onRefresh={getPosts} />
     </View>
   )
 }
+
 const styles = StyleSheet.create({
   tabtext: {
     padding: 4,

@@ -1,77 +1,88 @@
-import { pool } from "@/configs/NilePostgresConfig"
+import { client, pool } from "@/configs/NilePostgresConfig"
 
-// Добавяне на лайк
+// Създаване на харесване (при лайк)
 export async function POST(request: Request) {
-  const { postId, userEmail } = await request.json()
+  const body = await request.json()
+  console.log("Получени данни:", body)
 
-  try {
-    // Добавяме лайк, ако не е вече съществуващ (може да добавите и проверка)
-    const result = await pool.query(
-      `INSERT INTO likes (post_id, user_email)
-       VALUES ($1, $2)
-       RETURNING id`,
-      [postId, userEmail]
+  if (!body || !body.postId || !body.userEmail) {
+    console.error("Липсват задължителни данни:", body)
+    return Response.json(
+      { error: "Липсват задължителни данни" },
+      { status: 400 }
     )
-    return Response.json({ message: "Liked", likeId: result.rows[0].id })
-  } catch (error) {
-    console.error("Error adding like", error)
-    return Response.json({ error }, { status: 500 })
   }
+
+  const { postId, userEmail } = body
+
+  const result = await pool.query(
+    `INSERT INTO likes (post_id, user_email)
+     VALUES ($1, $2)
+     RETURNING id`,
+    [postId, userEmail]
+  )
+
+  return Response.json({ newLikeId: result.rows[0].id })
 }
 
+// Извличане на харесвания/статус по postId (и/или userEmail)
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const postId = searchParams.get("postId")
-  const userEmail = searchParams.get("userEmail") // ако идва - проверяваме isLiked
+  const url = new URL(request.url)
 
-  if (!postId) {
-    return Response.json({ error: "Missing postId" }, { status: 400 })
-  }
+  if (url.searchParams.has("postId")) {
+    const postId = url.searchParams.get("postId")
 
-  try {
-    // Ако има userEmail => връщаме дали е лайкнат от потребителя
-    if (userEmail) {
+    // Ако се подаде и userEmail – проверка дали потребителят е харесал поста
+    if (url.searchParams.has("userEmail")) {
+      const userEmail = url.searchParams.get("userEmail")
       const result = await pool.query(
-        `SELECT COUNT(*) AS count FROM likes WHERE post_id = $1 AND user_email = $2`,
+        `SELECT COUNT(*)::int as count 
+         FROM likes 
+         WHERE post_id = $1 AND user_email = $2`,
         [postId, userEmail]
       )
-
-      const isLiked = parseInt(result.rows[0].count, 10) > 0
+      const isLiked = result.rows[0].count > 0
       return Response.json({ isLiked })
+    } else {
+      // Прочитаме общия брой лайкове и гарантираме, че ако няма данни връщаме 0
+      const result = await pool.query(
+        `SELECT COUNT(*)::int as likecount 
+         FROM likes 
+         WHERE post_id = $1`,
+        [postId]
+      )
+      // Използваме "likecount" защото PostgreSQL го връща с малки букви
+      const likeCount =
+        result.rows[0] && result.rows[0].likecount !== null
+          ? parseInt(result.rows[0].likecount, 10)
+          : 0
+      return Response.json({ likeCount })
     }
-
-    // Ако няма userEmail => връщаме броя лайкове
-    const result = await pool.query(
-      `SELECT COUNT(*) AS likeCount FROM likes WHERE post_id = $1`,
-      [postId]
-    )
-
-    return Response.json({
-      likeCount: parseInt(result.rows[0].likecount, 10),
-    })
-  } catch (error) {
-    console.error("Error fetching like info", error)
-    return Response.json({ error: "Internal server error" }, { status: 500 })
+  } else {
+    return Response.json({ error: "Missing postId parameter" }, { status: 400 })
   }
 }
 
-// Премахване на лайк
-export async function DELETE(request: Request) {
-  const { postId, userEmail } = await request.json()
+export async function PUT(request: Request) {
+  const body = await request.json()
+  return Response.json({ message: "PUT not implemented" })
+}
 
-  try {
-    const result = await pool.query(
-      `DELETE FROM likes
-       WHERE post_id = $1 AND user_email = $2
-       RETURNING id`,
-      [postId, userEmail]
+export async function DELETE(request: Request) {
+  const body = await request.json()
+  const { postId, userEmail } = body
+
+  if (!postId || !userEmail) {
+    console.error("Липсват задължителни данни за изтриване:", body)
+    return Response.json(
+      { error: "Липсват задължителни данни" },
+      { status: 400 }
     )
-    return Response.json({
-      message: "Unliked",
-      removedLikeId: result.rows[0]?.id,
-    })
-  } catch (error) {
-    console.error("Error removing like", error)
-    return Response.json({ error }, { status: 500 })
   }
+
+  const result = await pool.query(
+    "DELETE FROM likes WHERE post_id = $1 AND user_email = $2 RETURNING id",
+    [postId, userEmail]
+  )
+  return Response.json({ deletedLikeId: result.rows[0].id })
 }

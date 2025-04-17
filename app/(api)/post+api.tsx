@@ -1,10 +1,10 @@
 import { client, pool } from "@/configs/NilePostgresConfig"
 
+// Създаване на нов пост
 export async function POST(request: Request) {
   const body = await request.json()
   console.log("Получени данни:", body)
 
-  // Проверка дали има нужните данни в body
   if (!body || !body.content || !body.email) {
     console.error("Липсват задължителни данни:", body)
     return Response.json(
@@ -28,7 +28,6 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const url = new URL(request.url)
 
-  // Ако е подаден u_email, извличаме постове от клубовете, в които потребителя е член
   if (url.searchParams.has("u_email")) {
     const u_email = url.searchParams.get("u_email")
     const result = await pool.query(
@@ -54,39 +53,65 @@ export async function GET(request: Request) {
     )
     return Response.json(result.rows)
   } else {
-    // В противен случай използваме club и orderField
     const club = url.searchParams.get("club")
     let orderField = url.searchParams.get("orderField")
 
-    // Валидация на orderField: списък с позволени стойности
-    const allowedFields = ["post.createdon", "post.id", "users.name"]
+    const allowedFields = [
+      "post.createdon",
+      "post.id",
+      "users.name",
+      "likes_count",
+    ]
     if (!orderField || !allowedFields.includes(orderField)) {
       orderField = "post.createdon"
     }
 
-    // Проверка дали club параметърът е зададен
     if (!club) {
       return Response.json({ error: "Missing club parameter" }, { status: 400 })
     }
 
-    const result = await pool.query(`
-      SELECT 
-        post.id AS post_id,
-        post.context,
-        post.imageurl,
-        post.createdby,
-        post.createdon,
-        post.club,
-        users.id AS user_id,
-        users.email,
-        users.name,
-        users.image
-      FROM post
-      INNER JOIN users ON post.createdby = users.email
-      WHERE post.club IN (${club})
-      ORDER BY ${orderField} DESC;
-    `)
-    return Response.json(result.rows)
+    if (orderField === "likes_count") {
+      const result = await pool.query(`
+        SELECT 
+          post.id AS post_id,
+          post.context,
+          post.imageurl,
+          post.createdby,
+          post.createdon,
+          post.club,
+          users.id AS user_id,
+          users.email,
+          users.name,
+          users.image,
+          COUNT(likes.id) AS likes_count
+        FROM post
+        INNER JOIN users ON post.createdby = users.email
+        LEFT JOIN likes ON post.id = likes.post_id
+        WHERE post.club IN (${club})
+        GROUP BY post.id, users.id
+        ORDER BY likes_count DESC;
+      `)
+      return Response.json(result.rows)
+    } else {
+      const result = await pool.query(`
+        SELECT 
+          post.id AS post_id,
+          post.context,
+          post.imageurl,
+          post.createdby,
+          post.createdon,
+          post.club,
+          users.id AS user_id,
+          users.email,
+          users.name,
+          users.image
+        FROM post
+        INNER JOIN users ON post.createdby = users.email
+        WHERE post.club IN (${club})
+        ORDER BY ${orderField} DESC;
+      `)
+      return Response.json(result.rows)
+    }
   }
 }
 
@@ -94,7 +119,6 @@ export async function PUT(request: Request) {
   const body = await request.json()
   const { postId, userEmail, content, imageUrl } = body
 
-  // Проверка за задължителните данни
   if (!postId || !userEmail || (!content && !imageUrl)) {
     console.error("Липсват задължителни данни:", body)
     return Response.json(
@@ -103,7 +127,6 @@ export async function PUT(request: Request) {
     )
   }
 
-  // Проверка за съществуването на поста и дали потребителя е автор
   const postQuery = await pool.query(
     "SELECT createdby FROM post WHERE id = $1",
     [postId]
@@ -121,7 +144,6 @@ export async function PUT(request: Request) {
     )
   }
 
-  // Изграждане на динамична UPDATE заявка
   let updateFields: string[] = []
   let updateValues: any[] = []
   let parameterIdx = 1
@@ -134,7 +156,7 @@ export async function PUT(request: Request) {
     updateFields.push(`imageurl = $${parameterIdx++}`)
     updateValues.push(imageUrl)
   }
-  updateValues.push(postId) // последният параметър за WHERE условията
+  updateValues.push(postId)
 
   const updateQuery = `
     UPDATE post
@@ -159,7 +181,6 @@ export async function DELETE(request: Request) {
   const body = await request.json()
   const { postId, userEmail } = body
 
-  // Проверяваме дали са подадени необходимите данни
   if (!postId || !userEmail) {
     console.error("Липсват задължителни данни за изтриване:", body)
     return Response.json(
@@ -168,7 +189,6 @@ export async function DELETE(request: Request) {
     )
   }
 
-  // Проверяваме дали постът съществува и дали потребителят е автор
   const postQuery = await pool.query(
     "SELECT createdby FROM post WHERE id = $1",
     [postId]
@@ -185,7 +205,6 @@ export async function DELETE(request: Request) {
     )
   }
 
-  // Изтриваме поста
   const result = await pool.query(
     "DELETE FROM post WHERE id = $1 RETURNING id",
     [postId]
