@@ -11,19 +11,28 @@ export default function Index() {
   const { user, setUser } = useContext(AuthContext)
   const router = useRouter()
   onAuthStateChanged(auth, async (userData) => {
-    //console.log(userData?.email)
-    if (userData && userData.email) {
-      const result = await axios.get(
-        process.env.EXPO_PUBLIC_HOST_URL + "/user?email=" + userData.email
-      )
-      // Ако данните от базата са празни или непълни, може би това е нов акаунт
-      if (result.data && result.data.name) {
-        setUser(result.data)
-        router.replace("/(tabs)/Home")
+    console.log("Auth state changed:", userData)
+    console.log("Using API URL:", process.env.EXPO_PUBLIC_HOST_URL)
+    try {
+      if (userData && userData.email) {
+        console.log("Fetching user data for:", userData.email)
+        const result = await axios.get(
+          process.env.EXPO_PUBLIC_HOST_URL + "/user?email=" + userData.email
+        )
+        console.log("User data fetched:", result.data)
+        if (result.data && result.data.name) {
+          setUser(result.data)
+          router.replace("/(tabs)/Home")
+        } else {
+          console.log("No user data found, redirecting to landing.")
+          router.replace("/landing")
+        }
       } else {
+        console.log("No user logged in, redirecting to landing.")
         router.replace("/landing")
       }
-    } else {
+    } catch (error) {
+      console.error("Error fetching user data:", error)
       router.replace("/landing")
     }
   })
