@@ -15,7 +15,7 @@ import UserAvatar from "./UserAvatar"
 import Colors from "@/data/Colors"
 import AntDesign from "@expo/vector-icons/AntDesign"
 import FontAwesome from "@expo/vector-icons/FontAwesome"
-import { AuthContext } from "@/context/AuthContext"
+import { AuthContext, isAdmin } from "@/context/AuthContext"
 import * as ImagePicker from "expo-image-picker"
 import { upload } from "cloudinary-react-native"
 import { cld, options } from "@/configs/CloudinaryConfig"
@@ -26,7 +26,7 @@ moment.locale("bg")
 export default function PostCard({ post, onUpdate }: any) {
   const { user } = useContext(AuthContext)
   const router = useRouter()
-
+  const canDelete = isAdmin(user?.role) || user?.email === post.createdby
   // Състояния за харесвания, коментари и редактиране
   const [isLiked, setIsLiked] = useState(false)
   const [likeCount, setLikeCount] = useState(0)
@@ -195,7 +195,7 @@ export default function PostCard({ post, onUpdate }: any) {
   }
 
   const startEditing = () => {
-    if (user?.email !== post.createdby) {
+    if (!isAdmin(user?.role) && user?.email !== post.createdby) {
       Alert.alert("Нямате права да редактирате този пост.")
       return
     }
@@ -359,7 +359,7 @@ export default function PostCard({ post, onUpdate }: any) {
           <TouchableOpacity onPress={toggleCommentsView}>
             <Text style={styles.commentsLink}>Виж всички коментари</Text>
           </TouchableOpacity>
-          {user?.email === post.createdby && (
+          {(isAdmin(user?.role) || user?.email === post.createdby) && (
             <View style={styles.actionButtonsContainer}>
               <TouchableOpacity onPress={startEditing} style={styles.editLink}>
                 <Text style={styles.editLinkText}>Редактирай</Text>
