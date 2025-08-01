@@ -9,9 +9,9 @@ import { auth } from "@/configs/FirebaseConfig"
 
 const profileOptions = [
   {
-    name: "Добави публикация",
-    path: "/add-post",
-    icon: "add-circle-outline",
+    name: "Настройки",
+    path: "/settings",
+    icon: "settings-outline",
   },
   {
     name: "Моите събития",

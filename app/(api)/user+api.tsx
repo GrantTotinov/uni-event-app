@@ -20,3 +20,34 @@ export async function GET(request: Request) {
     return Response.json({ error: e })
   }
 }
+
+export async function PUT(request: Request) {
+  const { email, name } = await request.json()
+
+  if (!email || !name) {
+    return Response.json(
+      { error: "Липсват задължителни данни" },
+      { status: 400 }
+    )
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE users SET name = $1 WHERE email = $2 RETURNING *`,
+      [name, email]
+    )
+    if (result.rows.length === 0) {
+      return Response.json(
+        { error: "Потребителят не съществува" },
+        { status: 404 }
+      )
+    }
+    return Response.json(result.rows[0])
+  } catch (error) {
+    console.error("Грешка при промяна на името:", error)
+    return Response.json(
+      { error: "Грешка при промяна на името" },
+      { status: 500 }
+    )
+  }
+}

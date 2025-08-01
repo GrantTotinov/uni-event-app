@@ -64,6 +64,12 @@ export default function RootLayout() {
             headerTitle: "Създай Ново Събитие",
           }}
         />
+        <Stack.Screen
+          name="settings"
+          options={{
+            headerTitle: "Настройки",
+          }}
+        />
       </Stack>
     </AuthContext.Provider>
   )
