@@ -37,11 +37,91 @@ export default function PostCard({ post, onUpdate }: any) {
   const [isEditing, setIsEditing] = useState(false)
   const [editedContent, setEditedContent] = useState(post?.context)
   const [editedImageUrl, setEditedImageUrl] = useState(post?.imageurl)
-  const [localPost, setLocalPost] = useState(post)
+  //const [localPost, setLocalPost] = useState(post)
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
+  const [editedCommentText, setEditedCommentText] = useState<string>("")
 
   // state за обновяване – на всяка промяна се извиква презареждане
   const [updateTrigger, setUpdateTrigger] = useState(0)
+  const deleteComment = async (commentId: number) => {
+    Alert.alert(
+      "Изтриване на коментар",
+      "Сигурни ли сте, че искате да изтриете този коментар?",
+      [
+        {
+          text: "Отказ",
+          style: "cancel",
+        },
+        {
+          text: "Изтрий",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const response = await axios.delete(
+                `${process.env.EXPO_PUBLIC_HOST_URL}/comment`,
+                {
+                  data: {
+                    commentId,
+                    userEmail: user.email,
+                    postAuthorEmail: post.createdby,
+                  },
+                }
+              )
+              console.log("Коментарът е изтрит:", response.data)
+              setComments((prev) =>
+                prev.filter((comment) => comment.id !== commentId)
+              )
+              setCommentCount((prev) => prev - 1)
+              Alert.alert("Успех", "Коментарът е изтрит успешно.")
+            } catch (error) {
+              console.error("Грешка при изтриване на коментара", error)
+              Alert.alert(
+                "Грешка",
+                "Неуспешно изтриване на коментара. Опитайте отново."
+              )
+            }
+          },
+        },
+      ]
+    )
+  }
 
+  const saveEditedComment = async () => {
+    if (!editedCommentText.trim()) {
+      Alert.alert("Грешка", "Коментарът не може да бъде празен.")
+      return
+    }
+
+    try {
+      const response = await axios.put(
+        `${process.env.EXPO_PUBLIC_HOST_URL}/comment`,
+        {
+          commentId: editingCommentId,
+          userEmail: user.email,
+          newComment: editedCommentText,
+        }
+      )
+      console.log("Коментарът е редактиран:", response.data)
+
+      // Актуализиране на локалния state
+      setComments((prev) =>
+        prev.map((comment) =>
+          comment.id === editingCommentId
+            ? { ...comment, comment: response.data.updatedComment }
+            : comment
+        )
+      )
+      setEditingCommentId(null)
+      setEditedCommentText("")
+      Alert.alert("Успех", "Коментарът е редактиран успешно.")
+    } catch (error) {
+      console.error("Грешка при редактиране на коментара", error)
+      Alert.alert(
+        "Грешка",
+        "Неуспешно редактиране на коментара. Опитайте отново."
+      )
+    }
+  }
   // Преобразуване на датата на публикацията
   const createdAt = post?.createdon
     ? moment
@@ -112,9 +192,11 @@ export default function PostCard({ post, onUpdate }: any) {
     if (commentsVisible) {
       const fetchComments = async () => {
         try {
+          console.log("Fetching comments for post ID:", post.post_id)
           const commentRes = await axios.get(
             `${process.env.EXPO_PUBLIC_HOST_URL}/comment?postId=${post.post_id}`
           )
+          console.log("Fetched comments:", commentRes.data)
           setComments(commentRes.data)
           setCommentCount(
             Array.isArray(commentRes.data) ? commentRes.data.length : 0
@@ -162,11 +244,16 @@ export default function PostCard({ post, onUpdate }: any) {
     }
     if (commentText.trim() === "") return
     try {
-      await axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/comment`, {
-        postId: post.post_id,
-        userEmail: user.email,
-        comment: commentText,
-      })
+      console.log("Submitting comment:", commentText)
+      const response = await axios.post(
+        `${process.env.EXPO_PUBLIC_HOST_URL}/comment`,
+        {
+          postId: post.post_id,
+          userEmail: user.email,
+          comment: commentText,
+        }
+      )
+      console.log("Comment submitted successfully:", response.data)
       setCommentText("")
       setCommentCount((prev) => prev + 1)
       if (commentsVisible) {
@@ -179,6 +266,7 @@ export default function PostCard({ post, onUpdate }: any) {
           name: user.name,
           image: user.image,
         }
+        console.log("Adding new comment to state:", newComment)
         setComments((prev) => [newComment, ...prev])
       }
     } catch (error) {
@@ -191,6 +279,7 @@ export default function PostCard({ post, onUpdate }: any) {
   }
 
   const toggleCommentsView = () => {
+    console.log("Toggling comments view. Current state:", commentsVisible)
     setCommentsVisible((prev) => !prev)
   }
 
@@ -390,10 +479,75 @@ export default function PostCard({ post, onUpdate }: any) {
             comments.map((c) => (
               <View key={c.id} style={styles.commentItem}>
                 <Text style={styles.commentAuthor}>{c.name}</Text>
-                <Text style={styles.commentText}>{c.comment}</Text>
-                <Text style={styles.commentDate}>
-                  {moment.utc(c.created_at).tz("Europe/Sofia").fromNow()}
-                </Text>
+                {editingCommentId === c.id ? (
+                  <>
+                    <TextInput
+                      style={styles.commentInput}
+                      value={editedCommentText}
+                      onChangeText={setEditedCommentText}
+                      placeholder="Редактирайте коментара..."
+                    />
+                    <View style={styles.editButtons}>
+                      <TouchableOpacity onPress={saveEditedComment}>
+                        <Text
+                          style={{ color: Colors.PRIMARY, fontWeight: "bold" }}
+                        >
+                          Запази
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setEditingCommentId(null)
+                          setEditedCommentText("")
+                        }}
+                      >
+                        <Text style={{ color: "red", fontWeight: "bold" }}>
+                          Откажи
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.commentText}>{c.comment}</Text>
+                    <Text style={styles.commentDate}>
+                      {moment.utc(c.created_at).tz("Europe/Sofia").fromNow()}
+                    </Text>
+                    {user?.email === c.user_email &&
+                      (console.log(
+                        "User email:",
+                        user?.email,
+                        "Comment author email:",
+                        c.user_email
+                      ),
+                      (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setEditingCommentId(c.id)
+                            setEditedCommentText(c.comment)
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: Colors.PRIMARY,
+                              fontWeight: "bold",
+                            }}
+                          >
+                            Редактирай
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    {(isAdmin(user?.role) ||
+                      user?.email === c.user_email ||
+                      user?.email === post.createdby) && (
+                      <TouchableOpacity onPress={() => deleteComment(c.id)}>
+                        <Text style={{ color: "red", fontWeight: "bold" }}>
+                          Изтрий
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                )}
               </View>
             ))
           ) : (
