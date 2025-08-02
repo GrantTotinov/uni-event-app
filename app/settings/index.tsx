@@ -1,6 +1,12 @@
 import React, { useState, useContext } from "react"
 import { View, Text, TextInput, TouchableOpacity, Alert } from "react-native"
 import { AuthContext } from "@/context/AuthContext"
+import {
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+} from "firebase/auth"
+import { auth } from "@/configs/FirebaseConfig"
 import Colors from "@/data/Colors"
 import axios from "axios"
 
@@ -31,20 +37,27 @@ export default function Settings() {
     }
   }
 
-  const updatePassword = async () => {
+  const updatePasswordHandler = async () => {
     if (!currentPassword || !newPassword) {
       Alert.alert("Грешка", "Моля, попълнете всички полета.")
       return
     }
+
+    if (!auth.currentUser) {
+      Alert.alert("Грешка", "Не сте влезли в профила си.")
+      return
+    }
+
     try {
-      const response = await axios.put(
-        `${process.env.EXPO_PUBLIC_HOST_URL}/user/password`,
-        {
-          email: user?.email,
-          currentPassword,
-          newPassword,
-        }
+      // Реавтентикация на потребителя
+      const credential = EmailAuthProvider.credential(
+        user.email,
+        currentPassword
       )
+      await reauthenticateWithCredential(auth.currentUser, credential)
+
+      // Смяна на паролата
+      await updatePassword(auth.currentUser, newPassword)
       Alert.alert("Успех", "Паролата е успешно променена.")
     } catch (error) {
       console.error("Грешка при промяна на паролата:", error)
@@ -57,6 +70,8 @@ export default function Settings() {
       <Text style={{ fontSize: 25, fontWeight: "bold", marginBottom: 20 }}>
         Настройки
       </Text>
+
+      {/* Секция за промяна на име */}
       <View style={{ marginBottom: 20 }}>
         <Text style={{ fontSize: 18 }}>Смяна на потребителско име</Text>
         <TextInput
@@ -83,6 +98,8 @@ export default function Settings() {
           <Text style={{ color: "white", textAlign: "center" }}>Запази</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Секция за промяна на парола */}
       <View>
         <Text style={{ fontSize: 18 }}>Смяна на парола</Text>
         <TextInput
@@ -112,7 +129,7 @@ export default function Settings() {
           onChangeText={setNewPassword}
         />
         <TouchableOpacity
-          onPress={updatePassword}
+          onPress={updatePasswordHandler}
           style={{
             backgroundColor: Colors.PRIMARY,
             padding: 10,
