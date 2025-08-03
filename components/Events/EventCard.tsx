@@ -5,7 +5,7 @@ import Entypo from "@expo/vector-icons/Entypo"
 import Ionicons from "@expo/vector-icons/Ionicons"
 import Button from "../Shared/Button"
 import axios from "axios"
-import { AuthContext } from "@/context/AuthContext"
+import { AuthContext, isAdmin } from "@/context/AuthContext"
 import * as FileSystem from "expo-file-system"
 import * as Sharing from "expo-sharing"
 
@@ -185,7 +185,7 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
         </View>
       )}
       {/* Добавяне на бутон за изтриване, показан само за създателя */}
-      {user?.email === event.createdby && (
+      {(user?.email === event.createdby || isAdmin(user?.role)) && (
         <View style={styles.eventActionsContainer}>
           <Button text="Изтрий събитие" onPress={deleteEvent} outline={true} />
         </View>

@@ -237,6 +237,7 @@ export default function PostCard({ post, onUpdate }: any) {
   }
 
   // Функция за изпращане на коментар
+  // Функция за изпращане на коментар
   const submitComment = async () => {
     if (!user) {
       Alert.alert("Моля, влезте в профила си, за да коментирате.")
@@ -257,14 +258,14 @@ export default function PostCard({ post, onUpdate }: any) {
       setCommentText("")
       setCommentCount((prev) => prev + 1)
       if (commentsVisible) {
+        // Използвайте същия формат като този, който идва от сървъра
         const newComment = {
-          id: Date.now(),
+          id: response.data.commentId,
           comment: commentText,
-          created_at: moment()
-            .tz("Europe/Sofia")
-            .format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
+          created_at: moment().tz("Europe/Sofia").toISOString(),
           name: user.name,
           image: user.image,
+          user_email: user.email,
         }
         console.log("Adding new comment to state:", newComment)
         setComments((prev) => [newComment, ...prev])
@@ -511,7 +512,7 @@ export default function PostCard({ post, onUpdate }: any) {
                   <>
                     <Text style={styles.commentText}>{c.comment}</Text>
                     <Text style={styles.commentDate}>
-                      {moment.utc(c.created_at).tz("Europe/Sofia").fromNow()}
+                      {moment(c.created_at).tz("Europe/Sofia").fromNow()}
                     </Text>
                     {user?.email === c.user_email &&
                       (console.log(

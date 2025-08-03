@@ -65,7 +65,7 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
-          name="settings"
+          name="settings/index"
           options={{
             headerTitle: "Настройки",
           }}
