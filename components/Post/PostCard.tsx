@@ -123,11 +123,9 @@ export default function PostCard({ post, onUpdate }: any) {
     }
   }
   // Преобразуване на датата на публикацията
-  const createdAt = post?.createdon
-    ? moment
-        .utc(post.createdon)
-        .tz("Europe/Sofia")
-        .format("YYYY-MM-DD HH:mm:ss")
+  // Преобразуване на датата на публикацията
+  const createdAt = post?.createdon_local
+    ? moment(post.createdon_local).format("YYYY-MM-DD HH:mm:ss")
     : "Няма дата"
 
   // Функция за презареждане на данните на публикацията
@@ -258,11 +256,15 @@ export default function PostCard({ post, onUpdate }: any) {
       setCommentText("")
       setCommentCount((prev) => prev + 1)
       if (commentsVisible) {
+        const now = new Date()
+        const nowBG = moment(now).format()
         // Използвайте същия формат като този, който идва от сървъра
         const newComment = {
           id: response.data.commentId,
           comment: commentText,
-          created_at: moment().tz("Europe/Sofia").toISOString(),
+          // Не използваме UTC() - просто вземаме локалното време
+          created_at: now.toISOString(),
+          created_at_local: nowBG,
           name: user.name,
           image: user.image,
           user_email: user.email,
@@ -388,7 +390,12 @@ export default function PostCard({ post, onUpdate }: any) {
 
   return (
     <View style={styles.cardContainer}>
-      <UserAvatar name={post?.name} image={post?.image} date={createdAt} />
+      <UserAvatar
+        name={post?.name}
+        image={post?.image}
+        date={post?.createdon}
+        localDate={post?.createdon_local}
+      />
 
       {isEditing ? (
         <>
@@ -511,33 +518,26 @@ export default function PostCard({ post, onUpdate }: any) {
                 ) : (
                   <>
                     <Text style={styles.commentText}>{c.comment}</Text>
+                    {/* Добавен ред */}
                     <Text style={styles.commentDate}>
-                      {moment(c.created_at).tz("Europe/Sofia").fromNow()}
+                      {c.created_at_local
+                        ? moment(c.created_at_local).fromNow()
+                        : moment(c.created_at).fromNow()}
                     </Text>
-                    {user?.email === c.user_email &&
-                      (console.log(
-                        "User email:",
-                        user?.email,
-                        "Comment author email:",
-                        c.user_email
-                      ),
-                      (
-                        <TouchableOpacity
-                          onPress={() => {
-                            setEditingCommentId(c.id)
-                            setEditedCommentText(c.comment)
-                          }}
+                    {user?.email === c.user_email && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setEditingCommentId(c.id)
+                          setEditedCommentText(c.comment)
+                        }}
+                      >
+                        <Text
+                          style={{ color: Colors.PRIMARY, fontWeight: "bold" }}
                         >
-                          <Text
-                            style={{
-                              color: Colors.PRIMARY,
-                              fontWeight: "bold",
-                            }}
-                          >
-                            Редактирай
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
+                          Редактирай
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                     {(isAdmin(user?.role) ||
                       user?.email === c.user_email ||
                       user?.email === post.createdby) && (

@@ -3,5 +3,6 @@ import { createContext } from "react"
 export const AuthContext = createContext<any>(undefined)
 
 export function isAdmin(userRole: string | undefined): boolean {
-  return userRole === "admin"
+  if (!userRole) return false
+  return userRole.toLowerCase() === "admin"
 }

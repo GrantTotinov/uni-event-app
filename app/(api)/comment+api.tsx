@@ -10,11 +10,17 @@ export async function GET(request: Request) {
 
   try {
     const result = await pool.query(
-      `SELECT comments.id, comments.comment, comments.created_at, users.name, users.image, users.email AS user_email
-       FROM comments
-       INNER JOIN users ON comments.user_email = users.email
-       WHERE comments.post_id = $1
-       ORDER BY comments.created_at DESC`,
+      `SELECT comments.id,
+      comments.comment, 
+      comments.created_at, 
+      comments.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS created_at_local, 
+      users.name,
+      users.image, 
+      users.email AS user_email
+      FROM comments
+      INNER JOIN users ON comments.user_email = users.email
+      WHERE comments.post_id = $1
+      ORDER BY comments.created_at DESC`,
       [postId]
     )
     console.log("Fetched comments from API:", result.rows)

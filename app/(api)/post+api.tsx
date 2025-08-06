@@ -33,23 +33,24 @@ export async function GET(request: Request) {
     const u_email = url.searchParams.get("u_email")
     const result = await pool.query(
       `
-      SELECT 
-        post.id AS post_id,
-        post.context,
-        post.imageurl,
-        post.createdby,
-        post.createdon,
-        post.club,
-        users.id AS user_id,
-        users.email,
-        users.name,
-        users.image
-      FROM post
-      INNER JOIN clubfollowers ON post.club = clubfollowers.club_id
-      INNER JOIN users ON post.createdby = users.email
-      WHERE clubfollowers.u_email = $1
-      ORDER BY post.createdon DESC;
-      `,
+  SELECT 
+    post.id AS post_id,
+    post.context,
+    post.imageurl,
+    post.createdby,
+    post.createdon,
+    post.createdon AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS createdon_local,
+    post.club,
+    users.id AS user_id,
+    users.email,
+    users.name,
+    users.image
+  FROM post
+  INNER JOIN clubfollowers ON post.club = clubfollowers.club_id
+  INNER JOIN users ON post.createdby = users.email
+  WHERE clubfollowers.u_email = $1
+  ORDER BY post.createdon DESC;
+  `,
       [u_email]
     )
     return Response.json(result.rows)
@@ -79,6 +80,7 @@ export async function GET(request: Request) {
           post.imageurl,
           post.createdby,
           post.createdon,
+          post.createdon AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS createdon_local,
           post.club,
           users.id AS user_id,
           users.email,
@@ -101,6 +103,7 @@ export async function GET(request: Request) {
           post.imageurl,
           post.createdby,
           post.createdon,
+          post.createdon AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS createdon_local,
           post.club,
           users.id AS user_id,
           users.email,

@@ -2,7 +2,7 @@ import { View, Text, Image } from "react-native"
 import React from "react"
 import Colors from "@/data/Colors"
 import Ionicons from "@expo/vector-icons/Ionicons"
-import moment from "moment-timezone"
+import moment from "moment"
 import "moment/locale/bg"
 
 moment.locale("bg")
@@ -11,15 +11,40 @@ type USER_AVATAR = {
   name: string
   image: string
   date: string
+  localDate?: string // Добавяме новото поле
 }
 
-export default function UserAvatar({ name, image, date }: USER_AVATAR) {
-  // Ако date е "Now" използваме текущата дата, иначе отрязваме излишните интервали.
-  const sanitizedDate = date === "Now" ? moment().toISOString() : date.trim()
-  const localDate = moment.utc(sanitizedDate).tz("Europe/Sofia")
-  const formattedDate = localDate.isValid()
-    ? localDate.fromNow()
-    : "Невалидна дата"
+export default function UserAvatar({
+  name,
+  image,
+  date,
+  localDate,
+}: USER_AVATAR) {
+  // Форматиране на датата, използвайки localDate когато е налично
+  // В UserAvatar функцията:
+
+  // Добавете логване за дебъгиране
+  console.log("UserAvatar props:", { name, image, date, localDate })
+
+  // Променете логиката:
+  let formattedDate = "Невалидна дата"
+
+  if (date === "Now") {
+    formattedDate = "току-що"
+  } else {
+    try {
+      // Използваме localDate ако е налично
+      if (localDate) {
+        console.log("Using localDate:", localDate)
+        formattedDate = moment(localDate).fromNow()
+      } else {
+        console.log("Using date with UTC conversion:", date)
+        formattedDate = moment.utc(date).tz("Europe/Sofia").fromNow()
+      }
+    } catch (error) {
+      console.error("Грешка при форматиране на датата:", error)
+    }
+  }
 
   return (
     <View
