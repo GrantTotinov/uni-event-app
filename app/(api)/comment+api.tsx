@@ -23,7 +23,7 @@ export async function GET(request: Request) {
       ORDER BY comments.created_at DESC`,
       [postId]
     )
-    console.log("Fetched comments from API:", result.rows)
+
     return Response.json(result.rows)
   } catch (error) {
     console.error("Error fetching comments", error)

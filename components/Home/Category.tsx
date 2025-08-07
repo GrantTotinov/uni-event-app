@@ -10,6 +10,7 @@ import {
 import React from "react"
 import Colors from "@/data/Colors"
 import { useRouter } from "expo-router"
+import { scale, verticalScale, moderateScale } from "react-native-size-matters"
 
 const categoryOptions = [
   {
@@ -34,25 +35,27 @@ const categoryOptions = [
   },
 ]
 
+const ITEM_WIDTH = Dimensions.get("screen").width * 0.42
+const ITEM_HEIGHT = verticalScale(130)
+
 export default function Category() {
   const router = useRouter()
   return (
-    <View
-      style={{
-        marginTop: 15,
-      }}
-    >
+    <View style={{ marginTop: verticalScale(15) }}>
       <FlatList
         data={categoryOptions}
         numColumns={2}
-        renderItem={({ item, index }) => (
+        renderItem={({ item }) => (
           <TouchableOpacity
-            //@ts-ignore
-            onPress={() => router.push(item.path)}
+            //onPress={() => router.push(item.path)}
             style={styles.cartContainer}
           >
-            <Image source={item.banner} style={styles.bannerImage} />
-            <Text style={styles.text}>{item.name}</Text>
+            <View style={styles.imageWrapper}>
+              <Image source={item.banner} style={styles.bannerImage} />
+              <Text style={styles.text} numberOfLines={2} adjustsFontSizeToFit>
+                {item.name}
+              </Text>
+            </View>
           </TouchableOpacity>
         )}
       />
@@ -62,18 +65,46 @@ export default function Category() {
 
 const styles = StyleSheet.create({
   cartContainer: {
-    margin: 5,
+    margin: scale(10),
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+  },
+  imageWrapper: {
+    width: ITEM_WIDTH,
+    height: ITEM_HEIGHT,
+    borderRadius: scale(18),
+    overflow: "hidden",
+    backgroundColor: Colors.WHITE,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 3,
   },
   bannerImage: {
-    height: 100,
-    objectFit: "cover",
-    width: Dimensions.get("screen").width * 0.43,
+    width: "100%",
+    height: "100%",
+    borderRadius: scale(18),
+    resizeMode: "cover",
+    position: "absolute",
+    top: 0,
+    left: 0,
   },
   text: {
     position: "absolute",
-    padding: 10,
-    fontSize: 17,
+    top: "50%",
+    left: "50%",
+    transform: [
+      { translateX: -ITEM_WIDTH / 2 + scale(10) },
+      { translateY: -moderateScale(10) },
+    ],
+    width: ITEM_WIDTH - scale(20),
+    textAlign: "center",
+    fontSize: moderateScale(16),
     color: Colors.WHITE,
-    fontWeight: "400",
+    fontWeight: "700",
+    textShadowColor: "rgba(0,0,0,0.7)",
+    textShadowOffset: { width: scale(1), height: scale(1) },
+    textShadowRadius: scale(2),
+    paddingHorizontal: scale(10),
   },
 })

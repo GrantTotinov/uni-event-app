@@ -23,9 +23,6 @@ export default function UserAvatar({
   // Форматиране на датата, използвайки localDate когато е налично
   // В UserAvatar функцията:
 
-  // Добавете логване за дебъгиране
-  console.log("UserAvatar props:", { name, image, date, localDate })
-
   // Променете логиката:
   let formattedDate = "Невалидна дата"
 
@@ -35,10 +32,8 @@ export default function UserAvatar({
     try {
       // Използваме localDate ако е налично
       if (localDate) {
-        console.log("Using localDate:", localDate)
         formattedDate = moment(localDate).fromNow()
       } else {
-        console.log("Using date with UTC conversion:", date)
         formattedDate = moment.utc(date).tz("Europe/Sofia").fromNow()
       }
     } catch (error) {

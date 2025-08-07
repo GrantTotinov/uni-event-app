@@ -4,9 +4,19 @@ import Colors from "@/data/Colors"
 import axios from "axios"
 import PostList from "../Post/PostList"
 
-export default function LatestPost() {
+type Comment = {
+  comment: string
+}
+
+type Post = {
+  context: string
+  post_id: number
+  comments?: Comment[]
+}
+
+export default function LatestPost({ search }: { search: string }) {
   const [selectedTab, setSelectedTab] = useState(0)
-  const [posts, setPosts] = useState([])
+  const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -15,20 +25,37 @@ export default function LatestPost() {
 
   const getPosts = async () => {
     setLoading(true)
-
-    // Определяме orderField според избрания таб
     let orderField = selectedTab === 0 ? "post.createdon" : "likes_count"
-    // club може да остане същото или да бъде адаптирано спрямо логиката на вашето приложение
     const url = `${process.env.EXPO_PUBLIC_HOST_URL}/post?club=0&orderField=${orderField}`
 
     try {
       const result = await axios.get(url)
-      setPosts(result.data)
+      const postsWithComments = await Promise.all(
+        result.data.map(async (post: Post) => {
+          try {
+            const commentsRes = await axios.get(
+              `${process.env.EXPO_PUBLIC_HOST_URL}/comment?postId=${post.post_id}`
+            )
+            return { ...post, comments: commentsRes.data }
+          } catch {
+            return { ...post, comments: [] }
+          }
+        })
+      )
+      setPosts(postsWithComments)
     } catch (error) {
       console.error("Грешка при извличане на постовете", error)
     }
     setLoading(false)
   }
+
+  const filteredPosts = posts.filter(
+    (post) =>
+      post.context?.toLowerCase().includes(search.toLowerCase()) ||
+      post.comments?.some((c) =>
+        c.comment?.toLowerCase().includes(search.toLowerCase())
+      )
+  )
 
   return (
     <View style={{ marginTop: 15 }}>
@@ -58,11 +85,11 @@ export default function LatestPost() {
               },
             ]}
           >
-            Трендинг
+            Популарни
           </Text>
         </Pressable>
       </View>
-      <PostList posts={posts} loading={loading} onRefresh={getPosts} />
+      <PostList posts={filteredPosts} loading={loading} onRefresh={getPosts} />
     </View>
   )
 }

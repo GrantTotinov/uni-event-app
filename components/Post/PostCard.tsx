@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Alert,
   TextInput,
+  Modal,
 } from "react-native"
 import React, { useContext, useEffect, useState } from "react"
 import axios from "axios"
@@ -20,6 +21,7 @@ import * as ImagePicker from "expo-image-picker"
 import { upload } from "cloudinary-react-native"
 import { cld, options } from "@/configs/CloudinaryConfig"
 import { useRouter } from "expo-router"
+import { scale, verticalScale, moderateScale } from "react-native-size-matters"
 
 moment.locale("bg")
 
@@ -40,6 +42,7 @@ export default function PostCard({ post, onUpdate }: any) {
   //const [localPost, setLocalPost] = useState(post)
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editedCommentText, setEditedCommentText] = useState<string>("")
+  const [menuVisible, setMenuVisible] = useState(false)
 
   // state за обновяване – на всяка промяна се извиква презареждане
   const [updateTrigger, setUpdateTrigger] = useState(0)
@@ -387,16 +390,113 @@ export default function PostCard({ post, onUpdate }: any) {
       ]
     )
   }
+  const showMenu = () => setMenuVisible(true)
+  const hideMenu = () => setMenuVisible(false)
 
   return (
     <View style={styles.cardContainer}>
-      <UserAvatar
-        name={post?.name}
-        image={post?.image}
-        date={post?.createdon}
-        localDate={post?.createdon_local}
-      />
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <UserAvatar
+          name={post?.name}
+          image={post?.image}
+          date={post?.createdon}
+          localDate={post?.createdon_local}
+        />
+        {(isAdmin(user?.role) || user?.email === post.createdby) && (
+          <TouchableOpacity onPress={showMenu} style={{ padding: scale(8) }}>
+            <Text style={{ fontSize: moderateScale(22) }}>⋮</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
+      <Modal
+        visible={menuVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={hideMenu}
+      >
+        <View style={{ flex: 1, justifyContent: "flex-end" }}>
+          {/* Overlay */}
+          <TouchableOpacity
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "transparent",
+              zIndex: 1,
+            }}
+            activeOpacity={1}
+            onPress={hideMenu}
+          />
+          {/* Bottom sheet */}
+          <View
+            style={{
+              backgroundColor: Colors.WHITE,
+              borderTopLeftRadius: scale(16),
+              borderTopRightRadius: scale(16),
+              padding: scale(20),
+              minWidth: "100%",
+              elevation: scale(10),
+              zIndex: 2,
+            }}
+          >
+            <View
+              style={{
+                width: scale(40),
+                height: verticalScale(4),
+                backgroundColor: Colors.GRAY,
+                borderRadius: scale(2),
+                alignSelf: "center",
+                marginBottom: verticalScale(16),
+              }}
+            />
+            <TouchableOpacity
+              onPress={() => {
+                hideMenu()
+                startEditing()
+              }}
+              style={{ paddingVertical: verticalScale(16) }}
+            >
+              <Text
+                style={{
+                  color: Colors.PRIMARY,
+                  fontWeight: "bold",
+                  fontSize: moderateScale(18),
+                  textAlign: "center",
+                }}
+              >
+                Редактирай
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                hideMenu()
+                deletePost()
+              }}
+              style={{ paddingVertical: verticalScale(16) }}
+            >
+              <Text
+                style={{
+                  color: "red",
+                  fontWeight: "bold",
+                  fontSize: moderateScale(18),
+                  textAlign: "center",
+                }}
+              >
+                Изтрий
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       {isEditing ? (
         <>
           <TextInput
@@ -440,7 +540,7 @@ export default function PostCard({ post, onUpdate }: any) {
             <TouchableOpacity onPress={toggleLike} style={styles.subContainer}>
               <AntDesign
                 name="like2"
-                size={24}
+                size={scale(24)}
                 color={isLiked ? Colors.PRIMARY : "black"}
               />
               <Text style={styles.actionText}>{likeCount}</Text>
@@ -449,23 +549,13 @@ export default function PostCard({ post, onUpdate }: any) {
               onPress={toggleCommentsView}
               style={styles.subContainer}
             >
-              <FontAwesome name="commenting-o" size={24} color="black" />
+              <FontAwesome name="commenting-o" size={scale(24)} color="black" />
               <Text style={styles.actionText}>{commentCount}</Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity onPress={toggleCommentsView}>
             <Text style={styles.commentsLink}>Виж всички коментари</Text>
           </TouchableOpacity>
-          {(isAdmin(user?.role) || user?.email === post.createdby) && (
-            <View style={styles.actionButtonsContainer}>
-              <TouchableOpacity onPress={startEditing} style={styles.editLink}>
-                <Text style={styles.editLinkText}>Редактирай</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={deletePost} style={styles.deleteLink}>
-                <Text style={styles.deleteLinkText}>Изтрий</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </>
       )}
 
@@ -562,85 +652,85 @@ export default function PostCard({ post, onUpdate }: any) {
 
 const styles = StyleSheet.create({
   cardContainer: {
-    padding: 15,
+    padding: scale(15),
     backgroundColor: Colors.WHITE,
-    borderRadius: 8,
-    marginTop: 10,
+    borderRadius: scale(8),
+    marginTop: verticalScale(10),
   },
   contentText: {
-    fontSize: 18,
-    marginTop: 10,
+    fontSize: moderateScale(18),
+    marginTop: verticalScale(10),
   },
   postImage: {
     width: "100%",
-    height: 300,
+    height: verticalScale(300),
     resizeMode: "cover",
-    borderRadius: 10,
-    marginTop: 10,
+    borderRadius: scale(10),
+    marginTop: verticalScale(10),
   },
   actionsContainer: {
-    marginTop: 10,
+    marginTop: verticalScale(10),
     flexDirection: "row",
     alignItems: "center",
-    gap: 20,
+    gap: scale(20),
   },
   subContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: scale(7),
   },
   actionText: {
-    fontSize: 17,
+    fontSize: moderateScale(17),
     color: Colors.GRAY,
   },
   commentsLink: {
-    marginTop: 7,
+    marginTop: verticalScale(7),
     color: Colors.GRAY,
   },
   commentInputContainer: {
-    marginTop: 15,
+    marginTop: verticalScale(15),
     flexDirection: "row",
     alignItems: "center",
     borderColor: Colors.GRAY,
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
+    borderRadius: scale(8),
+    paddingHorizontal: scale(10),
   },
   commentInput: {
     flex: 1,
-    height: 40,
+    height: verticalScale(40),
     color: Colors.BLACK,
   },
   submitButton: {
-    padding: 10,
+    padding: scale(10),
   },
   submitButtonText: {
     color: Colors.PRIMARY,
     fontWeight: "bold",
   },
   commentsContainer: {
-    marginTop: 15,
+    marginTop: verticalScale(15),
     borderTopWidth: 1,
     borderColor: Colors.LIGHT_GRAY,
-    paddingTop: 10,
+    paddingTop: verticalScale(10),
   },
   commentItem: {
-    marginBottom: 12,
-    paddingVertical: 8,
+    marginBottom: verticalScale(12),
+    paddingVertical: verticalScale(8),
     borderBottomWidth: 1,
     borderColor: Colors.LIGHT_GRAY,
   },
   commentAuthor: {
     fontWeight: "bold",
-    fontSize: 16,
+    fontSize: moderateScale(16),
     color: Colors.BLACK,
   },
   commentText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     color: Colors.BLACK,
   },
   commentDate: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     color: Colors.GRAY,
   },
   noCommentsText: {
@@ -650,30 +740,30 @@ const styles = StyleSheet.create({
   editInput: {
     borderWidth: 1,
     borderColor: Colors.LIGHT_GRAY,
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 10,
-    fontSize: 16,
+    borderRadius: scale(8),
+    padding: scale(10),
+    marginTop: verticalScale(10),
+    fontSize: moderateScale(16),
     color: Colors.BLACK,
   },
   editButtons: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 10,
+    marginTop: verticalScale(10),
   },
   saveButton: {
     backgroundColor: Colors.PRIMARY,
-    padding: 10,
-    borderRadius: 8,
+    padding: scale(10),
+    borderRadius: scale(8),
     flex: 1,
-    marginRight: 5,
+    marginRight: scale(5),
   },
   cancelButton: {
     backgroundColor: Colors.GRAY,
-    padding: 10,
-    borderRadius: 8,
+    padding: scale(10),
+    borderRadius: scale(8),
     flex: 1,
-    marginLeft: 5,
+    marginLeft: scale(5),
   },
   saveButtonText: {
     color: Colors.WHITE,
@@ -684,10 +774,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   editImage: {
-    width: 150,
-    height: 150,
-    borderRadius: 10,
-    marginTop: 10,
+    width: scale(150),
+    height: verticalScale(150),
+    borderRadius: scale(10),
+    marginTop: verticalScale(10),
     alignSelf: "center",
   },
   imagePlaceholder: {
@@ -697,25 +787,22 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     color: Colors.GRAY,
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
   actionButtonsContainer: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    alignItems: "center", // Добавено, за да изравнява бутоните вертикално
-    marginTop: 10,
-    gap: 10,
+    alignItems: "center",
+    marginTop: verticalScale(10),
+    gap: scale(10),
   },
   editLink: {
-    // Премахваме marginTop: 10,
-    // Може да добавим paddingVertical: 5, за да има малко вътрешен отстъп
-    paddingVertical: 5,
-    paddingHorizontal: 8,
+    paddingVertical: verticalScale(5),
+    paddingHorizontal: scale(8),
   },
   deleteLink: {
-    // Премахваме marginTop: 10
-    paddingVertical: 5,
-    paddingHorizontal: 8,
+    paddingVertical: verticalScale(5),
+    paddingHorizontal: scale(8),
   },
   deleteLinkText: {
     color: "red",
