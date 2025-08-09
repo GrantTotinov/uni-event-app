@@ -21,7 +21,7 @@ import * as ImagePicker from "expo-image-picker"
 import { upload } from "cloudinary-react-native"
 import { cld, options } from "@/configs/CloudinaryConfig"
 import { useRouter } from "expo-router"
-import { scale, verticalScale, moderateScale } from "react-native-size-matters"
+import { MaterialIcons } from "@expo/vector-icons"
 
 moment.locale("bg")
 
@@ -43,9 +43,200 @@ export default function PostCard({ post, onUpdate }: any) {
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editedCommentText, setEditedCommentText] = useState<string>("")
   const [menuVisible, setMenuVisible] = useState(false)
+  const [replies, setReplies] = useState<{ [key: number]: any[] }>({})
+  const [expandedComments, setExpandedComments] = useState<number[]>([])
+  const [replyTexts, setReplyTexts] = useState<{ [key: number]: string }>({})
+  const [selectedCommentMenu, setSelectedCommentMenu] = useState<number | null>(
+    null
+  )
+  const [selectedReplyMenu, setSelectedReplyMenu] = useState<number | null>(
+    null
+  )
+  const [editingReplyId, setEditingReplyId] = useState<number | null>(null)
+  const [editedReplyText, setEditedReplyText] = useState<string>("")
 
   // state за обновяване – на всяка промяна се извиква презареждане
   const [updateTrigger, setUpdateTrigger] = useState(0)
+
+  const fetchReplies = async (commentId: number) => {
+    try {
+      const response = await axios.get(
+        `${process.env.EXPO_PUBLIC_HOST_URL}/comment?postId=${post.post_id}&parentId=${commentId}`
+      )
+      setReplies((prev) => ({ ...prev, [commentId]: response.data }))
+    } catch (error) {
+      console.error("Error fetching replies", error)
+    }
+  }
+
+  const toggleReplies = (commentId: number) => {
+    if (expandedComments.includes(commentId)) {
+      setExpandedComments((prev) => prev.filter((id) => id !== commentId))
+    } else {
+      setExpandedComments((prev) => [...prev, commentId])
+      if (!replies[commentId]) {
+        fetchReplies(commentId)
+      }
+    }
+  }
+
+  // Функция за изпращане на reply
+  const submitReply = async (parentId: number) => {
+    if (!user) {
+      Alert.alert("Моля, влезте в профила си, за да коментирате.")
+      return
+    }
+
+    const replyText = replyTexts[parentId]
+    if (!replyText || replyText.trim() === "") return
+
+    try {
+      const response = await axios.post(
+        `${process.env.EXPO_PUBLIC_HOST_URL}/comment`,
+        {
+          postId: post.post_id,
+          userEmail: user.email,
+          comment: replyText,
+          parentId,
+        }
+      )
+
+      // Добавяне на новия reply към локалния state
+      const now = new Date()
+      const nowBG = moment(now).format()
+      const newReply = {
+        id: response.data.commentId,
+        comment: replyText,
+        created_at: now.toISOString(),
+        created_at_local: nowBG,
+        name: user.name,
+        image: user.image,
+        user_email: user.email,
+        parent_id: parentId,
+      }
+
+      setReplies((prev) => ({
+        ...prev,
+        [parentId]: [...(prev[parentId] || []), newReply],
+      }))
+
+      // Изчистване на текста за reply
+      setReplyTexts((prev) => ({ ...prev, [parentId]: "" }))
+
+      console.log("Reply submitted successfully:", response.data)
+    } catch (error) {
+      console.error("Error submitting reply", error)
+      Alert.alert("Грешка", "Неуспешно добавяне на отговор.")
+    }
+  }
+
+  // Функция за обновяване на reply текста
+  const updateReplyText = (commentId: number, text: string) => {
+    setReplyTexts((prev) => ({ ...prev, [commentId]: text }))
+  }
+
+  // Функция за управление на менюто за коментари
+  const toggleCommentMenu = (commentId: number | null) => {
+    setSelectedCommentMenu((prev) => (prev === commentId ? null : commentId))
+  }
+
+  // Функция за управление на менюто за подкоментари
+  const toggleReplyMenu = (replyId: number | null) => {
+    setSelectedReplyMenu((prev) => (prev === replyId ? null : replyId))
+  }
+
+  // Функция за изтриване на подкоментар
+  const deleteReply = async (replyId: number, parentId: number) => {
+    Alert.alert(
+      "Изтриване на отговор",
+      "Сигурни ли сте, че искате да изтриете този отговор?",
+      [
+        {
+          text: "Отказ",
+          style: "cancel",
+        },
+        {
+          text: "Изтрий",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const response = await axios.delete(
+                `${process.env.EXPO_PUBLIC_HOST_URL}/comment`,
+                {
+                  data: {
+                    commentId: replyId,
+                    userEmail: user.email,
+                    postAuthorEmail: post.createdby,
+                  },
+                }
+              )
+              console.log("Отговорът е изтрит:", response.data)
+
+              // Премахване на отговора от локалния state
+              setReplies((prev) => ({
+                ...prev,
+                [parentId]:
+                  prev[parentId]?.filter((reply) => reply.id !== replyId) || [],
+              }))
+
+              Alert.alert("Успех", "Отговорът е изтрит успешно.")
+            } catch (error) {
+              console.error("Грешка при изтриване на отговора", error)
+              Alert.alert(
+                "Грешка",
+                "Неуспешно изтриване на отговора. Опитайте отново."
+              )
+            }
+          },
+        },
+      ]
+    )
+  }
+
+  // Функция за запазване на редактиран подкоментар
+  const saveEditedReply = async () => {
+    if (!editedReplyText.trim()) {
+      Alert.alert("Грешка", "Отговорът не може да бъде празен.")
+      return
+    }
+
+    try {
+      const response = await axios.put(
+        `${process.env.EXPO_PUBLIC_HOST_URL}/comment`,
+        {
+          commentId: editingReplyId,
+          userEmail: user.email,
+          newComment: editedReplyText,
+        }
+      )
+      console.log("Отговорът е редактиран:", response.data)
+
+      // Актуализиране на локалния state
+      setReplies((prev) => {
+        const newReplies = { ...prev }
+        Object.keys(newReplies).forEach((parentId) => {
+          newReplies[parseInt(parentId)] =
+            newReplies[parseInt(parentId)]?.map((reply) =>
+              reply.id === editingReplyId
+                ? { ...reply, comment: response.data.updatedComment }
+                : reply
+            ) || []
+        })
+        return newReplies
+      })
+
+      setEditingReplyId(null)
+      setEditedReplyText("")
+      Alert.alert("Успех", "Отговорът е редактиран успешно.")
+    } catch (error) {
+      console.error("Грешка при редактиране на отговора", error)
+      Alert.alert(
+        "Грешка",
+        "Неуспешно редактиране на отговора. Опитайте отново."
+      )
+    }
+  }
+
   const deleteComment = async (commentId: number) => {
     Alert.alert(
       "Изтриване на коментар",
@@ -239,7 +430,7 @@ export default function PostCard({ post, onUpdate }: any) {
 
   // Функция за изпращане на коментар
   // Функция за изпращане на коментар
-  const submitComment = async () => {
+  const submitComment = async (parentId: number | null = null) => {
     if (!user) {
       Alert.alert("Моля, влезте в профила си, за да коментирате.")
       return
@@ -253,6 +444,7 @@ export default function PostCard({ post, onUpdate }: any) {
           postId: post.post_id,
           userEmail: user.email,
           comment: commentText,
+          parentId, // Добавяне на parentId, ако е наличен
         }
       )
       console.log("Comment submitted successfully:", response.data)
@@ -261,16 +453,15 @@ export default function PostCard({ post, onUpdate }: any) {
       if (commentsVisible) {
         const now = new Date()
         const nowBG = moment(now).format()
-        // Използвайте същия формат като този, който идва от сървъра
         const newComment = {
           id: response.data.commentId,
           comment: commentText,
-          // Не използваме UTC() - просто вземаме локалното време
           created_at: now.toISOString(),
           created_at_local: nowBG,
           name: user.name,
           image: user.image,
           user_email: user.email,
+          parent_id: parentId, // Добавяне на parentId към локалния state
         }
         console.log("Adding new comment to state:", newComment)
         setComments((prev) => [newComment, ...prev])
@@ -409,8 +600,8 @@ export default function PostCard({ post, onUpdate }: any) {
           localDate={post?.createdon_local}
         />
         {(isAdmin(user?.role) || user?.email === post.createdby) && (
-          <TouchableOpacity onPress={showMenu} style={{ padding: scale(8) }}>
-            <Text style={{ fontSize: moderateScale(22) }}>⋮</Text>
+          <TouchableOpacity onPress={showMenu} style={{ padding: 8 }}>
+            <Text style={{ fontSize: 22 }}>⋮</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -440,22 +631,22 @@ export default function PostCard({ post, onUpdate }: any) {
           <View
             style={{
               backgroundColor: Colors.WHITE,
-              borderTopLeftRadius: scale(16),
-              borderTopRightRadius: scale(16),
-              padding: scale(20),
+              borderTopLeftRadius: 16,
+              borderTopRightRadius: 16,
+              padding: 20,
               minWidth: "100%",
-              elevation: scale(10),
+              elevation: 10,
               zIndex: 2,
             }}
           >
             <View
               style={{
-                width: scale(40),
-                height: verticalScale(4),
+                width: 40,
+                height: 4,
                 backgroundColor: Colors.GRAY,
-                borderRadius: scale(2),
+                borderRadius: 2,
                 alignSelf: "center",
-                marginBottom: verticalScale(16),
+                marginBottom: 16,
               }}
             />
             <TouchableOpacity
@@ -463,13 +654,13 @@ export default function PostCard({ post, onUpdate }: any) {
                 hideMenu()
                 startEditing()
               }}
-              style={{ paddingVertical: verticalScale(16) }}
+              style={{ paddingVertical: 16 }}
             >
               <Text
                 style={{
                   color: Colors.PRIMARY,
                   fontWeight: "bold",
-                  fontSize: moderateScale(18),
+                  fontSize: 18,
                   textAlign: "center",
                 }}
               >
@@ -481,13 +672,13 @@ export default function PostCard({ post, onUpdate }: any) {
                 hideMenu()
                 deletePost()
               }}
-              style={{ paddingVertical: verticalScale(16) }}
+              style={{ paddingVertical: 16 }}
             >
               <Text
                 style={{
                   color: "red",
                   fontWeight: "bold",
-                  fontSize: moderateScale(18),
+                  fontSize: 18,
                   textAlign: "center",
                 }}
               >
@@ -540,7 +731,7 @@ export default function PostCard({ post, onUpdate }: any) {
             <TouchableOpacity onPress={toggleLike} style={styles.subContainer}>
               <AntDesign
                 name="like2"
-                size={scale(24)}
+                size={24}
                 color={isLiked ? Colors.PRIMARY : "black"}
               />
               <Text style={styles.actionText}>{likeCount}</Text>
@@ -549,7 +740,7 @@ export default function PostCard({ post, onUpdate }: any) {
               onPress={toggleCommentsView}
               style={styles.subContainer}
             >
-              <FontAwesome name="commenting-o" size={scale(24)} color="black" />
+              <FontAwesome name="commenting-o" size={24} color="black" />
               <Text style={styles.actionText}>{commentCount}</Text>
             </TouchableOpacity>
           </View>
@@ -567,16 +758,79 @@ export default function PostCard({ post, onUpdate }: any) {
           placeholder="Добавете коментар..."
           placeholderTextColor={Colors.GRAY}
         />
-        <TouchableOpacity onPress={submitComment} style={styles.submitButton}>
+        <TouchableOpacity
+          onPress={() => submitComment()}
+          style={styles.submitButton}
+        >
           <Text style={styles.submitButtonText}>Изпрати</Text>
         </TouchableOpacity>
       </View>
       {commentsVisible && (
         <View style={styles.commentsContainer}>
+          {(selectedCommentMenu !== null || selectedReplyMenu !== null) && (
+            <TouchableOpacity
+              style={styles.overlay}
+              activeOpacity={1}
+              onPress={() => {
+                toggleCommentMenu(null)
+                toggleReplyMenu(null)
+              }}
+            />
+          )}
           {comments.length > 0 ? (
             comments.map((c) => (
               <View key={c.id} style={styles.commentItem}>
-                <Text style={styles.commentAuthor}>{c.name}</Text>
+                <View style={styles.commentHeader}>
+                  <Text style={styles.commentAuthor}>{c.name}</Text>
+                  {(user?.email === c.user_email ||
+                    isAdmin(user?.role) ||
+                    user?.email === post.createdby) && (
+                    <TouchableOpacity
+                      onPress={() => toggleCommentMenu(c.id)}
+                      style={styles.commentMenuIcon}
+                    >
+                      <MaterialIcons
+                        name="more-vert"
+                        size={20}
+                        color={Colors.GRAY}
+                      />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Меню с опции за коментар */}
+                {selectedCommentMenu === c.id && (
+                  <View style={styles.commentMenu}>
+                    {user?.email === c.user_email && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setEditingCommentId(c.id)
+                          setEditedCommentText(c.comment)
+                          toggleCommentMenu(null)
+                        }}
+                        style={styles.menuOption}
+                      >
+                        <Text style={styles.menuOptionText}>Редактирай</Text>
+                      </TouchableOpacity>
+                    )}
+                    {(isAdmin(user?.role) ||
+                      user?.email === c.user_email ||
+                      user?.email === post.createdby) && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          deleteComment(c.id)
+                          toggleCommentMenu(null)
+                        }}
+                        style={styles.menuOption}
+                      >
+                        <Text style={[styles.menuOptionText, { color: "red" }]}>
+                          Изтрий
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+
                 {editingCommentId === c.id ? (
                   <>
                     <TextInput
@@ -608,36 +862,154 @@ export default function PostCard({ post, onUpdate }: any) {
                 ) : (
                   <>
                     <Text style={styles.commentText}>{c.comment}</Text>
-                    {/* Добавен ред */}
                     <Text style={styles.commentDate}>
                       {c.created_at_local
                         ? moment(c.created_at_local).fromNow()
                         : moment(c.created_at).fromNow()}
                     </Text>
-                    {user?.email === c.user_email && (
-                      <TouchableOpacity
-                        onPress={() => {
-                          setEditingCommentId(c.id)
-                          setEditedCommentText(c.comment)
-                        }}
-                      >
-                        <Text
-                          style={{ color: Colors.PRIMARY, fontWeight: "bold" }}
-                        >
-                          Редактирай
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                    {(isAdmin(user?.role) ||
-                      user?.email === c.user_email ||
-                      user?.email === post.createdby) && (
-                      <TouchableOpacity onPress={() => deleteComment(c.id)}>
-                        <Text style={{ color: "red", fontWeight: "bold" }}>
-                          Изтрий
-                        </Text>
-                      </TouchableOpacity>
-                    )}
+
+                    {/* Бутон за показване/скриване на отговори */}
+                    <TouchableOpacity onPress={() => toggleReplies(c.id)}>
+                      <Text style={styles.replyButton}>
+                        {expandedComments.includes(c.id)
+                          ? "Скрий отговорите"
+                          : "Покажи отговорите"}
+                      </Text>
+                    </TouchableOpacity>
                   </>
+                )}
+
+                {/* Секция за отговори */}
+                {expandedComments.includes(c.id) && (
+                  <View style={styles.repliesContainer}>
+                    {/* Показване на съществуващи отговори */}
+                    {replies[c.id]?.map((reply) => (
+                      <View key={reply.id} style={styles.replyItem}>
+                        <View style={styles.commentHeader}>
+                          <Text style={styles.replyAuthor}>{reply.name}</Text>
+                          {(user?.email === reply.user_email ||
+                            isAdmin(user?.role) ||
+                            user?.email === post.createdby) && (
+                            <TouchableOpacity
+                              onPress={() => toggleReplyMenu(reply.id)}
+                              style={styles.commentMenuIcon}
+                            >
+                              <MaterialIcons
+                                name="more-vert"
+                                size={16}
+                                color={Colors.GRAY}
+                              />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+
+                        {/* Меню с опции за подкоментар */}
+                        {selectedReplyMenu === reply.id && (
+                          <View style={styles.replyMenu}>
+                            {user?.email === reply.user_email && (
+                              <TouchableOpacity
+                                onPress={() => {
+                                  setEditingReplyId(reply.id)
+                                  setEditedReplyText(reply.comment)
+                                  toggleReplyMenu(null)
+                                }}
+                                style={styles.menuOption}
+                              >
+                                <Text style={styles.menuOptionText}>
+                                  Редактирай
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                            {(isAdmin(user?.role) ||
+                              user?.email === reply.user_email ||
+                              user?.email === post.createdby) && (
+                              <TouchableOpacity
+                                onPress={() => {
+                                  deleteReply(reply.id, c.id)
+                                  toggleReplyMenu(null)
+                                }}
+                                style={styles.menuOption}
+                              >
+                                <Text
+                                  style={[
+                                    styles.menuOptionText,
+                                    { color: "red" },
+                                  ]}
+                                >
+                                  Изтрий
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+
+                        {editingReplyId === reply.id ? (
+                          <>
+                            <TextInput
+                              style={styles.replyInput}
+                              value={editedReplyText}
+                              onChangeText={setEditedReplyText}
+                              placeholder="Редактирайте отговора..."
+                            />
+                            <View style={styles.editButtons}>
+                              <TouchableOpacity onPress={saveEditedReply}>
+                                <Text
+                                  style={{
+                                    color: Colors.PRIMARY,
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  Запази
+                                </Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => {
+                                  setEditingReplyId(null)
+                                  setEditedReplyText("")
+                                }}
+                              >
+                                <Text
+                                  style={{ color: "red", fontWeight: "bold" }}
+                                >
+                                  Откажи
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          </>
+                        ) : (
+                          <>
+                            <Text style={styles.replyText}>
+                              {reply.comment}
+                            </Text>
+                            <Text style={styles.commentDate}>
+                              {reply.created_at_local
+                                ? moment(reply.created_at_local).fromNow()
+                                : moment(reply.created_at).fromNow()}
+                            </Text>
+                          </>
+                        )}
+                      </View>
+                    ))}
+
+                    {/* Поле за добавяне на нов отговор */}
+                    <View style={styles.replyInputContainer}>
+                      <TextInput
+                        style={styles.replyInput}
+                        value={replyTexts[c.id] || ""}
+                        onChangeText={(text) => updateReplyText(c.id, text)}
+                        placeholder="Отговорете на този коментар..."
+                        placeholderTextColor={Colors.GRAY}
+                      />
+                      <TouchableOpacity
+                        onPress={() => submitReply(c.id)}
+                        style={styles.replySubmitButton}
+                      >
+                        <Text style={styles.replySubmitButtonText}>
+                          Отговори
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 )}
               </View>
             ))
@@ -652,85 +1024,85 @@ export default function PostCard({ post, onUpdate }: any) {
 
 const styles = StyleSheet.create({
   cardContainer: {
-    padding: scale(15),
+    padding: 15,
     backgroundColor: Colors.WHITE,
-    borderRadius: scale(8),
-    marginTop: verticalScale(10),
+    borderRadius: 8,
+    marginTop: 10,
   },
   contentText: {
-    fontSize: moderateScale(18),
-    marginTop: verticalScale(10),
+    fontSize: 18,
+    marginTop: 10,
   },
   postImage: {
-    width: "100%",
-    height: verticalScale(300),
+    width: 640,
+    height: 500,
     resizeMode: "cover",
-    borderRadius: scale(10),
-    marginTop: verticalScale(10),
+    borderRadius: 10,
+    marginTop: 10,
   },
   actionsContainer: {
-    marginTop: verticalScale(10),
+    marginTop: 10,
     flexDirection: "row",
     alignItems: "center",
-    gap: scale(20),
+    gap: 20,
   },
   subContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: scale(7),
+    gap: 7,
   },
   actionText: {
-    fontSize: moderateScale(17),
+    fontSize: 17,
     color: Colors.GRAY,
   },
   commentsLink: {
-    marginTop: verticalScale(7),
+    marginTop: 7,
     color: Colors.GRAY,
   },
   commentInputContainer: {
-    marginTop: verticalScale(15),
+    marginTop: 15,
     flexDirection: "row",
     alignItems: "center",
     borderColor: Colors.GRAY,
     borderWidth: 1,
-    borderRadius: scale(8),
-    paddingHorizontal: scale(10),
+    borderRadius: 8,
+    paddingHorizontal: 10,
   },
   commentInput: {
     flex: 1,
-    height: verticalScale(40),
+    height: 40,
     color: Colors.BLACK,
   },
   submitButton: {
-    padding: scale(10),
+    padding: 10,
   },
   submitButtonText: {
     color: Colors.PRIMARY,
     fontWeight: "bold",
   },
   commentsContainer: {
-    marginTop: verticalScale(15),
+    marginTop: 15,
     borderTopWidth: 1,
     borderColor: Colors.LIGHT_GRAY,
-    paddingTop: verticalScale(10),
+    paddingTop: 10,
   },
   commentItem: {
-    marginBottom: verticalScale(12),
-    paddingVertical: verticalScale(8),
+    marginBottom: 12,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderColor: Colors.LIGHT_GRAY,
   },
   commentAuthor: {
     fontWeight: "bold",
-    fontSize: moderateScale(16),
+    fontSize: 16,
     color: Colors.BLACK,
   },
   commentText: {
-    fontSize: moderateScale(15),
+    fontSize: 15,
     color: Colors.BLACK,
   },
   commentDate: {
-    fontSize: moderateScale(13),
+    fontSize: 13,
     color: Colors.GRAY,
   },
   noCommentsText: {
@@ -740,30 +1112,30 @@ const styles = StyleSheet.create({
   editInput: {
     borderWidth: 1,
     borderColor: Colors.LIGHT_GRAY,
-    borderRadius: scale(8),
-    padding: scale(10),
-    marginTop: verticalScale(10),
-    fontSize: moderateScale(16),
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+    fontSize: 16,
     color: Colors.BLACK,
   },
   editButtons: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: verticalScale(10),
+    marginTop: 10,
   },
   saveButton: {
     backgroundColor: Colors.PRIMARY,
-    padding: scale(10),
-    borderRadius: scale(8),
+    padding: 10,
+    borderRadius: 8,
     flex: 1,
-    marginRight: scale(5),
+    marginRight: 5,
   },
   cancelButton: {
     backgroundColor: Colors.GRAY,
-    padding: scale(10),
-    borderRadius: scale(8),
+    padding: 10,
+    borderRadius: 8,
     flex: 1,
-    marginLeft: scale(5),
+    marginLeft: 5,
   },
   saveButtonText: {
     color: Colors.WHITE,
@@ -774,10 +1146,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   editImage: {
-    width: scale(150),
-    height: verticalScale(150),
-    borderRadius: scale(10),
-    marginTop: verticalScale(10),
+    width: 150,
+    height: 150,
+    borderRadius: 10,
+    marginTop: 10,
     alignSelf: "center",
   },
   imagePlaceholder: {
@@ -787,22 +1159,22 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     color: Colors.GRAY,
-    fontSize: moderateScale(14),
+    fontSize: 14,
   },
   actionButtonsContainer: {
     flexDirection: "row",
     justifyContent: "flex-end",
     alignItems: "center",
-    marginTop: verticalScale(10),
-    gap: scale(10),
+    marginTop: 10,
+    gap: 10,
   },
   editLink: {
-    paddingVertical: verticalScale(5),
-    paddingHorizontal: scale(8),
+    paddingVertical: 5,
+    paddingHorizontal: 8,
   },
   deleteLink: {
-    paddingVertical: verticalScale(5),
-    paddingHorizontal: scale(8),
+    paddingVertical: 5,
+    paddingHorizontal: 8,
   },
   deleteLinkText: {
     color: "red",
@@ -811,5 +1183,118 @@ const styles = StyleSheet.create({
   editLinkText: {
     color: Colors.PRIMARY,
     fontWeight: "bold",
+  },
+  replyButton: {
+    color: Colors.PRIMARY,
+    marginTop: 5,
+    fontWeight: "bold",
+  },
+  repliesContainer: {
+    marginTop: 10,
+    paddingLeft: 15,
+    borderLeftWidth: 2,
+    borderLeftColor: Colors.LIGHT_GRAY,
+  },
+  replyItem: {
+    marginLeft: 20,
+    marginTop: 5,
+    borderLeftWidth: 1,
+    borderLeftColor: Colors.GRAY,
+    paddingLeft: 10,
+    marginBottom: 8,
+    padding: 8,
+    backgroundColor: Colors.LIGHT_GRAY + "20",
+    borderRadius: 8,
+  },
+  replyAuthor: {
+    fontWeight: "bold",
+    color: Colors.BLACK,
+    fontSize: 14,
+  },
+  replyText: {
+    color: Colors.BLACK,
+    marginTop: 2,
+    fontSize: 14,
+  },
+  replyInputContainer: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  replyInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Colors.LIGHT_GRAY,
+    borderRadius: 8,
+    padding: 8,
+    fontSize: 14,
+    color: Colors.BLACK,
+  },
+  replySubmitButton: {
+    backgroundColor: Colors.PRIMARY,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  replySubmitButtonText: {
+    color: Colors.WHITE,
+    fontWeight: "bold",
+    fontSize: 12,
+  },
+  commentHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  commentMenuIcon: {
+    padding: 5,
+  },
+  commentMenu: {
+    position: "absolute",
+    top: 30,
+    right: 10,
+    backgroundColor: Colors.WHITE,
+    borderRadius: 8,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    zIndex: 10,
+    minWidth: 120,
+  },
+  replyMenu: {
+    position: "absolute",
+    top: 25,
+    right: 10,
+    backgroundColor: Colors.WHITE,
+    borderRadius: 8,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    zIndex: 10,
+    minWidth: 120,
+  },
+  menuOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.LIGHT_GRAY,
+  },
+  menuOptionText: {
+    fontSize: 16,
+    color: Colors.BLACK,
+  },
+  overlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 5,
   },
 })

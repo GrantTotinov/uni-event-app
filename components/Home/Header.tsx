@@ -2,7 +2,7 @@ import { View, Text, Image, TextInput } from "react-native"
 import React, { useContext } from "react"
 import Colors from "@/data/Colors"
 import { AuthContext } from "@/context/AuthContext"
-import { scale, verticalScale, moderateScale } from "react-native-size-matters"
+
 export default function Header({
   search,
   setSearch,
@@ -18,26 +18,26 @@ export default function Header({
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        //paddingHorizontal: scale(16),
-        //paddingVertical: verticalScale(8),
+        //paddingHorizontal: 16,
+        //paddingVertical: 8,
       }}
     >
       <View>
         <Text
           style={{
-            fontSize: moderateScale(24),
+            fontSize: 24,
             fontWeight: "bold",
             color: Colors.PRIMARY,
-            marginBottom: verticalScale(4),
+            marginBottom: 4,
           }}
         >
           Здравейте!
         </Text>
         <Text
           style={{
-            fontSize: moderateScale(16),
+            fontSize: 16,
             color: Colors.GRAY,
-            marginBottom: verticalScale(6),
+            marginBottom: 6,
           }}
         >
           {user?.name}
@@ -47,25 +47,25 @@ export default function Header({
           onChangeText={setSearch}
           placeholder="Търси пост или коментар..."
           style={{
-            marginTop: verticalScale(8),
-            padding: scale(10),
-            borderRadius: scale(10),
+            marginTop: 8,
+            padding: 10,
+            borderRadius: 10,
             backgroundColor: Colors.WHITE,
-            borderWidth: scale(1),
+            borderWidth: 1,
             borderColor: Colors.GRAY,
-            fontSize: moderateScale(16),
-            width: scale(300),
-            maxWidth: scale(235),
+            fontSize: 16,
+            width: 300,
+            maxWidth: 235,
           }}
         />
       </View>
       <Image
         source={{ uri: user?.image }}
         style={{
-          height: scale(50),
-          width: scale(50),
-          borderRadius: scale(25),
-          marginLeft: scale(12),
+          height: 50,
+          width: 50,
+          borderRadius: 25,
+          marginLeft: 12,
         }}
       />
     </View>

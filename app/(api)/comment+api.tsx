@@ -4,25 +4,32 @@ import { isAdmin } from "@/context/AuthContext"
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const postId = searchParams.get("postId")
+  const parentId = searchParams.get("parentId") // Нов параметър за replies
+
   if (!postId) {
     return Response.json({ error: "Липсва параметър postId" }, { status: 400 })
   }
 
   try {
-    const result = await pool.query(
-      `SELECT comments.id,
-      comments.comment, 
-      comments.created_at, 
-      comments.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS created_at_local, 
-      users.name,
-      users.image, 
-      users.email AS user_email
-      FROM comments
-      INNER JOIN users ON comments.user_email = users.email
-      WHERE comments.post_id = $1
-      ORDER BY comments.created_at DESC`,
-      [postId]
-    )
+    const query = parentId
+      ? `SELECT comments.id, comments.comment, comments.created_at, 
+                comments.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS created_at_local, 
+                users.name, users.image, users.email AS user_email
+         FROM comments
+         INNER JOIN users ON comments.user_email = users.email
+         WHERE comments.post_id = $1 AND comments.parent_id = $2
+         ORDER BY comments.created_at ASC`
+      : `SELECT comments.id, comments.comment, comments.created_at, 
+                comments.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS created_at_local, 
+                users.name, users.image, users.email AS user_email
+         FROM comments
+         INNER JOIN users ON comments.user_email = users.email
+         WHERE comments.post_id = $1 AND comments.parent_id IS NULL
+         ORDER BY comments.created_at DESC`
+
+    const params = parentId ? [postId, parentId] : [postId]
+
+    const result = await pool.query(query, params)
 
     return Response.json(result.rows)
   } catch (error) {
@@ -35,8 +42,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { postId, userEmail, comment } = await request.json()
-  console.log("Received data:", { postId, userEmail, comment })
+  const { postId, userEmail, comment, parentId } = await request.json()
+  console.log("Received data:", { postId, userEmail, comment, parentId })
+
   if (!postId || !userEmail || !comment) {
     return Response.json(
       { error: "Липсват задължителни данни" },
@@ -46,10 +54,10 @@ export async function POST(request: Request) {
 
   try {
     const result = await pool.query(
-      `INSERT INTO comments (post_id, user_email, comment) 
-       VALUES ($1, $2, $3) 
+      `INSERT INTO comments (post_id, user_email, comment, parent_id) 
+       VALUES ($1, $2, $3, $4) 
        RETURNING id, created_at`,
-      [postId, userEmail, comment]
+      [postId, userEmail, comment, parentId || null]
     )
     console.log("Comment added successfully:", result.rows[0])
     return Response.json({
