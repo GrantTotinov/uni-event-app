@@ -1024,20 +1024,21 @@ export default function PostCard({ post, onUpdate }: any) {
 
 const styles = StyleSheet.create({
   cardContainer: {
-    padding: 15,
+    //padding: 10,
     backgroundColor: Colors.WHITE,
-    borderRadius: 8,
+    borderRadius: 5,
     marginTop: 10,
+    overflow: "hidden",
   },
   contentText: {
-    fontSize: 18,
+    fontSize: 15,
     marginTop: 10,
   },
   postImage: {
-    width: 640,
-    height: 500,
+    width: "100%",
+    aspectRatio: 4 / 5,
     resizeMode: "cover",
-    borderRadius: 10,
+    borderRadius: 5,
     marginTop: 10,
   },
   actionsContainer: {

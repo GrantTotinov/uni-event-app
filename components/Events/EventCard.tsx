@@ -1,4 +1,12 @@
-import { View, Text, Image, StyleSheet, Alert } from "react-native"
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  Alert,
+  Modal,
+  TouchableOpacity,
+} from "react-native"
 import React, { useContext, useEffect, useState } from "react"
 import Colors from "@/data/Colors"
 import Entypo from "@expo/vector-icons/Entypo"
@@ -8,6 +16,8 @@ import axios from "axios"
 import { AuthContext, isAdmin } from "@/context/AuthContext"
 import * as FileSystem from "expo-file-system"
 import * as Sharing from "expo-sharing"
+import { useRouter } from "expo-router"
+import { MaterialIcons } from "@expo/vector-icons"
 
 type EVENT = {
   id: number
@@ -27,6 +37,9 @@ type EVENT = {
 export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
   const { user } = useContext(AuthContext)
   const [isRegistered, setIsRegistered] = useState(event.isRegistered)
+  const canManage = isAdmin(user?.role) || user?.email === event.createdby
+  const [menuVisible, setMenuVisible] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     setIsRegistered(event.isRegistered)
@@ -40,10 +53,7 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
           try {
             await axios.post(
               `${process.env.EXPO_PUBLIC_HOST_URL}/event-register`,
-              {
-                eventId: event.id,
-                userEmail: user?.email,
-              }
+              { eventId: event.id, userEmail: user?.email }
             )
             setIsRegistered(true)
             Alert.alert("Чудесно!", "Успешно се регистрирахте за събитието!")
@@ -53,10 +63,7 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
           }
         },
       },
-      {
-        text: "Отказ",
-        style: "cancel",
-      },
+      { text: "Отказ", style: "cancel" },
     ])
   }
 
@@ -84,18 +91,14 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
             }
           },
         },
-        {
-          text: "Отказ",
-          style: "cancel",
-        },
+        { text: "Отказ", style: "cancel" },
       ]
     )
   }
 
   const shareImage = async () => {
     try {
-      const fileUri = (await FileSystem.documentDirectory) + "shared-image.jpg"
-
+      const fileUri = `${FileSystem.documentDirectory}shared-image.jpg`
       const { uri } = await FileSystem.downloadAsync(event.bannerurl, fileUri)
 
       if (await Sharing.isAvailableAsync()) {
@@ -118,10 +121,7 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
       "Изтриване на събитие",
       "Сигурни ли сте, че искате да изтриете това събитие?",
       [
-        {
-          text: "Отказ",
-          style: "cancel",
-        },
+        { text: "Отказ", style: "cancel" },
         {
           text: "Изтрий",
           style: "destructive",
@@ -135,7 +135,6 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
               )
               console.log("Събитието е изтрито:", response.data)
               Alert.alert("Успешно", "Събитието е изтрито.")
-              // Ако имате callback (например onDelete), извикайте го тук, за да обновите списъка
               if (onDelete) onDelete()
             } catch (error) {
               console.error("Грешка при изтриване на събитието", error)
@@ -149,47 +148,145 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
 
   return (
     <View
-      style={{ padding: 20, backgroundColor: Colors.WHITE, marginBottom: 3 }}
+      style={{
+        padding: 20,
+        backgroundColor: Colors.WHITE,
+        marginBottom: 3,
+        position: "relative",
+      }}
     >
+      {canManage && (
+        <TouchableOpacity
+          onPress={() => setMenuVisible(true)}
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            padding: 6,
+            zIndex: 10,
+          }}
+        >
+          <MaterialIcons name="more-vert" size={22} color={Colors.GRAY} />
+        </TouchableOpacity>
+      )}
+
       <Image
         source={{ uri: event.bannerurl }}
-        style={{ height: 250, borderRadius: 15 }}
+        style={{ height: 250, borderRadius: 15, width: "100%" }}
       />
+
       <Text style={{ fontSize: 23, fontWeight: "bold", marginTop: 7 }}>
         {event.name}
       </Text>
       <Text style={{ color: Colors.GRAY, fontSize: 16 }}>
         Създадено от: {event.username}
       </Text>
+
       <View style={styles.subContainer}>
         <Entypo name="location" size={24} color={Colors.GRAY} />
         <Text style={{ color: Colors.GRAY, fontSize: 16 }}>
           {event.location}
         </Text>
       </View>
+
       <View style={styles.subContainer}>
         <Ionicons name="calendar-number" size={24} color={Colors.GRAY} />
         <Text style={{ color: Colors.GRAY, fontSize: 16 }}>
           {event.event_date} от {event.event_time}
         </Text>
       </View>
+
       {!isRegistered ? (
         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <Button text="Сподели" outline={true} onPress={() => shareImage()} />
+          <Button text="Сподели" outline={true} onPress={shareImage} />
           <Button text="Регистрирай се" onPress={handleRegister} />
         </View>
       ) : (
         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <Button text="Сподели" outline={true} onPress={() => shareImage()} />
+          <Button text="Сподели" outline={true} onPress={shareImage} />
           <Button text="Отпиши се" onPress={handleUnregister} outline={true} />
         </View>
       )}
-      {/* Добавяне на бутон за изтриване, показан само за създателя */}
-      {(user?.email === event.createdby || isAdmin(user?.role)) && (
-        <View style={styles.eventActionsContainer}>
-          <Button text="Изтрий събитие" onPress={deleteEvent} outline={true} />
+
+      {/* Modal за менюто с 3 точки */}
+      <Modal
+        visible={menuVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <View style={{ flex: 1, justifyContent: "flex-end" }}>
+          <TouchableOpacity
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+            activeOpacity={1}
+            onPress={() => setMenuVisible(false)}
+          />
+          <View
+            style={{
+              backgroundColor: Colors.WHITE,
+              borderTopLeftRadius: 16,
+              borderTopRightRadius: 16,
+              padding: 20,
+            }}
+          >
+            <TouchableOpacity
+              onPress={() => {
+                setMenuVisible(false)
+                router.push({
+                  pathname: "/add-event",
+                  params: {
+                    edit: "1",
+                    id: String(event.id),
+                    name: event.name,
+                    bannerurl: event.bannerurl,
+                    location: event.location,
+                    link: event.link ?? "",
+                    event_date: event.event_date,
+                    event_time: event.event_time,
+                  },
+                })
+              }}
+              style={{ paddingVertical: 16 }}
+            >
+              <Text
+                style={{
+                  color: Colors.PRIMARY,
+                  fontWeight: "bold",
+                  fontSize: 18,
+                  textAlign: "center",
+                }}
+              >
+                Редактирай
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                setMenuVisible(false)
+                deleteEvent()
+              }}
+              style={{ paddingVertical: 16 }}
+            >
+              <Text
+                style={{
+                  color: "red",
+                  fontWeight: "bold",
+                  fontSize: 18,
+                  textAlign: "center",
+                }}
+              >
+                Изтрий
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      )}
+      </Modal>
     </View>
   )
 }
@@ -200,10 +297,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 5,
     gap: 5,
-  },
-  eventActionsContainer: {
-    marginTop: 10,
-    flexDirection: "row",
-    justifyContent: "flex-end",
   },
 })

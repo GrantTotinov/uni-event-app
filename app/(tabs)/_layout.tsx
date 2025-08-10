@@ -20,6 +20,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
           ),
+          tabBarLabel: "Начало",
         }}
       />
       <Tabs.Screen
@@ -28,6 +29,16 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar" size={size} color={color} />
           ),
+          tabBarLabel: "Събития",
+        }}
+      />
+      <Tabs.Screen
+        name="AddPost"
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="create" size={size} color={color} />
+          ),
+          tabBarLabel: "Добави Публикация",
         }}
       />
       <Tabs.Screen
@@ -36,6 +47,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="people" size={size} color={color} />
           ),
+          tabBarLabel: "Групи",
         }}
       />
       <Tabs.Screen
@@ -51,6 +63,7 @@ export default function TabLayout() {
               }}
             />
           ),
+          tabBarLabel: "Профил",
         }}
       />
     </Tabs>

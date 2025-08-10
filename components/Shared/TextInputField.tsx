@@ -6,12 +6,14 @@ type TextInputFieldProps = {
   label: string
   onChangeText: (text: string) => void
   password?: boolean
+  value?: string
 }
 
 export default function TextInputField({
   label,
   onChangeText,
   password = false,
+  value,
 }: TextInputFieldProps) {
   return (
     <View
@@ -31,6 +33,7 @@ export default function TextInputField({
         style={styles.textInput}
         secureTextEntry={password}
         onChangeText={onChangeText}
+        value={value}
       />
     </View>
   )
