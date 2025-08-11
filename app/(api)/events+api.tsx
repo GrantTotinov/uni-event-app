@@ -1,6 +1,7 @@
 import { pool } from "@/configs/NilePostgresConfig"
 import { isAdmin } from "@/context/AuthContext"
 
+// Създаване на събитие
 export async function POST(request: Request) {
   const body = await request.json()
   console.log("Получени данни:", body)
@@ -26,53 +27,92 @@ export async function POST(request: Request) {
   return Response.json({ newEventId: result.rows[0].id })
 }
 
+// Извличане на събития (с/без email)
 export async function GET(request: Request) {
   const email = new URL(request.url).searchParams.get("email")
 
-  if (email) {
-    const result = await pool.query(
-      `SELECT events.*, users.name as username,
-              CASE WHEN event_registration.id IS NOT NULL THEN true ELSE false END as isRegistered
-       FROM events
-       INNER JOIN users ON events.createdby = users.email
-       LEFT JOIN event_registration ON events.id = event_registration.event_id AND event_registration.user_email = $1
-       ORDER BY events.id DESC;`,
-      [email]
+  try {
+    if (email) {
+      const result = await pool.query(
+        `SELECT 
+           events.*,
+           users.name as username,
+           CASE WHEN er.event_id IS NOT NULL THEN true ELSE false END as "isRegistered",
+           CASE WHEN ei.event_id IS NOT NULL THEN true ELSE false END as "isInterested",
+           COALESCE(reg_count.count, 0)::integer as "registeredCount",
+           COALESCE(int_count.count, 0)::integer as "interestedCount"
+         FROM events
+         INNER JOIN users ON events.createdby = users.email
+         LEFT JOIN event_registration er ON events.id = er.event_id AND er.user_email = $1
+         LEFT JOIN event_interest ei ON events.id = ei.event_id AND ei.user_email = $1
+         LEFT JOIN (
+           SELECT event_id, COUNT(*)::integer as count 
+           FROM event_registration 
+           GROUP BY event_id
+         ) reg_count ON events.id = reg_count.event_id
+         LEFT JOIN (
+           SELECT event_id, COUNT(*)::integer as count 
+           FROM event_interest 
+           GROUP BY event_id
+         ) int_count ON events.id = int_count.event_id
+         ORDER BY events.id DESC`,
+        [email]
+      )
+      return Response.json(result.rows)
+    } else {
+      const result = await pool.query(
+        `SELECT 
+           events.*,
+           users.name as username,
+           COALESCE(reg_count.count, 0)::integer as "registeredCount",
+           COALESCE(int_count.count, 0)::integer as "interestedCount"
+         FROM events
+         INNER JOIN users ON events.createdby = users.email
+         LEFT JOIN (
+           SELECT event_id, COUNT(*)::integer as count 
+           FROM event_registration 
+           GROUP BY event_id
+         ) reg_count ON events.id = reg_count.event_id
+         LEFT JOIN (
+           SELECT event_id, COUNT(*)::integer as count 
+           FROM event_interest 
+           GROUP BY event_id
+         ) int_count ON events.id = int_count.event_id
+         ORDER BY events.id DESC`
+      )
+      return Response.json(result.rows)
+    }
+  } catch (error) {
+    console.error("Грешка при извличане на събития:", error)
+    return Response.json(
+      { error: "Грешка при извличане на събития" },
+      { status: 500 }
     )
-    return Response.json(result.rows)
-  } else {
-    const result = await pool.query(
-      `SELECT events.*, users.name as username
-       FROM events
-       INNER JOIN users ON events.createdby = users.email
-       ORDER BY events.id DESC;`
-    )
-    return Response.json(result.rows)
   }
 }
 
+// Обновяване на събитие
 export async function PUT(request: Request) {
-  const body = await request.json()
-  const {
-    eventId,
-    userEmail,
-    eventName,
-    bannerUrl,
-    location,
-    link,
-    eventDate,
-    eventTime,
-  } = body
-
-  if (!eventId || !userEmail) {
-    return Response.json(
-      { error: "Липсват задължителни данни" },
-      { status: 400 }
-    )
-  }
-
   try {
-    // Проверка за събитието
+    const body = await request.json()
+    const {
+      eventId,
+      userEmail,
+      eventName,
+      bannerUrl,
+      location,
+      link,
+      eventDate,
+      eventTime,
+    } = body
+
+    if (!eventId || !userEmail) {
+      return Response.json(
+        { error: "Липсват задължителни данни" },
+        { status: 400 }
+      )
+    }
+
     const eventQuery = await pool.query(
       "SELECT createdby FROM events WHERE id = $1",
       [eventId]
@@ -84,7 +124,6 @@ export async function PUT(request: Request) {
       )
     }
 
-    // Проверка за потребителя
     const userQuery = await pool.query(
       "SELECT role FROM users WHERE email = $1",
       [userEmail]
@@ -98,7 +137,6 @@ export async function PUT(request: Request) {
 
     const userRole = userQuery.rows[0].role
     const creator = eventQuery.rows[0].createdby
-
     if (!isAdmin(userRole) && creator !== userEmail) {
       return Response.json(
         { error: "Нямате права да редактирате това събитие" },
@@ -106,7 +144,6 @@ export async function PUT(request: Request) {
       )
     }
 
-    // Изграждане на динамичната заявка за обновяване
     const fields: string[] = []
     const values: any[] = []
     let paramIndex = 1
@@ -147,7 +184,6 @@ export async function PUT(request: Request) {
     const updateQuery = `UPDATE events SET ${fields.join(
       ", "
     )} WHERE id = $${paramIndex} RETURNING id`
-
     const updateRes = await pool.query(updateQuery, values)
     return Response.json({ updatedEventId: updateRes.rows[0].id })
   } catch (error) {
@@ -159,19 +195,19 @@ export async function PUT(request: Request) {
   }
 }
 
+// Изтриване на събитие
 export async function DELETE(request: Request) {
-  const body = await request.json()
-  const { eventId, userEmail } = body
-
-  if (!eventId || !userEmail) {
-    return Response.json(
-      { error: "Липсват задължителни данни" },
-      { status: 400 }
-    )
-  }
-
   try {
-    // Проверка дали събитието съществува
+    const body = await request.json()
+    const { eventId, userEmail } = body
+
+    if (!eventId || !userEmail) {
+      return Response.json(
+        { error: "Липсват задължителни данни" },
+        { status: 400 }
+      )
+    }
+
     const eventQuery = await pool.query(
       "SELECT createdby FROM events WHERE id = $1",
       [eventId]
@@ -183,7 +219,6 @@ export async function DELETE(request: Request) {
       )
     }
 
-    // Проверка за ролята на потребителя
     const userQuery = await pool.query(
       "SELECT role FROM users WHERE email = $1",
       [userEmail]
@@ -197,8 +232,6 @@ export async function DELETE(request: Request) {
 
     const userRole = userQuery.rows[0]?.role
     const eventCreator = eventQuery.rows[0]?.createdby
-
-    // Проверка за права: администратор или автор на събитието
     if (!isAdmin(userRole) && eventCreator !== userEmail) {
       return Response.json(
         { error: "Нямате права да изтриете това събитие" },
@@ -206,7 +239,6 @@ export async function DELETE(request: Request) {
       )
     }
 
-    // Изтриване на събитието
     const deleteRes = await pool.query(
       "DELETE FROM events WHERE id = $1 RETURNING id",
       [eventId]

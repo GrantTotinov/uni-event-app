@@ -30,6 +30,9 @@ type EVENT = {
   createdby: string
   username: string
   isRegistered: boolean
+  isInterested?: boolean
+  registeredCount: number
+  interestedCount?: number
   onUnregister?: () => void
   onDelete?: () => void
 }
@@ -37,13 +40,28 @@ type EVENT = {
 export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
   const { user } = useContext(AuthContext)
   const [isRegistered, setIsRegistered] = useState(event.isRegistered)
+  const [isInterested, setIsInterested] = useState(event.isInterested || false)
+  const [registeredCount, setRegisteredCount] = useState(
+    event.registeredCount || 0
+  )
+  const [interestedCount, setInterestedCount] = useState(
+    event.interestedCount || 0
+  )
   const canManage = isAdmin(user?.role) || user?.email === event.createdby
   const [menuVisible, setMenuVisible] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
     setIsRegistered(event.isRegistered)
-  }, [event.isRegistered])
+    setIsInterested(event.isInterested || false)
+    setRegisteredCount(event.registeredCount || 0)
+    setInterestedCount(event.interestedCount || 0)
+  }, [
+    event.isRegistered,
+    event.isInterested,
+    event.registeredCount,
+    event.interestedCount,
+  ])
 
   const handleRegister = () => {
     Alert.alert("Регистрация за събитие!", "Потвърди регистрацията!", [
@@ -56,6 +74,7 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
               { eventId: event.id, userEmail: user?.email }
             )
             setIsRegistered(true)
+            setRegisteredCount((prev) => prev + 1)
             Alert.alert("Чудесно!", "Успешно се регистрирахте за събитието!")
           } catch (error) {
             console.error(error)
@@ -83,6 +102,7 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
                 }
               )
               setIsRegistered(false)
+              setRegisteredCount((prev) => Math.max(0, prev - 1))
               Alert.alert("Готово!", "Вече не сте записани за събитието.")
               if (onUnregister) onUnregister()
             } catch (error) {
@@ -94,6 +114,33 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
         { text: "Отказ", style: "cancel" },
       ]
     )
+  }
+
+  const handleInterest = async () => {
+    try {
+      if (!isInterested) {
+        await axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/event-interest`, {
+          eventId: event.id,
+          userEmail: user?.email,
+        })
+        setIsInterested(true)
+        setInterestedCount((prev) => prev + 1)
+        Alert.alert("Чудесно!", "Проявихте интерес към събитието!")
+      } else {
+        await axios.delete(
+          `${process.env.EXPO_PUBLIC_HOST_URL}/event-interest`,
+          {
+            data: { eventId: event.id, userEmail: user?.email },
+          }
+        )
+        setIsInterested(false)
+        setInterestedCount((prev) => Math.max(0, prev - 1))
+        Alert.alert("Готово!", "Вече не проявявате интерес към събитието.")
+      }
+    } catch (error) {
+      console.error(error)
+      Alert.alert("Грешка!", "Неуспешна операция.")
+    }
   }
 
   const shareImage = async () => {
@@ -196,19 +243,53 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
         </Text>
       </View>
 
-      {!isRegistered ? (
-        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <Button text="Сподели" outline={true} onPress={shareImage} />
-          <Button text="Регистрирай се" onPress={handleRegister} />
-        </View>
-      ) : (
-        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <Button text="Сподели" outline={true} onPress={shareImage} />
-          <Button text="Отпиши се" onPress={handleUnregister} outline={true} />
-        </View>
-      )}
+      <View style={styles.subContainer}>
+        <Ionicons name="people" size={24} color={Colors.PRIMARY} />
+        <Text
+          style={{ color: Colors.PRIMARY, fontSize: 16, fontWeight: "600" }}
+        >
+          {registeredCount}{" "}
+          {registeredCount === 1 ? "регистриран" : "регистрирани"}
+        </Text>
+      </View>
 
-      {/* Modal за менюто с 3 точки */}
+      <View style={styles.subContainer}>
+        <Ionicons name="heart" size={24} color="#e74c3c" />
+        <Text style={{ color: "#e74c3c", fontSize: 16, fontWeight: "600" }}>
+          {interestedCount}{" "}
+          {interestedCount === 1 ? "заинтересован" : "заинтересовани"}
+        </Text>
+      </View>
+
+      <View style={styles.buttonContainer}>
+        <Button text="Сподели" outline={true} onPress={shareImage} />
+
+        <TouchableOpacity
+          onPress={handleInterest}
+          style={styles.interestButton}
+        >
+          <Ionicons
+            name={isInterested ? "heart" : "heart-outline"}
+            size={20}
+            color={isInterested ? "#e74c3c" : Colors.PRIMARY}
+          />
+          <Text
+            style={[
+              styles.interestButtonText,
+              { color: isInterested ? "#e74c3c" : Colors.PRIMARY },
+            ]}
+          >
+            {isInterested ? "Имам интерес" : "Интерес"}
+          </Text>
+        </TouchableOpacity>
+
+        {!isRegistered ? (
+          <Button text="Регистрирай се" onPress={handleRegister} />
+        ) : (
+          <Button text="Отпиши се" onPress={handleUnregister} outline={true} />
+        )}
+      </View>
+
       <Modal
         visible={menuVisible}
         transparent
@@ -297,5 +378,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 5,
     gap: 5,
+  },
+  buttonContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 15,
+    gap: 10,
+  },
+  interestButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.PRIMARY,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flex: 1,
+    gap: 6,
+  },
+  interestButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 })

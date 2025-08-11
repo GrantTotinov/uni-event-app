@@ -31,34 +31,13 @@ export default function Event() {
   const GetAllEvents = async () => {
     setLoading(true)
     try {
-      const eventsResult = await axios.get(
-        process.env.EXPO_PUBLIC_HOST_URL + "/events"
-      )
-      if (user?.email) {
-        const registeredResult = await axios.get(
-          process.env.EXPO_PUBLIC_HOST_URL +
-            "/event-register?email=" +
-            user.email
-        )
-
-        const registeredEventIds = registeredResult.data.map((e: any) => e.id)
-
-        const eventsWithRegistrationStatus = eventsResult.data.map(
-          (event: any) => ({
-            ...event,
-            isRegistered: registeredEventIds.includes(event.id),
-          })
-        )
-
-        setEventList(eventsWithRegistrationStatus)
-      } else {
-        setEventList(
-          eventsResult.data.map((event: any) => ({
-            ...event,
-            isRegistered: false,
-          }))
-        )
-      }
+      const url = user?.email
+        ? `${
+            process.env.EXPO_PUBLIC_HOST_URL
+          }/events?email=${encodeURIComponent(user.email)}`
+        : `${process.env.EXPO_PUBLIC_HOST_URL}/events`
+      const { data } = await axios.get(url)
+      setEventList(data)
     } catch (error) {
       console.error(error)
     } finally {

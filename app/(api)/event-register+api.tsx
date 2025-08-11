@@ -23,10 +23,17 @@ export async function GET(request: Request) {
   const email = new URL(request.url).searchParams.get("email")
 
   const result = await pool.query(
-    `SELECT events.*, users.name as username 
+    `SELECT events.*, 
+            users.name as username,
+            COALESCE(registration_count.count, 0) as registeredCount
      FROM events
      INNER JOIN users ON events.createdby = users.email
      INNER JOIN event_registration ON events.id = event_registration.event_id
+     LEFT JOIN (
+       SELECT event_id, COUNT(*) as count 
+       FROM event_registration 
+       GROUP BY event_id
+     ) registration_count ON events.id = registration_count.event_id
      WHERE event_registration.user_email = $1
      ORDER BY event_registration.id DESC;`,
     [email]
