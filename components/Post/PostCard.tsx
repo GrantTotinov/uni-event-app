@@ -598,6 +598,7 @@ export default function PostCard({ post, onUpdate }: any) {
           image={post?.image}
           date={post?.createdon}
           localDate={post?.createdon_local}
+          role={post?.role}
         />
         {(isAdmin(user?.role) || user?.email === post.createdby) && (
           <TouchableOpacity onPress={showMenu} style={{ padding: 8 }}>

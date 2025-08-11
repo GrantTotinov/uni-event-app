@@ -33,88 +33,80 @@ export async function GET(request: Request) {
     const u_email = url.searchParams.get("u_email")
     const result = await pool.query(
       `
-  SELECT 
-    post.id AS post_id,
-    post.context,
-    post.imageurl,
-    post.createdby,
-    post.createdon,
-    post.createdon AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS createdon_local,
-    post.club,
-    users.id AS user_id,
-    users.email,
-    users.name,
-    users.image
-  FROM post
-  INNER JOIN clubfollowers ON post.club = clubfollowers.club_id
-  INNER JOIN users ON post.createdby = users.email
-  WHERE clubfollowers.u_email = $1
-  ORDER BY post.createdon DESC;
-  `,
+      SELECT 
+        post.id AS post_id,
+        post.context,
+        post.imageurl,
+        post.createdby,
+        post.createdon,
+        post.createdon AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS createdon_local,
+        post.club,
+        users.id AS user_id,
+        users.email,
+        users.name,
+        users.image,
+        users.role
+      FROM post
+      INNER JOIN clubfollowers ON post.club = clubfollowers.club_id
+      INNER JOIN users ON post.createdby = users.email
+      WHERE clubfollowers.u_email = $1
+      ORDER BY post.createdon DESC;
+      `,
       [u_email]
     )
     return Response.json(result.rows)
   } else {
     const club = url.searchParams.get("club")
-    let orderField = url.searchParams.get("orderField")
 
-    const allowedFields = [
-      "post.createdon",
-      "post.id",
-      "users.name",
-      "likes_count",
-    ]
-    if (!orderField || !allowedFields.includes(orderField)) {
-      orderField = "post.createdon"
-    }
+    if (club) {
+      const orderField = url.searchParams.get("orderField") || "post.createdon"
 
-    if (!club) {
-      return Response.json({ error: "Missing club parameter" }, { status: 400 })
-    }
-
-    if (orderField === "likes_count") {
-      const result = await pool.query(`
-        SELECT 
-          post.id AS post_id,
-          post.context,
-          post.imageurl,
-          post.createdby,
-          post.createdon,
-          post.createdon AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS createdon_local,
-          post.club,
-          users.id AS user_id,
-          users.email,
-          users.name,
-          users.image,
-          COUNT(likes.id) AS likes_count
-        FROM post
-        INNER JOIN users ON post.createdby = users.email
-        LEFT JOIN likes ON post.id = likes.post_id
-        WHERE post.club IN (${club})
-        GROUP BY post.id, users.id
-        ORDER BY likes_count DESC;
-      `)
-      return Response.json(result.rows)
-    } else {
-      const result = await pool.query(`
-        SELECT 
-          post.id AS post_id,
-          post.context,
-          post.imageurl,
-          post.createdby,
-          post.createdon,
-          post.createdon AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS createdon_local,
-          post.club,
-          users.id AS user_id,
-          users.email,
-          users.name,
-          users.image
-        FROM post
-        INNER JOIN users ON post.createdby = users.email
-        WHERE post.club IN (${club})
-        ORDER BY ${orderField} DESC;
-      `)
-      return Response.json(result.rows)
+      if (url.searchParams.has("orderByLikes")) {
+        const result = await pool.query(`
+          SELECT 
+            post.id AS post_id,
+            post.context,
+            post.imageurl,
+            post.createdby,
+            post.createdon,
+            post.createdon AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS createdon_local,
+            post.club,
+            users.id AS user_id,
+            users.email,
+            users.name,
+            users.image,
+            users.role,
+            COALESCE(COUNT(likes.id), 0) AS likes_count
+          FROM post
+          INNER JOIN users ON post.createdby = users.email
+          LEFT JOIN likes ON post.id = likes.post_id
+          WHERE post.club IN (${club})
+          GROUP BY post.id, users.id
+          ORDER BY likes_count DESC;
+        `)
+        return Response.json(result.rows)
+      } else {
+        const result = await pool.query(`
+          SELECT 
+            post.id AS post_id,
+            post.context,
+            post.imageurl,
+            post.createdby,
+            post.createdon,
+            post.createdon AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS createdon_local,
+            post.club,
+            users.id AS user_id,
+            users.email,
+            users.name,
+            users.image,
+            users.role
+          FROM post
+          INNER JOIN users ON post.createdby = users.email
+          WHERE post.club IN (${club})
+          ORDER BY ${orderField} DESC;
+        `)
+        return Response.json(result.rows)
+      }
     }
   }
 }

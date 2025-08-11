@@ -11,7 +11,8 @@ type USER_AVATAR = {
   name: string
   image: string
   date: string
-  localDate?: string // Добавяме новото поле
+  localDate?: string
+  role?: string | null
 }
 
 export default function UserAvatar({
@@ -19,18 +20,14 @@ export default function UserAvatar({
   image,
   date,
   localDate,
+  role,
 }: USER_AVATAR) {
-  // Форматиране на датата, използвайки localDate когато е налично
-  // В UserAvatar функцията:
-
-  // Променете логиката:
   let formattedDate = "Невалидна дата"
 
   if (date === "Now") {
     formattedDate = "току-що"
   } else {
     try {
-      // Използваме localDate ако е налично
       if (localDate) {
         formattedDate = moment(localDate).fromNow()
       } else {
@@ -38,6 +35,32 @@ export default function UserAvatar({
       }
     } catch (error) {
       console.error("Грешка при форматиране на датата:", error)
+    }
+  }
+
+  const getRoleDisplayText = (userRole: string | null | undefined): string => {
+    switch (userRole) {
+      case "admin":
+        return "Админ"
+      case "teacher":
+        return "Преподавател"
+      case "user":
+        return "Студент"
+      default:
+        return "Студент"
+    }
+  }
+
+  const getRoleColor = (userRole: string | null | undefined): string => {
+    switch (userRole) {
+      case "admin":
+        return "#dc3545" // Червен за админ
+      case "teacher":
+        return "#007bff" // Син за преподавател
+      case "user":
+        return Colors.GRAY // Сив за студент
+      default:
+        return Colors.GRAY
     }
   }
 
@@ -56,7 +79,21 @@ export default function UserAvatar({
         />
         <View>
           <Text style={{ fontSize: 18, fontWeight: "bold" }}>{name}</Text>
-          <Text style={{ color: Colors.GRAY }}>{formattedDate}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text
+              style={{
+                color: getRoleColor(role),
+                fontSize: 14,
+                fontWeight: "600",
+              }}
+            >
+              {getRoleDisplayText(role)}
+            </Text>
+            <Text style={{ color: Colors.GRAY, fontSize: 14 }}>•</Text>
+            <Text style={{ color: Colors.GRAY, fontSize: 14 }}>
+              {formattedDate}
+            </Text>
+          </View>
         </View>
       </View>
     </View>

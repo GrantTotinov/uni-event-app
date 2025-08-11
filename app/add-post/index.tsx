@@ -12,7 +12,12 @@ export default function AddPost() {
         padding: 20,
       }}
     >
-      <UserAvatar name={user?.name} image={user?.image} date="Now" />
+      <UserAvatar
+        name={user?.name}
+        image={user?.image}
+        date="Now"
+        role={user?.role}
+      />
       <WritePost />
     </View>
   )
