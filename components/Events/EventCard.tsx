@@ -1,3 +1,4 @@
+import React, { useContext, useEffect, useState } from "react"
 import {
   View,
   Text,
@@ -7,17 +8,17 @@ import {
   Modal,
   TouchableOpacity,
 } from "react-native"
-import React, { useContext, useEffect, useState } from "react"
-import Colors from "@/data/Colors"
 import Entypo from "@expo/vector-icons/Entypo"
 import Ionicons from "@expo/vector-icons/Ionicons"
-import Button from "../Shared/Button"
-import axios from "axios"
-import { AuthContext, isAdmin } from "@/context/AuthContext"
+import { MaterialIcons } from "@expo/vector-icons"
 import * as FileSystem from "expo-file-system"
 import * as Sharing from "expo-sharing"
 import { useRouter } from "expo-router"
-import { MaterialIcons } from "@expo/vector-icons"
+import axios from "axios"
+
+import Colors from "@/data/Colors"
+import Button from "../Shared/Button"
+import { AuthContext, isAdmin } from "@/context/AuthContext"
 
 type EVENT = {
   id: number
@@ -29,6 +30,7 @@ type EVENT = {
   event_time: string
   createdby: string
   username: string
+  details?: string
   isRegistered: boolean
   isInterested?: boolean
   registeredCount: number
@@ -63,6 +65,15 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
     event.interestedCount,
   ])
 
+  const openDetails = () => {
+    try {
+      router.push({ pathname: "/event/[id]", params: { id: String(event.id) } })
+    } catch (error) {
+      console.error("Navigation error:", error)
+      Alert.alert("Грешка", "Неуспешно отваряне на детайли.")
+    }
+  }
+
   const handleRegister = () => {
     Alert.alert("Регистрация за събитие!", "Потвърди регистрацията!", [
       {
@@ -77,7 +88,7 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
             setRegisteredCount((prev) => prev + 1)
             Alert.alert("Чудесно!", "Успешно се регистрирахте за събитието!")
           } catch (error) {
-            console.error(error)
+            console.error("Registration error", error)
             Alert.alert("Грешка!", "Неуспешна регистрация.")
           }
         },
@@ -104,9 +115,9 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
               setIsRegistered(false)
               setRegisteredCount((prev) => Math.max(0, prev - 1))
               Alert.alert("Готово!", "Вече не сте записани за събитието.")
-              if (onUnregister) onUnregister()
+              onUnregister && onUnregister()
             } catch (error) {
-              console.error(error)
+              console.error("Unregister error", error)
               Alert.alert("Грешка!", "Неуспешно отписване.")
             }
           },
@@ -138,7 +149,7 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
         Alert.alert("Готово!", "Вече не проявявате интерес към събитието.")
       }
     } catch (error) {
-      console.error(error)
+      console.error("Interest toggle error", error)
       Alert.alert("Грешка!", "Неуспешна операция.")
     }
   }
@@ -147,7 +158,6 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
     try {
       const fileUri = `${FileSystem.documentDirectory}shared-image.jpg`
       const { uri } = await FileSystem.downloadAsync(event.bannerurl, fileUri)
-
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
           dialogTitle: "Погледни новото интересно събитие",
@@ -174,17 +184,13 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
           style: "destructive",
           onPress: async () => {
             try {
-              const response = await axios.delete(
-                `${process.env.EXPO_PUBLIC_HOST_URL}/events`,
-                {
-                  data: { eventId: event.id, userEmail: user?.email },
-                }
-              )
-              console.log("Събитието е изтрито:", response.data)
+              await axios.delete(`${process.env.EXPO_PUBLIC_HOST_URL}/events`, {
+                data: { eventId: event.id, userEmail: user?.email },
+              })
               Alert.alert("Успешно", "Събитието е изтрито.")
-              if (onDelete) onDelete()
+              onDelete && onDelete()
             } catch (error) {
-              console.error("Грешка при изтриване на събитието", error)
+              console.error("Delete event error", error)
               Alert.alert("Грешка", "Неуспешно изтриване на събитието.")
             }
           },
@@ -194,60 +200,41 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
   }
 
   return (
-    <View
-      style={{
-        padding: 20,
-        backgroundColor: Colors.WHITE,
-        marginBottom: 3,
-        position: "relative",
-      }}
-    >
+    <View style={styles.card}>
       {canManage && (
         <TouchableOpacity
           onPress={() => setMenuVisible(true)}
-          style={{
-            position: "absolute",
-            top: 12,
-            right: 12,
-            padding: 6,
-            zIndex: 10,
-          }}
+          style={styles.menuButton}
         >
           <MaterialIcons name="more-vert" size={22} color={Colors.GRAY} />
         </TouchableOpacity>
       )}
 
-      <Image
-        source={{ uri: event.bannerurl }}
-        style={{ height: 250, borderRadius: 15, width: "100%" }}
-      />
+      <TouchableOpacity onPress={openDetails} activeOpacity={0.85}>
+        <Image source={{ uri: event.bannerurl }} style={styles.banner} />
+      </TouchableOpacity>
 
-      <Text style={{ fontSize: 23, fontWeight: "bold", marginTop: 7 }}>
-        {event.name}
-      </Text>
-      <Text style={{ color: Colors.GRAY, fontSize: 16 }}>
-        Създадено от: {event.username}
-      </Text>
+      <TouchableOpacity onPress={openDetails} activeOpacity={0.8}>
+        <Text style={styles.title}>{event.name}</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.createdBy}>Създадено от: {event.username}</Text>
 
       <View style={styles.subContainer}>
         <Entypo name="location" size={24} color={Colors.GRAY} />
-        <Text style={{ color: Colors.GRAY, fontSize: 16 }}>
-          {event.location}
-        </Text>
+        <Text style={styles.metaText}>{event.location}</Text>
       </View>
 
       <View style={styles.subContainer}>
         <Ionicons name="calendar-number" size={24} color={Colors.GRAY} />
-        <Text style={{ color: Colors.GRAY, fontSize: 16 }}>
+        <Text style={styles.metaText}>
           {event.event_date} от {event.event_time}
         </Text>
       </View>
 
       <View style={styles.subContainer}>
         <Ionicons name="people" size={24} color={Colors.PRIMARY} />
-        <Text
-          style={{ color: Colors.PRIMARY, fontSize: 16, fontWeight: "600" }}
-        >
+        <Text style={styles.countPrimary}>
           {registeredCount}{" "}
           {registeredCount === 1 ? "регистриран" : "регистрирани"}
         </Text>
@@ -255,7 +242,7 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
 
       <View style={styles.subContainer}>
         <Ionicons name="heart" size={24} color="#e74c3c" />
-        <Text style={{ color: "#e74c3c", fontSize: 16, fontWeight: "600" }}>
+        <Text style={styles.countInterested}>
           {interestedCount}{" "}
           {interestedCount === 1 ? "заинтересован" : "заинтересовани"}
         </Text>
@@ -263,10 +250,10 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
 
       <View style={styles.buttonContainer}>
         <Button text="Сподели" outline={true} onPress={shareImage} />
-
         <TouchableOpacity
           onPress={handleInterest}
           style={styles.interestButton}
+          activeOpacity={0.8}
         >
           <Ionicons
             name={isInterested ? "heart" : "heart-outline"}
@@ -298,53 +285,37 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
       >
         <View style={{ flex: 1, justifyContent: "flex-end" }}>
           <TouchableOpacity
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-            }}
+            style={styles.overlay}
             activeOpacity={1}
             onPress={() => setMenuVisible(false)}
           />
-          <View
-            style={{
-              backgroundColor: Colors.WHITE,
-              borderTopLeftRadius: 16,
-              borderTopRightRadius: 16,
-              padding: 20,
-            }}
-          >
+          <View style={styles.sheet}>
             <TouchableOpacity
               onPress={() => {
                 setMenuVisible(false)
-                router.push({
-                  pathname: "/add-event",
-                  params: {
-                    edit: "1",
-                    id: String(event.id),
-                    name: event.name,
-                    bannerurl: event.bannerurl,
-                    location: event.location,
-                    link: event.link ?? "",
-                    event_date: event.event_date,
-                    event_time: event.event_time,
-                  },
-                })
+                try {
+                  router.push({
+                    pathname: "/add-event",
+                    params: {
+                      edit: "1",
+                      id: String(event.id),
+                      name: event.name,
+                      bannerurl: event.bannerurl,
+                      location: event.location,
+                      link: event.link ?? "",
+                      event_date: event.event_date,
+                      event_time: event.event_time,
+                      details: event.details ?? "",
+                    },
+                  })
+                } catch (error) {
+                  console.error("Navigation error (edit event):", error)
+                  Alert.alert("Грешка", "Неуспешно отваряне на формата.")
+                }
               }}
-              style={{ paddingVertical: 16 }}
+              style={styles.sheetOption}
             >
-              <Text
-                style={{
-                  color: Colors.PRIMARY,
-                  fontWeight: "bold",
-                  fontSize: 18,
-                  textAlign: "center",
-                }}
-              >
-                Редактирай
-              </Text>
+              <Text style={styles.sheetOptionTextPrimary}>Редактирай</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -352,18 +323,9 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
                 setMenuVisible(false)
                 deleteEvent()
               }}
-              style={{ paddingVertical: 16 }}
+              style={styles.sheetOption}
             >
-              <Text
-                style={{
-                  color: "red",
-                  fontWeight: "bold",
-                  fontSize: 18,
-                  textAlign: "center",
-                }}
-              >
-                Изтрий
-              </Text>
+              <Text style={styles.sheetOptionTextDanger}>Изтрий</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -373,6 +335,55 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
 }
 
 const styles = StyleSheet.create({
+  card: {
+    padding: 20,
+    backgroundColor: Colors.WHITE,
+    marginVertical: 10,
+    borderRadius: 10,
+    marginHorizontal: 20,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    marginBottom: 3,
+    position: "relative",
+  },
+  menuButton: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    padding: 6,
+    zIndex: 10,
+  },
+  banner: {
+    aspectRatio: 1.5,
+    borderRadius: 5,
+    width: "100%",
+  },
+  title: {
+    fontSize: 23,
+    fontWeight: "bold",
+    marginTop: 7,
+  },
+  createdBy: {
+    color: Colors.GRAY,
+    fontSize: 16,
+  },
+  metaText: {
+    color: Colors.GRAY,
+    fontSize: 16,
+  },
+  countPrimary: {
+    color: Colors.PRIMARY,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  countInterested: {
+    color: "#e74c3c",
+    fontSize: 16,
+    fontWeight: "600",
+  },
   subContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -389,17 +400,44 @@ const styles = StyleSheet.create({
   interestButton: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     borderWidth: 1,
     borderColor: Colors.PRIMARY,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    flex: 1,
     gap: 6,
+    backgroundColor: Colors.WHITE,
   },
   interestButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
+  },
+  overlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
+  sheet: {
+    backgroundColor: Colors.WHITE,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 20,
+  },
+  sheetOption: {
+    paddingVertical: 16,
+  },
+  sheetOptionTextPrimary: {
+    color: Colors.PRIMARY,
+    fontWeight: "bold",
+    fontSize: 18,
+    textAlign: "center",
+  },
+  sheetOptionTextDanger: {
+    color: "red",
+    fontWeight: "bold",
+    fontSize: 18,
+    textAlign: "center",
   },
 })

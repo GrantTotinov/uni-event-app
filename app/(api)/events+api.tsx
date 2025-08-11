@@ -1,37 +1,123 @@
 import { pool } from "@/configs/NilePostgresConfig"
 import { isAdmin } from "@/context/AuthContext"
 
-// Създаване на събитие
+// Създаване на събитие (вкл. details)
 export async function POST(request: Request) {
-  const body = await request.json()
-  console.log("Получени данни:", body)
+  try {
+    const body = await request.json()
 
-  if (!body || !body.eventName || !body.email) {
-    console.error("Липсват задължителни данни:", body)
+    if (!body || !body.eventName || !body.email) {
+      return Response.json(
+        { error: "Липсват задължителни данни" },
+        { status: 400 }
+      )
+    }
+
+    const {
+      eventName,
+      bannerUrl,
+      location,
+      link,
+      details,
+      eventDate,
+      eventTime,
+      email,
+    } = body
+
+    const result = await pool.query(
+      `INSERT INTO events (name, bannerurl, location, link, details, event_date, event_time, createdby) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+       RETURNING id`,
+      [
+        eventName,
+        bannerUrl,
+        location,
+        link ?? null,
+        details ?? null,
+        eventDate,
+        eventTime,
+        email,
+      ]
+    )
+
+    return Response.json({ newEventId: result.rows[0].id })
+  } catch (error) {
+    console.error("Грешка при създаване на събитие:", error)
     return Response.json(
-      { error: "Липсват задължителни данни" },
-      { status: 400 }
+      { error: "Грешка при създаване на събитие" },
+      { status: 500 }
     )
   }
-
-  const { eventName, bannerUrl, location, link, eventDate, eventTime, email } =
-    body
-
-  const result = await pool.query(
-    `INSERT INTO events (name, bannerurl, location, link, event_date, event_time, createdby) 
-     VALUES ($1, $2, $3, $4, $5, $6, $7) 
-     RETURNING id`,
-    [eventName, bannerUrl, location, link, eventDate, eventTime, email]
-  )
-
-  return Response.json({ newEventId: result.rows[0].id })
 }
 
-// Извличане на събития (с/без email)
+// Извличане на събития:
+// - без параметри: списък с броячи
+// - ?email=...: списък + isRegistered/isInterested за този user
+// - ?id=... [&email=...]: конкретно събитие (детайлна страница)
 export async function GET(request: Request) {
-  const email = new URL(request.url).searchParams.get("email")
+  const url = new URL(request.url)
+  const email = url.searchParams.get("email")
+  const id = url.searchParams.get("id")
 
   try {
+    // Детайл за конкретно събитие
+    if (id) {
+      if (email) {
+        const result = await pool.query(
+          `SELECT 
+             events.*,
+             users.name as username,
+             CASE WHEN er.event_id IS NOT NULL THEN true ELSE false END as "isRegistered",
+             CASE WHEN ei.event_id IS NOT NULL THEN true ELSE false END as "isInterested",
+             COALESCE(reg_count.count, 0)::integer as "registeredCount",
+             COALESCE(int_count.count, 0)::integer as "interestedCount"
+           FROM events
+           INNER JOIN users ON events.createdby = users.email
+           LEFT JOIN event_registration er ON events.id = er.event_id AND er.user_email = $2
+           LEFT JOIN event_interest ei ON events.id = ei.event_id AND ei.user_email = $2
+           LEFT JOIN (
+             SELECT event_id, COUNT(*)::integer as count 
+             FROM event_registration 
+             GROUP BY event_id
+           ) reg_count ON events.id = reg_count.event_id
+           LEFT JOIN (
+             SELECT event_id, COUNT(*)::integer as count 
+             FROM event_interest 
+             GROUP BY event_id
+           ) int_count ON events.id = int_count.event_id
+           WHERE events.id = $1
+           LIMIT 1`,
+          [id, email]
+        )
+        return Response.json(result.rows[0] ?? null)
+      } else {
+        const result = await pool.query(
+          `SELECT 
+             events.*,
+             users.name as username,
+             COALESCE(reg_count.count, 0)::integer as "registeredCount",
+             COALESCE(int_count.count, 0)::integer as "interestedCount"
+           FROM events
+           INNER JOIN users ON events.createdby = users.email
+           LEFT JOIN (
+             SELECT event_id, COUNT(*)::integer as count 
+             FROM event_registration 
+             GROUP BY event_id
+           ) reg_count ON events.id = reg_count.event_id
+           LEFT JOIN (
+             SELECT event_id, COUNT(*)::integer as count 
+             FROM event_interest 
+             GROUP BY event_id
+           ) int_count ON events.id = int_count.event_id
+           WHERE events.id = $1
+           LIMIT 1`,
+          [id]
+        )
+        return Response.json(result.rows[0] ?? null)
+      }
+    }
+
+    // Списък със събития (с флагове ако има email)
     if (email) {
       const result = await pool.query(
         `SELECT 
@@ -91,7 +177,7 @@ export async function GET(request: Request) {
   }
 }
 
-// Обновяване на събитие
+// Обновяване на събитие (вкл. details)
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
@@ -102,6 +188,7 @@ export async function PUT(request: Request) {
       bannerUrl,
       location,
       link,
+      details,
       eventDate,
       eventTime,
     } = body
@@ -146,30 +233,34 @@ export async function PUT(request: Request) {
 
     const fields: string[] = []
     const values: any[] = []
-    let paramIndex = 1
+    let i = 1
 
     if (eventName) {
-      fields.push(`name = $${paramIndex++}`)
+      fields.push(`name = $${i++}`)
       values.push(eventName)
     }
     if (bannerUrl) {
-      fields.push(`bannerurl = $${paramIndex++}`)
+      fields.push(`bannerurl = $${i++}`)
       values.push(bannerUrl)
     }
     if (location) {
-      fields.push(`location = $${paramIndex++}`)
+      fields.push(`location = $${i++}`)
       values.push(location)
     }
     if (link !== undefined) {
-      fields.push(`link = $${paramIndex++}`)
+      fields.push(`link = $${i++}`)
       values.push(link)
     }
+    if (details !== undefined) {
+      fields.push(`details = $${i++}`)
+      values.push(details)
+    }
     if (eventDate) {
-      fields.push(`event_date = $${paramIndex++}`)
+      fields.push(`event_date = $${i++}`)
       values.push(eventDate)
     }
     if (eventTime) {
-      fields.push(`event_time = $${paramIndex++}`)
+      fields.push(`event_time = $${i++}`)
       values.push(eventTime)
     }
 
@@ -183,9 +274,9 @@ export async function PUT(request: Request) {
     values.push(eventId)
     const updateQuery = `UPDATE events SET ${fields.join(
       ", "
-    )} WHERE id = $${paramIndex} RETURNING id`
-    const updateRes = await pool.query(updateQuery, values)
-    return Response.json({ updatedEventId: updateRes.rows[0].id })
+    )} WHERE id = $${i} RETURNING id`
+    const res = await pool.query(updateQuery, values)
+    return Response.json({ updatedEventId: res.rows[0].id })
   } catch (error) {
     console.error("Грешка при обновяване на събитието:", error)
     return Response.json(

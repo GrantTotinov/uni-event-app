@@ -1,31 +1,68 @@
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  Image,
-  StyleSheet,
   Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
 import * as ImagePicker from "expo-image-picker"
-import React, { useContext, useState, useEffect } from "react"
-import Colors from "@/data/Colors"
-import TextInputField from "@/components/Shared/TextInputField"
-import { AuthContext } from "@/context/AuthContext"
+import React, { useContext, useEffect, useLayoutEffect, useState } from "react"
 import RNDateTimePicker from "@react-native-community/datetimepicker"
-import Button from "@/components/Shared/Button"
 import moment from "moment"
 import "moment/locale/bg"
 import axios from "axios"
-import { cld, options } from "@/configs/CloudinaryConfig"
 import { upload } from "cloudinary-react-native"
-import { useRouter, useLocalSearchParams } from "expo-router"
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router"
+
+import Colors from "@/data/Colors"
+import TextInputField from "@/components/Shared/TextInputField"
+import Button from "@/components/Shared/Button"
+import { AuthContext } from "@/context/AuthContext"
+import { cld, options } from "@/configs/CloudinaryConfig"
+
+type RouteParams = {
+  edit?: string
+  id?: string
+  name?: string
+  bannerurl?: string
+  location?: string
+  link?: string
+  event_date?: string
+  event_time?: string
+  details?: string
+}
 
 export default function AddEvent() {
   moment.locale("bg")
+  const navigation = useNavigation()
+  const { user } = useContext(AuthContext)
+  const router = useRouter()
+
+  const params = useLocalSearchParams<RouteParams>()
+  const {
+    edit,
+    id,
+    name: paramName,
+    bannerurl: paramBannerUrl,
+    location: paramLocation,
+    link: paramLink,
+    event_date: paramEventDate,
+    event_time: paramEventTime,
+    details: paramDetails,
+  } = params
+
+  const isEdit = edit === "1"
+
   const [image, setImage] = useState<string>()
   const [eventName, setEventName] = useState<string>()
   const [location, setLocation] = useState<string>()
   const [link, setLink] = useState<string>()
+  const [details, setDetails] = useState<string>("")
   const [time, setTime] = useState("Избери час")
   const [date, setDate] = useState("Избери дата")
   const [selectedTime, setSelectedTime] = useState<Date>(new Date())
@@ -33,84 +70,87 @@ export default function AddEvent() {
   const [openTimePicker, setOpenTimePicker] = useState(false)
   const [openDatePicker, setOpenDatePicker] = useState(false)
   const [dayInBulgarian, setDayInBulgarian] = useState<string>("")
-  const { user } = useContext(AuthContext)
-  const router = useRouter()
 
-  const params = useLocalSearchParams<{
-    edit?: string
-    id?: string
-    name?: string
-    bannerurl?: string
-    location?: string
-    link?: string
-    event_date?: string
-    event_time?: string
-  }>()
-  const isEdit = params.edit === "1"
+  // Header title
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerTitle: isEdit ? "Редактирай събитие" : "Създай Ново Събитие",
+    })
+  }, [navigation, isEdit])
 
-  // FIXED - Променил useEffect зависимостите
+  // Initialize form on edit (avoid using object "params" as dependency to prevent infinite loops)
   useEffect(() => {
-    if (isEdit) {
-      // Зареждаме данните само веднъж при инициализация
-      if (params.name) setEventName(params.name)
-      if (params.bannerurl) setImage(params.bannerurl)
-      if (params.location) setLocation(params.location)
-      if (params.link) setLink(params.link)
+    if (!isEdit) return
 
-      if (params.event_time) {
-        setTime(params.event_time)
-        const timeDate = new Date()
-        const [hours, minutes] = params.event_time.split(":")
-        timeDate.setHours(parseInt(hours), parseInt(minutes))
-        setSelectedTime(timeDate)
-      }
+    if (paramName && paramName !== eventName) setEventName(paramName)
+    if (paramBannerUrl && paramBannerUrl !== image) setImage(paramBannerUrl)
+    if (paramLocation && paramLocation !== location) setLocation(paramLocation)
+    if (paramLink !== undefined && paramLink !== link) setLink(paramLink)
+    if (paramDetails !== undefined && paramDetails !== details)
+      setDetails(paramDetails)
 
-      if (params.event_date) {
-        const dateParts = params.event_date.split(",")
-        if (dateParts.length > 1) {
-          const dateString = dateParts[1]
-          setDate(params.event_date)
-          setDayInBulgarian(dateParts[0])
-          const parsedDate = new Date(dateString)
-          setSelectedDate(parsedDate)
-        } else {
-          setDate(params.event_date)
-          const parsedDate = new Date(params.event_date)
-          setSelectedDate(parsedDate)
-          setDayInBulgarian(moment(parsedDate).format("dddd"))
-        }
+    if (paramEventTime && paramEventTime !== time) {
+      setTime(paramEventTime)
+      const t = new Date()
+      const [h, m] = paramEventTime.split(":")
+      t.setHours(parseInt(h || "0"), parseInt(m || "0"))
+      setSelectedTime(t)
+    }
+
+    if (paramEventDate && paramEventDate !== date) {
+      const parts = paramEventDate.split(",")
+      if (parts.length > 1) {
+        const dateString = parts[1]
+        setDate(paramEventDate)
+        setDayInBulgarian(parts[0])
+        const parsed = new Date(dateString)
+        setSelectedDate(parsed)
+      } else {
+        setDate(paramEventDate)
+        const parsed = new Date(paramEventDate)
+        setSelectedDate(parsed)
+        setDayInBulgarian(moment(parsed).format("dddd"))
       }
     }
-  }, [isEdit]) // FIXED - Зависи само от isEdit, не от params
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isEdit,
+    paramName,
+    paramBannerUrl,
+    paramLocation,
+    paramLink,
+    paramDetails,
+    paramEventTime,
+    paramEventDate,
+  ])
 
   const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"] as any,
       allowsEditing: true,
       aspect: [4, 4],
       quality: 0.5,
     })
-
     if (!result.canceled) {
       setImage(result.assets[0].uri)
     }
   }
 
-  const onTimeChange = (event: any, selectedTime: any) => {
+  const onTimeChange = (_e: any, selected: any) => {
     setOpenTimePicker(false)
-    if (selectedTime) {
-      setSelectedTime(selectedTime)
-      setTime(moment(selectedTime).format("HH:mm"))
+    if (selected) {
+      setSelectedTime(selected)
+      setTime(moment(selected).format("HH:mm"))
     }
   }
 
-  const onDateChange = (event: any, selectedDate: any) => {
+  const onDateChange = (_e: any, selected: any) => {
     setOpenDatePicker(false)
-    if (selectedDate) {
-      setSelectedDate(selectedDate)
-      const dayInBulgarian = moment(selectedDate).format("dddd")
-      setDayInBulgarian(dayInBulgarian)
-      setDate(`${dayInBulgarian},${moment(selectedDate).format("YYYY-MM-DD")}`)
+    if (selected) {
+      setSelectedDate(selected)
+      const dayBg = moment(selected).format("dddd")
+      setDayInBulgarian(dayBg)
+      setDate(`${dayBg},${moment(selected).format("YYYY-MM-DD")}`)
     }
   }
 
@@ -127,19 +167,20 @@ export default function AddEvent() {
           await upload(cld, {
             file: image,
             options: options,
-            callback: async (error, resp) => {
+            callback: async (_error, resp) => {
               if (resp) finalBannerUrl = resp.url
             },
           })
         }
 
         await axios.put(process.env.EXPO_PUBLIC_HOST_URL + "/events", {
-          eventId: params.id,
+          eventId: id,
           userEmail: user?.email,
-          eventName: eventName,
+          eventName,
           bannerUrl: finalBannerUrl,
           location,
           link,
+          details,
           eventDate: date.includes(",")
             ? date
             : `${dayInBulgarian},${moment(selectedDate).format("YYYY-MM-DD")}`,
@@ -157,115 +198,125 @@ export default function AddEvent() {
       return
     }
 
+    // Create
     upload(cld, {
       file: image,
       options: options,
-      callback: async (error, resp) => {
+      callback: async (_error, resp) => {
         if (resp) {
-          const result = await axios.post(
-            process.env.EXPO_PUBLIC_HOST_URL + "/events",
-            {
-              eventName: eventName,
+          try {
+            await axios.post(process.env.EXPO_PUBLIC_HOST_URL + "/events", {
+              eventName,
               bannerUrl: resp.url,
-              location: location,
-              link: link,
+              location,
+              link,
+              details,
               eventDate: `${dayInBulgarian},${moment(selectedDate).format(
                 "YYYY-MM-DD"
               )}`,
               eventTime: moment(selectedTime).format("HH:mm"),
               email: user?.email,
-            }
-          )
-          console.log(result)
-          Alert.alert("Чудесно!", "Ново събитие беше добавено!", [
-            {
-              text: "OK",
-              onPress: () => router.replace("/(tabs)/Event"),
-            },
-          ])
+            })
+            Alert.alert("Чудесно!", "Ново събитие беше добавено!", [
+              { text: "OK", onPress: () => router.replace("/(tabs)/Event") },
+            ])
+          } catch (err) {
+            console.error(err)
+            Alert.alert("Грешка", "Неуспешно добавяне на събитие.")
+          }
         }
       },
     })
   }
 
   return (
-    <View
-      style={{
-        padding: 20,
-        backgroundColor: Colors.WHITE,
-        height: "100%",
-      }}
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: Colors.WHITE }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Text
-        style={{
-          fontSize: 25,
-          fontWeight: "bold",
-        }}
+      <ScrollView
+        contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
       >
-        {isEdit ? "Редактирай събитие" : "Добави Събитие"}
-      </Text>
+        <Text style={{ fontSize: 25, fontWeight: "bold" }}>
+          {isEdit ? "Редактирай събитие" : "Добави Събитие"}
+        </Text>
 
-      <TouchableOpacity onPress={pickImage}>
-        {image ? (
-          <Image source={{ uri: image }} style={styles.image} />
-        ) : (
-          <Image
-            source={require("./../../assets/images/image.png")}
-            style={styles.image}
+        <TouchableOpacity onPress={pickImage}>
+          {image ? (
+            <Image source={{ uri: image }} style={styles.image} />
+          ) : (
+            <Image
+              source={require("./../../assets/images/image.png")}
+              style={styles.image}
+            />
+          )}
+        </TouchableOpacity>
+
+        <TextInputField
+          label="Име на събитието"
+          onChangeText={setEventName}
+          value={eventName}
+        />
+        <TextInputField
+          label="Локация"
+          onChangeText={setLocation}
+          value={location}
+        />
+        <TextInputField
+          label="Линк за детайли"
+          onChangeText={setLink}
+          value={link}
+        />
+
+        <View style={{ marginTop: 8, marginBottom: 10 }}>
+          <Text style={{ fontWeight: "600", marginBottom: 4 }}>
+            Детайли за събитието
+          </Text>
+          <TextInput
+            placeholder="Опишете подробно събитието..."
+            value={details}
+            onChangeText={setDetails}
+            multiline
+            style={styles.detailsInput}
+            placeholderTextColor={Colors.GRAY}
+          />
+        </View>
+
+        <View>
+          <Button
+            text={time}
+            outline
+            onPress={() => setOpenTimePicker(!openTimePicker)}
+          />
+          <Button
+            text={date}
+            outline
+            onPress={() => setOpenDatePicker(!openDatePicker)}
+          />
+        </View>
+
+        {openTimePicker && (
+          <RNDateTimePicker
+            mode="time"
+            value={selectedTime}
+            onChange={onTimeChange}
           />
         )}
-      </TouchableOpacity>
+        {openDatePicker && (
+          <RNDateTimePicker
+            mode="date"
+            value={selectedDate}
+            onChange={onDateChange}
+          />
+        )}
 
-      <TextInputField
-        label="Име на събитието"
-        onChangeText={(v) => setEventName(v)}
-        value={eventName}
-      />
-      <TextInputField
-        label="Локация"
-        onChangeText={(v) => setLocation(v)}
-        value={location}
-      />
-      <TextInputField
-        label="Линк за детайли"
-        onChangeText={(v) => setLink(v)}
-        value={link}
-      />
-
-      <View>
         <Button
-          text={time}
-          outline={true}
-          onPress={() => setOpenTimePicker(!openTimePicker)}
+          text={isEdit ? "Запази промените" : "Създай"}
+          onPress={onSubmitBtnPress}
         />
-        <Button
-          text={date}
-          outline={true}
-          onPress={() => setOpenDatePicker(!openDatePicker)}
-        />
-      </View>
-
-      {openTimePicker && (
-        <RNDateTimePicker
-          mode="time"
-          value={selectedTime}
-          onChange={onTimeChange}
-        />
-      )}
-
-      {openDatePicker && (
-        <RNDateTimePicker
-          mode="date"
-          value={selectedDate}
-          onChange={onDateChange}
-        />
-      )}
-
-      <Button
-        text={isEdit ? "Запази промените" : "Създай"}
-        onPress={() => onSubmitBtnPress()}
-      />
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -276,5 +327,14 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     marginTop: 15,
     marginLeft: -10,
+  },
+  detailsInput: {
+    borderWidth: 1,
+    borderColor: Colors.GRAY,
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 100,
+    textAlignVertical: "top",
+    color: "#000",
   },
 })
