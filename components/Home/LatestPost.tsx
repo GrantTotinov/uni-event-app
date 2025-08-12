@@ -1,17 +1,22 @@
-import React, { useEffect, useState } from "react"
 import { View, Text, Pressable, StyleSheet } from "react-native"
-import Colors from "@/data/Colors"
+import React, { useEffect, useState } from "react"
 import axios from "axios"
+import Colors from "@/data/Colors"
 import PostList from "../Post/PostList"
 
-type Comment = {
-  comment: string
-}
-
-type Post = {
-  context: string
+interface Post {
   post_id: number
-  comments?: Comment[]
+  context: string
+  imageurl: string
+  createdby: string
+  createdon: string
+  createdon_local: string
+  name: string
+  image: string
+  role: string
+  like_count: number
+  comment_count: number
+  is_uht_related: boolean
 }
 
 export default function LatestPost({ search }: { search: string }) {
@@ -25,7 +30,7 @@ export default function LatestPost({ search }: { search: string }) {
 
   const getPosts = async () => {
     setLoading(true)
-    let orderField = selectedTab === 0 ? "post.createdon" : "likes_count"
+    let orderField = selectedTab === 0 ? "post.createdon" : "like_count.count"
     const url = `${process.env.EXPO_PUBLIC_HOST_URL}/post?club=0&orderField=${orderField}`
 
     try {
@@ -37,7 +42,7 @@ export default function LatestPost({ search }: { search: string }) {
               `${process.env.EXPO_PUBLIC_HOST_URL}/comment?postId=${post.post_id}`
             )
             return { ...post, comments: commentsRes.data }
-          } catch {
+          } catch (error) {
             return { ...post, comments: [] }
           }
         })
@@ -52,7 +57,7 @@ export default function LatestPost({ search }: { search: string }) {
   const filteredPosts = posts.filter(
     (post) =>
       post.context?.toLowerCase().includes(search.toLowerCase()) ||
-      post.comments?.some((c) =>
+      post.comments?.some((c: any) =>
         c.comment?.toLowerCase().includes(search.toLowerCase())
       )
   )
@@ -96,9 +101,13 @@ export default function LatestPost({ search }: { search: string }) {
 
 const styles = StyleSheet.create({
   tabtext: {
-    padding: 4,
-    fontSize: 20,
-    paddingHorizontal: 10,
-    borderRadius: 99,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 25,
+    overflow: "hidden",
+    fontWeight: "600",
+    borderWidth: 1,
+    borderColor: Colors.PRIMARY,
+    textAlign: "center" as const,
   },
 })

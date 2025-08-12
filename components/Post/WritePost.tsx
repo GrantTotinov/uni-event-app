@@ -1,80 +1,93 @@
+import React, { useContext, useEffect, useState } from "react"
 import {
   View,
   Text,
   TextInput,
-  StyleSheet,
   Image,
   TouchableOpacity,
-  ToastAndroid,
+  Alert,
+  StyleSheet,
 } from "react-native"
-import React, { useContext, useEffect, useState } from "react"
 import Colors from "@/data/Colors"
+import Button from "@/components/Shared/Button"
+import { AuthContext, isAdmin } from "@/context/AuthContext"
 import DropDownPicker from "react-native-dropdown-picker"
-import Button from "../Shared/Button"
 import * as ImagePicker from "expo-image-picker"
 import { upload } from "cloudinary-react-native"
 import { cld, options } from "@/configs/CloudinaryConfig"
 import axios from "axios"
-import { AuthContext } from "@/context/AuthContext"
 import { useRouter } from "expo-router"
 
 export default function WritePost() {
-  const [selectedImage, setSelectedImage] = useState<string | undefined>()
+  const [post, setPost] = useState<string>("")
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [selectedClub, setSelectedClub] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
+  const [isUhtRelated, setIsUhtRelated] = useState(false)
+
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState(null)
-  const [content, setContent] = useState<string | null>()
+  const [items, setItems] = useState([{ label: "Публично", value: null }])
+
   const { user } = useContext(AuthContext)
   const router = useRouter()
-  const [item, setItems] = useState([{ label: "ПУБЛИЧНО", value: 0 }])
 
   useEffect(() => {
-    user && GetUserFollowedClubs()
-  }, [user])
-  const onPostBtnClick = async () => {
-    if (!content) {
-      ToastAndroid.show(
-        "Полето е празно. Моля въведете текст",
-        ToastAndroid.BOTTOM
-      )
+    GetUserFollowedClubs()
+  }, [])
+
+  const onPublishPost = async () => {
+    if (!post) {
+      Alert.alert("Моля добавете съдържание")
       return
     }
+
     setLoading(true)
-    // Upload image
-    let uploadImageUrl = ""
-    if (selectedImage) {
-      const resultData: any = await new Promise(async (resolve, reject) => {
+    let imageUrl = ""
+
+    try {
+      if (selectedImage) {
         await upload(cld, {
           file: selectedImage,
           options: options,
-          callback: (error: any, response: any) => {
-            if (error) {
-              reject(error)
-            } else {
-              resolve(response)
+          callback: (_error, response) => {
+            if (response?.url) {
+              imageUrl = response.url
             }
           },
         })
-      })
-      uploadImageUrl = resultData && resultData?.url
+      }
+
+      const resp = await axios.post(
+        `${process.env.EXPO_PUBLIC_HOST_URL}/post`,
+        {
+          content: post,
+          imageUrl: imageUrl,
+          email: user?.email,
+          visibleIn: selectedClub,
+          isUhtRelated: isUhtRelated,
+        }
+      )
+
+      if (resp) {
+        setPost("")
+        setSelectedImage(null)
+        setSelectedClub(null)
+        setIsUhtRelated(false)
+        Alert.alert("Успешно", "Публикацията е създадена!", [
+          { text: "OK", onPress: () => router.replace("/(tabs)/Home") },
+        ])
+      }
+    } catch (error) {
+      console.error("Error creating post:", error)
+      Alert.alert("Грешка", "Неуспешно създаване на публикация")
     }
-    const result = await axios.post(
-      process.env.EXPO_PUBLIC_HOST_URL + "/post",
-      {
-        content: content,
-        imageUrl: uploadImageUrl,
-        visibleIn: value,
-        email: user.email,
-      },
-      { headers: { "Content-Type": "application/json" } }
-    )
-    console.log(result.data)
+
     setLoading(false)
-    router.replace("/(tabs)/Home")
   }
-  const pickImage = async () => {
-    // No permissions request is necessary for launching the image library
-    let result = await ImagePicker.launchImageLibraryAsync({
+
+  const selectImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [4, 4],
@@ -85,6 +98,7 @@ export default function WritePost() {
       setSelectedImage(result.assets[0].uri)
     }
   }
+
   const GetUserFollowedClubs = async () => {
     const result = await axios.get(
       process.env.EXPO_PUBLIC_HOST_URL + "/clubfollower?u_email=" + user?.email
@@ -97,6 +111,7 @@ export default function WritePost() {
     console.log(data)
     setItems((prev) => [...prev, ...data])
   }
+
   return (
     <View>
       <TextInput
@@ -105,61 +120,142 @@ export default function WritePost() {
         multiline={true}
         numberOfLines={5}
         maxLength={1000}
-        onChangeText={(value) => setContent(value)}
+        onChangeText={(value) => setPost(value)}
+        value={post}
       />
 
-      <TouchableOpacity onPress={pickImage}>
+      <TouchableOpacity onPress={selectImage} style={styles.imageSelector}>
         {selectedImage ? (
-          <Image source={{ uri: selectedImage }} style={styles.image} />
+          <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
         ) : (
-          <Image
-            source={require("./../../assets/images/image.png")}
-            style={styles.image}
-          />
+          <View style={styles.imagePlaceholder}>
+            <Text style={styles.placeholderText}>Добави изображение</Text>
+          </View>
         )}
       </TouchableOpacity>
-      <View
-        style={{
-          marginTop: 15,
-        }}
-      >
+
+      {(isAdmin(user?.role) || user?.role === "teacher") && (
+        <View style={styles.uhtCheckboxContainer}>
+          <TouchableOpacity
+            onPress={() => setIsUhtRelated(!isUhtRelated)}
+            style={styles.checkboxContainer}
+          >
+            <View
+              style={[styles.checkbox, isUhtRelated && styles.checkboxChecked]}
+            >
+              {isUhtRelated && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={styles.checkboxLabel}>
+              Свързано с УХТ (официална информация)
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <View style={styles.dropdownContainer}>
+        <Text style={styles.dropdownLabel}>Видимост на публикацията:</Text>
         <DropDownPicker
-          items={item}
           open={open}
           value={value}
+          items={items}
           setOpen={setOpen}
           setValue={setValue}
           setItems={setItems}
-          style={{
-            borderWidth: 0,
-            elevation: 3,
-          }}
+          onChangeValue={(value) => setSelectedClub(value)}
+          placeholder="Избери видимост"
+          style={styles.dropdown}
+          dropDownContainerStyle={styles.dropdownList}
         />
       </View>
-      <Button
-        text="Публикувай"
-        onPress={() => onPostBtnClick()}
-        loading={loading}
-      />
+
+      <Button text="Публикувай" onPress={onPublishPost} loading={loading} />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   textInput: {
-    padding: 15,
-    backgroundColor: Colors.WHITE,
-    height: 140,
-    marginTop: 10,
-    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: Colors.GRAY,
+    borderRadius: 10,
+    padding: 10,
+    paddingTop: 15,
     textAlignVertical: "top",
-    elevation: 7,
+    minHeight: 100,
+    marginBottom: 15,
   },
-  image: {
-    width: 100,
+  imageSelector: {
+    marginBottom: 15,
+  },
+  selectedImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: 10,
+  },
+  imagePlaceholder: {
     height: 100,
-    borderRadius: 15,
-    marginTop: 15,
-    marginLeft: -10,
+    borderWidth: 1,
+    borderColor: Colors.GRAY,
+    borderRadius: 10,
+    borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  placeholderText: {
+    color: Colors.GRAY,
+    fontSize: 16,
+  },
+  uhtCheckboxContainer: {
+    marginBottom: 15,
+    padding: 12,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
+  },
+  checkboxContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderWidth: 2,
+    borderColor: Colors.PRIMARY,
+    borderRadius: 4,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: Colors.WHITE,
+  },
+  checkboxChecked: {
+    backgroundColor: Colors.PRIMARY,
+  },
+  checkmark: {
+    color: Colors.WHITE,
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  checkboxLabel: {
+    fontSize: 14,
+    color: Colors.BLACK,
+    flex: 1,
+    fontWeight: "500",
+  },
+  dropdownContainer: {
+    marginBottom: 20,
+  },
+  dropdownLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 8,
+    color: Colors.BLACK,
+  },
+  dropdown: {
+    borderColor: Colors.GRAY,
+    borderRadius: 8,
+  },
+  dropdownList: {
+    borderColor: Colors.GRAY,
   },
 })

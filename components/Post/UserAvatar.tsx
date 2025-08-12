@@ -1,18 +1,18 @@
 import { View, Text, Image } from "react-native"
 import React from "react"
 import Colors from "@/data/Colors"
-import Ionicons from "@expo/vector-icons/Ionicons"
 import moment from "moment"
 import "moment/locale/bg"
 
 moment.locale("bg")
 
-type USER_AVATAR = {
+interface USER_AVATAR {
   name: string
   image: string
   date: string
   localDate?: string
-  role?: string | null
+  role?: string
+  isUhtRelated?: boolean
 }
 
 export default function UserAvatar({
@@ -21,6 +21,7 @@ export default function UserAvatar({
   date,
   localDate,
   role,
+  isUhtRelated,
 }: USER_AVATAR) {
   let formattedDate = "Невалидна дата"
 
@@ -54,11 +55,11 @@ export default function UserAvatar({
   const getRoleColor = (userRole: string | null | undefined): string => {
     switch (userRole) {
       case "admin":
-        return "#dc3545" // Червен за админ
+        return "#dc3545"
       case "teacher":
-        return "#007bff" // Син за преподавател
+        return "#007bff"
       case "user":
-        return Colors.GRAY // Сив за студент
+        return Colors.GRAY
       default:
         return Colors.GRAY
     }
@@ -78,19 +79,40 @@ export default function UserAvatar({
           style={{ width: 50, height: 50, borderRadius: 99 }}
         />
         <View>
-          <Text style={{ fontSize: 18, fontWeight: "bold" }}>{name}</Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text style={{ fontWeight: "bold", fontSize: 16 }}>{name}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <Text
               style={{
                 color: getRoleColor(role),
-                fontSize: 14,
+                fontSize: 12,
                 fontWeight: "600",
               }}
             >
               {getRoleDisplayText(role)}
             </Text>
-            <Text style={{ color: Colors.GRAY, fontSize: 14 }}>•</Text>
-            <Text style={{ color: Colors.GRAY, fontSize: 14 }}>
+            {isUhtRelated && (
+              <View
+                style={{
+                  backgroundColor: "#e8f4fd",
+                  borderColor: "#0066cc",
+                  borderWidth: 1,
+                  borderRadius: 8,
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                }}
+              >
+                <Text
+                  style={{
+                    color: "#0066cc",
+                    fontSize: 10,
+                    fontWeight: "bold",
+                  }}
+                >
+                  УХТ
+                </Text>
+              </View>
+            )}
+            <Text style={{ color: Colors.GRAY, fontSize: 12 }}>
               {formattedDate}
             </Text>
           </View>

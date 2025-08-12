@@ -1,27 +1,73 @@
-import { View, Text, FlatList } from "react-native"
-import React, { useEffect } from "react"
+import React, { memo } from "react"
+import { FlatList, RefreshControl } from "react-native"
+import Colors from "@/data/Colors"
 import PostCard from "./PostCard"
 
-export default function PostList({ posts = [], onRefresh, loading }: any) {
-  useEffect(() => {
-    console.log("Posts data:", posts)
-    posts.forEach((post: any) => {
-      console.log("Post ID:", post.post_id)
-    })
-  }, [posts])
+interface Post {
+  post_id: number
+  context: string
+  imageurl: string
+  createdby: string
+  createdon: string
+  createdon_local: string
+  name: string
+  image: string
+  role: string
+  like_count: number
+  comment_count: number
+  is_uht_related: boolean
+  comments?: any[]
+}
+
+interface PostListProps {
+  posts: Post[]
+  loading: boolean
+  onRefresh: () => void
+}
+
+const PostItem = memo(
+  ({ item, onUpdate }: { item: Post; onUpdate: () => void }) => {
+    return <PostCard post={item} onUpdate={onUpdate} />
+  }
+)
+
+const PostList = memo(({ posts, loading, onRefresh }: PostListProps) => {
+  const renderPost = ({ item }: { item: Post }) => (
+    <PostItem item={item} onUpdate={onRefresh} />
+  )
+
+  const getItemLayout = (_: any, index: number) => ({
+    length: 400, // Приблизителна височина на PostCard
+    offset: 400 * index,
+    index,
+  })
+
+  const keyExtractor = (item: Post) => item.post_id.toString()
 
   return (
-    <View>
-      <FlatList
-        data={posts}
-        onRefresh={onRefresh}
-        refreshing={loading}
-        keyExtractor={(item) => item.post_id.toString()}
-        initialNumToRender={10} // Рендерира първоначално 10 елемента
-        maxToRenderPerBatch={10} // Рендерира по 10 елемента на "batch"
-        windowSize={5} // Оптимизира размера на прозореца за виртуализация
-        renderItem={({ item }) => <PostCard post={item} onUpdate={onRefresh} />}
-      />
-    </View>
+    <FlatList
+      data={posts}
+      renderItem={renderPost}
+      keyExtractor={keyExtractor}
+      getItemLayout={getItemLayout}
+      removeClippedSubviews={true}
+      maxToRenderPerBatch={5}
+      windowSize={10}
+      initialNumToRender={3}
+      refreshControl={
+        <RefreshControl
+          refreshing={loading}
+          onRefresh={onRefresh}
+          tintColor={Colors.PRIMARY}
+          colors={[Colors.PRIMARY]}
+        />
+      }
+      showsVerticalScrollIndicator={false}
+    />
   )
-}
+})
+
+PostItem.displayName = "PostItem"
+PostList.displayName = "PostList"
+
+export default PostList
