@@ -1,8 +1,8 @@
-import React, { memo } from "react"
-import { FlatList, RefreshControl, ActivityIndicator, View } from "react-native"
-import Colors from "@/data/Colors"
-import PostCard from "./PostCard"
-import PostCardSkeleton from "./PostCard/PostCardSkeleton"
+import React, { memo } from 'react'
+import { FlatList, RefreshControl, ActivityIndicator, View } from 'react-native'
+import Colors from '@/data/Colors'
+import PostCard from './PostCard'
+import PostCardSkeleton from './PostCard/PostCardSkeleton'
 
 interface Post {
   post_id: number
@@ -34,29 +34,12 @@ interface PostListProps {
 }
 
 const PostItem = memo(
-  ({
-    item,
-    onUpdate,
-    onToggleLike,
-    onAddComment,
-  }: {
-    item: Post
-    onUpdate: () => void
-    onToggleLike?: (postId: number, isLiked: boolean) => void
-    onAddComment?: (postId: number, comment: string) => Promise<boolean>
-  }) => {
+  ({ item, onUpdate }: { item: Post; onUpdate: () => void }) => {
     // Show skeleton for negative IDs
     if (item.post_id < 0) {
       return <PostCardSkeleton />
     }
-    return (
-      <PostCard
-        post={item}
-        onUpdate={onUpdate}
-        onToggleLike={onToggleLike}
-        onAddComment={onAddComment}
-      />
-    )
+    return <PostCard post={item} onUpdate={onUpdate} />
   }
 )
 
@@ -73,12 +56,7 @@ const PostList = memo(
     onAddComment,
   }: PostListProps) => {
     const renderPost = ({ item }: { item: Post }) => (
-      <PostItem
-        item={item}
-        onUpdate={onRefresh}
-        onToggleLike={onToggleLike}
-        onAddComment={onAddComment}
-      />
+      <PostItem item={item} onUpdate={onRefresh} />
     )
 
     const renderFooter = () => {
@@ -129,7 +107,7 @@ const PostList = memo(
   }
 )
 
-PostItem.displayName = "PostItem"
-PostList.displayName = "PostList"
+PostItem.displayName = 'PostItem'
+PostList.displayName = 'PostList'
 
 export default PostList

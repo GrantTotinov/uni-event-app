@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState, useCallback } from "react"
+import React, { useContext, useEffect, useState, useCallback } from 'react'
 import {
   View,
   Text,
@@ -6,12 +6,13 @@ import {
   FlatList,
   RefreshControl,
   ActivityIndicator,
-} from "react-native"
-import axios from "axios"
-import Colors from "@/data/Colors"
-import Button from "@/components/Shared/Button"
-import EventCard from "@/components/Events/EventCard"
-import { AuthContext } from "@/context/AuthContext"
+  StyleSheet,
+} from 'react-native'
+import axios from 'axios'
+import Colors from '@/data/Colors'
+import Button from '@/components/Shared/Button'
+import EventCard from '@/components/Events/EventCard'
+import { AuthContext } from '@/context/AuthContext'
 
 interface EventItem {
   id: number
@@ -28,6 +29,12 @@ interface EventItem {
   isInterested?: boolean
   registeredCount?: number
   interestedCount?: number
+}
+
+// Updated EVENT type to properly handle optional boolean properties
+type EVENT = EventItem & {
+  onUnregister?: () => void
+  onDelete?: () => void
 }
 
 export default function Event() {
@@ -52,7 +59,7 @@ export default function Event() {
         }
         setEventList(list)
       } catch (error) {
-        console.error("Error fetching events:", error)
+        console.error('Error fetching events:', error)
       } finally {
         setLoading(false)
       }
@@ -92,7 +99,7 @@ export default function Event() {
   const renderItem = ({ item, index }: { item: EventItem; index: number }) => (
     <EventCard
       key={index}
-      {...item}
+      {...(item as EVENT)}
       onUnregister={() => {
         // След отписване – презареди текущия списък (филтърът остава)
         if (selectedTab === 1) {
@@ -118,17 +125,17 @@ export default function Event() {
       <View
         style={{
           paddingHorizontal: 20,
-          display: "flex",
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
           paddingVertical: 12,
         }}
       >
         <Text
           style={{
             fontSize: 30,
-            fontWeight: "bold",
+            fontWeight: 'bold',
           }}
         >
           Събития
@@ -137,7 +144,7 @@ export default function Event() {
           text="   +   "
           onPress={() =>
             (window as any).expoRouter?.push
-              ? (window as any).expoRouter.push("/add-event")
+              ? (window as any).expoRouter.push('/add-event')
               : null
           }
         />
@@ -146,8 +153,8 @@ export default function Event() {
       {/* Tabs */}
       <View
         style={{
-          display: "flex",
-          flexDirection: "row",
+          display: 'flex',
+          flexDirection: 'row',
           gap: 10,
           backgroundColor: Colors.WHITE,
           paddingHorizontal: 20,
@@ -194,7 +201,7 @@ export default function Event() {
 
       {/* List */}
       {loading && !eventList && (
-        <View style={{ flex: 1, justifyContent: "center" }}>
+        <View style={{ flex: 1, justifyContent: 'center' }}>
           <ActivityIndicator color={Colors.PRIMARY} />
         </View>
       )}
@@ -209,10 +216,10 @@ export default function Event() {
         ListEmptyComponent={
           !loading ? (
             <View style={{ padding: 30 }}>
-              <Text style={{ textAlign: "center", color: Colors.GRAY }}>
+              <Text style={{ textAlign: 'center', color: Colors.GRAY }}>
                 {selectedTab === 0
-                  ? "Няма предстоящи събития."
-                  : "Нямате записани събития."}
+                  ? 'Няма предстоящи събития.'
+                  : 'Нямате записани събития.'}
               </Text>
             </View>
           ) : null
@@ -223,15 +230,15 @@ export default function Event() {
   )
 }
 
-const styles = {
+const styles = StyleSheet.create({
   tabtext: {
     paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 25,
-    overflow: "hidden",
-    fontWeight: "600",
+    overflow: 'hidden',
+    fontWeight: '600' as const,
     borderWidth: 1,
     borderColor: Colors.PRIMARY,
-    textAlign: "center" as const,
+    textAlign: 'center' as const,
   },
-}
+})

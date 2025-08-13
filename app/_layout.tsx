@@ -1,14 +1,14 @@
-import React from "react"
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { Stack } from "expo-router"
-import { AuthContextProvider } from "@/context/AuthContext"
+import React from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Stack } from 'expo-router'
+import { AuthContextProvider } from '@/context/AuthContext'
 
 // Create Query Client with optimized settings for performance
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh
-      cacheTime: 10 * 60 * 1000, // 10 minutes - data stays in memory
+      gcTime: 10 * 60 * 1000, // 10 minutes - data stays in memory (updated from cacheTime)
       retry: 2, // Retry failed requests twice
       refetchOnWindowFocus: false, // Don't refetch when window gains focus
       refetchOnReconnect: true, // Refetch when internet reconnects

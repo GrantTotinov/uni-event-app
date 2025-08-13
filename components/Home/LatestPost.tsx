@@ -1,10 +1,10 @@
-import React, { useMemo, useState } from "react"
-import { Pressable, Text, View, StyleSheet } from "react-native"
-import Colors from "@/data/Colors"
-import { useContext } from "react"
-import { AuthContext } from "@/context/AuthContext"
-import PostList from "@/components/Post/PostList"
-import { useAllPosts } from "@/hooks/usePosts"
+import React, { useMemo, useState } from 'react'
+import { Pressable, Text, View, StyleSheet } from 'react-native'
+import Colors from '@/data/Colors'
+import { useContext } from 'react'
+import { AuthContext } from '@/context/AuthContext'
+import PostList from '@/components/Post/PostList'
+import { useAllPosts } from '@/hooks/usePosts'
 
 export default function LatestPost({ search }: { search: string }) {
   const { user } = useContext(AuthContext)
@@ -24,7 +24,7 @@ export default function LatestPost({ search }: { search: string }) {
 
   // Filter posts based on search query
   const filteredPosts = useMemo(() => {
-    const query = (search || "").toLowerCase()
+    const query = (search || '').toLowerCase()
     if (!query) return posts
 
     return posts.filter((post) => post.context?.toLowerCase().includes(query))
@@ -48,13 +48,16 @@ export default function LatestPost({ search }: { search: string }) {
         isLiked,
       })
     } catch (error) {
-      console.error("Error toggling like:", error)
+      console.error('Error toggling like:', error)
     }
   }
 
-  // Handle comment submission with optimistic updates
-  const handleAddComment = async (postId: number, comment: string) => {
-    if (!user?.email || !comment.trim()) return
+  // Handle comment submission with optimistic updates - now always returns boolean
+  const handleAddComment = async (
+    postId: number,
+    comment: string
+  ): Promise<boolean> => {
+    if (!user?.email || !comment.trim()) return false
 
     try {
       await commentMutation.mutateAsync({
@@ -64,7 +67,7 @@ export default function LatestPost({ search }: { search: string }) {
       })
       return true
     } catch (error) {
-      console.error("Error adding comment:", error)
+      console.error('Error adding comment:', error)
       return false
     }
   }
@@ -72,7 +75,7 @@ export default function LatestPost({ search }: { search: string }) {
   return (
     <View style={{ marginTop: 15 }}>
       {/* Tab buttons for Latest/Popular */}
-      <View style={{ flexDirection: "row", gap: 8 }}>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
         <Pressable onPress={() => setSelectedTab(0)}>
           <Text
             style={[
@@ -125,7 +128,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    overflow: "hidden",
-    fontWeight: "600",
+    overflow: 'hidden',
+    fontWeight: '600',
   },
 })

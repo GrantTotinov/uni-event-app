@@ -1,6 +1,6 @@
-import { View, Text, TextInput, StyleSheet } from "react-native"
-import React from "react"
-import Colors from "@/data/Colors"
+import { View, Text, TextInput, StyleSheet } from 'react-native'
+import React from 'react'
+import Colors from '@/data/Colors'
 
 type TextInputFieldProps = {
   label: string

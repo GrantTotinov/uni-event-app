@@ -2,8 +2,9 @@ import {
   useInfiniteQuery,
   useMutation,
   useQueryClient,
-} from "@tanstack/react-query"
-import axios from "axios"
+  QueryFunctionContext,
+} from '@tanstack/react-query'
+import axios from 'axios'
 
 interface Post {
   post_id: number
@@ -29,6 +30,11 @@ interface UsePostsOptions {
   postsPerPage?: number
 }
 
+interface PostsResponse {
+  posts: Post[]
+  nextOffset?: number
+}
+
 export function usePosts({
   selectedTab,
   userEmail,
@@ -37,9 +43,9 @@ export function usePosts({
   postsPerPage = 10,
 }: UsePostsOptions) {
   const queryClient = useQueryClient()
-  const orderField = selectedTab === 1 ? "like_count" : "post.createdon"
+  const orderField = selectedTab === 1 ? 'like_count' : 'post.createdon'
 
-  const queryKey = ["posts", selectedTab, userEmail, followedOnly]
+  const queryKey = ['posts', selectedTab, userEmail, followedOnly]
 
   const {
     data,
@@ -50,19 +56,22 @@ export function usePosts({
     isFetchingNextPage,
     status,
     refetch,
-  } = useInfiniteQuery({
+  } = useInfiniteQuery<PostsResponse, Error>({
     queryKey,
-    queryFn: async ({ pageParam = 0 }) => {
+    queryFn: async (context: QueryFunctionContext) => {
+      const pageParam =
+        typeof context.pageParam === 'number' ? context.pageParam : 0
+
       const params: any = {
         u_email: userEmail ?? null,
         orderField,
-        orderDir: "DESC",
+        orderDir: 'DESC',
         limit: postsPerPage,
         offset: pageParam,
       }
 
       if (followedOnly) {
-        params.followedOnly = "true"
+        params.followedOnly = 'true'
       }
 
       const response = await axios.get(
@@ -78,12 +87,13 @@ export function usePosts({
             : undefined,
       }
     },
-    getNextPageParam: (lastPage) => lastPage.nextOffset,
+    getNextPageParam: (lastPage: PostsResponse) => lastPage.nextOffset,
     enabled,
     staleTime: 5 * 60 * 1000, // 5 minutes cache
-    cacheTime: 10 * 60 * 1000, // 10 minutes in memory
+    gcTime: 10 * 60 * 1000, // 10 minutes in memory (updated from cacheTime)
     retry: 2,
     refetchOnWindowFocus: false,
+    initialPageParam: 0,
   })
 
   // Mutation for like/unlike with optimistic updates
@@ -115,19 +125,21 @@ export function usePosts({
 
         return {
           ...oldData,
-          pages: oldData.pages.map((page: any) => ({
+          pages: oldData.pages.map((page: PostsResponse) => ({
             ...page,
-            posts: page.posts.map((post: Post) =>
-              post.post_id === variables.postId
-                ? {
-                    ...post,
-                    is_liked: !variables.isLiked,
-                    like_count: variables.isLiked
-                      ? Math.max(0, post.like_count - 1)
-                      : post.like_count + 1,
-                  }
-                : post
-            ),
+            posts: Array.isArray(page.posts)
+              ? page.posts.map((post: Post) =>
+                  post.post_id === variables.postId
+                    ? {
+                        ...post,
+                        is_liked: !variables.isLiked,
+                        like_count: variables.isLiked
+                          ? Math.max(0, post.like_count - 1)
+                          : post.like_count + 1,
+                      }
+                    : post
+                )
+              : [],
           })),
         }
       })
@@ -158,13 +170,15 @@ export function usePosts({
 
         return {
           ...oldData,
-          pages: oldData.pages.map((page: any) => ({
+          pages: oldData.pages.map((page: PostsResponse) => ({
             ...page,
-            posts: page.posts.map((post: Post) =>
-              post.post_id === variables.postId
-                ? { ...post, comment_count: post.comment_count + 1 }
-                : post
-            ),
+            posts: Array.isArray(page.posts)
+              ? page.posts.map((post: Post) =>
+                  post.post_id === variables.postId
+                    ? { ...post, comment_count: post.comment_count + 1 }
+                    : post
+                )
+              : [],
           })),
         }
       })
@@ -173,16 +187,19 @@ export function usePosts({
 
   // Function to invalidate cache when needed
   const invalidatePosts = () => {
-    queryClient.invalidateQueries({ queryKey: ["posts"] })
+    queryClient.invalidateQueries({ queryKey: ['posts'] })
   }
 
-  // Combine all pages into a single array
-  const posts = data?.pages.flatMap((page) => page.posts) ?? []
+  // Combine all pages into a single array with proper type guards
+  const posts =
+    data?.pages?.flatMap((page: PostsResponse) =>
+      Array.isArray(page.posts) ? page.posts : []
+    ) ?? []
 
   return {
     posts,
     error,
-    isLoading: status === "loading",
+    isLoading: status === 'pending', // Updated to use "pending" instead of "loading"
     isLoadingMore: isFetchingNextPage,
     hasMore: !!hasNextPage,
     fetchNextPage,

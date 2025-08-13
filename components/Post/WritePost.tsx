@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react"
+import React, { useContext, useEffect, useState } from 'react'
 import {
   View,
   Text,
@@ -7,19 +7,19 @@ import {
   TouchableOpacity,
   Alert,
   StyleSheet,
-} from "react-native"
-import Colors from "@/data/Colors"
-import Button from "@/components/Shared/Button"
-import { AuthContext, isAdmin } from "@/context/AuthContext"
-import DropDownPicker from "react-native-dropdown-picker"
-import * as ImagePicker from "expo-image-picker"
-import { upload } from "cloudinary-react-native"
-import { cld, options } from "@/configs/CloudinaryConfig"
-import axios from "axios"
-import { useRouter } from "expo-router"
+} from 'react-native'
+import Colors from '@/data/Colors'
+import Button from '@/components/Shared/Button'
+import { AuthContext, isAdmin } from '@/context/AuthContext'
+import DropDownPicker from 'react-native-dropdown-picker'
+import * as ImagePicker from 'expo-image-picker'
+import { upload } from 'cloudinary-react-native'
+import { cld, options } from '@/configs/CloudinaryConfig'
+import axios from 'axios'
+import { useRouter } from 'expo-router'
 
 export default function WritePost() {
-  const [post, setPost] = useState<string>("")
+  const [post, setPost] = useState<string>('')
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [selectedClub, setSelectedClub] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
@@ -27,7 +27,10 @@ export default function WritePost() {
 
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState(null)
-  const [items, setItems] = useState([{ label: "Публично", value: null }])
+  // Ensure each item has a unique key
+  const [items, setItems] = useState([
+    { label: 'Публично', value: undefined, key: 'public' },
+  ])
 
   const { user } = useContext(AuthContext)
   const router = useRouter()
@@ -38,49 +41,59 @@ export default function WritePost() {
 
   const onPublishPost = async () => {
     if (!post) {
-      Alert.alert("Моля добавете съдържание")
+      Alert.alert('Моля добавете съдържание')
       return
     }
 
     setLoading(true)
-    let imageUrl = ""
+    let imageUrl = ''
 
     try {
       if (selectedImage) {
-        await upload(cld, {
-          file: selectedImage,
-          options: options,
-          callback: (_error, response) => {
-            if (response?.url) {
-              imageUrl = response.url
-            }
-          },
+        const resultData: any = await new Promise(async (resolve, reject) => {
+          await upload(cld, {
+            file: selectedImage,
+            options: options,
+            callback: (error: any, response: any) => {
+              if (error) {
+                reject(error)
+              } else {
+                resolve(response)
+              }
+            },
+          })
         })
+        imageUrl = resultData && resultData?.url
       }
 
-      const resp = await axios.post(
-        `${process.env.EXPO_PUBLIC_HOST_URL}/post`,
-        {
-          content: post,
-          imageUrl: imageUrl,
-          email: user?.email,
-          visibleIn: selectedClub,
-          isUhtRelated: isUhtRelated,
-        }
+      const payload: any = {
+        content: post,
+        userEmail: user?.email,
+        imageUrl: imageUrl,
+        isUhtRelated,
+      }
+      if (selectedClub) {
+        payload.clubId = selectedClub
+      }
+
+      const response = await axios.post(
+        process.env.EXPO_PUBLIC_HOST_URL + '/post',
+        payload
       )
 
-      if (resp) {
-        setPost("")
+      if (response.data && response.data.post_id) {
+        setPost('')
         setSelectedImage(null)
         setSelectedClub(null)
         setIsUhtRelated(false)
-        Alert.alert("Успешно", "Публикацията е създадена!", [
-          { text: "OK", onPress: () => router.replace("/(tabs)/Home") },
-        ])
+        Alert.alert('Успех', 'Публикацията е създадена успешно!')
+        router.back()
+      } else {
+        Alert.alert('Грешка', 'Неуспешно създаване на публикация')
       }
     } catch (error) {
-      console.error("Error creating post:", error)
-      Alert.alert("Грешка", "Неуспешно създаване на публикация")
+      console.error('Грешка при създаване на публикация:', error)
+      Alert.alert('Грешка', 'Неуспешно създаване на публикация')
     }
 
     setLoading(false)
@@ -88,7 +101,7 @@ export default function WritePost() {
 
   const selectImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [4, 4],
       quality: 0.5,
@@ -100,16 +113,25 @@ export default function WritePost() {
   }
 
   const GetUserFollowedClubs = async () => {
-    const result = await axios.get(
-      process.env.EXPO_PUBLIC_HOST_URL + "/clubfollower?u_email=" + user?.email
-    )
-    console.log(result?.data)
-    const data = result.data?.map((item: any) => ({
-      label: item?.name,
-      value: item.club_id,
-    }))
-    console.log(data)
-    setItems((prev) => [...prev, ...data])
+    try {
+      const result = await axios.get(
+        process.env.EXPO_PUBLIC_HOST_URL +
+          '/clubfollower?u_email=' +
+          user?.email
+      )
+      // Map clubs to items with unique keys
+      const data = result.data?.map((item: any) => ({
+        label: item?.name?.replace(/^"|"$/g, ''), // Remove extra quotes if present
+        value: item.club_id,
+        key: String(item.club_id),
+      }))
+      setItems([
+        { label: 'Публично', value: undefined, key: 'public' },
+        ...(data || []),
+      ])
+    } catch (error) {
+      console.error('Error fetching followed clubs:', error)
+    }
   }
 
   return (
@@ -134,7 +156,7 @@ export default function WritePost() {
         )}
       </TouchableOpacity>
 
-      {(isAdmin(user?.role) || user?.role === "teacher") && (
+      {(isAdmin(user?.role) || user?.role === 'teacher') && (
         <View style={styles.uhtCheckboxContainer}>
           <TouchableOpacity
             onPress={() => setIsUhtRelated(!isUhtRelated)}
@@ -161,7 +183,7 @@ export default function WritePost() {
           setOpen={setOpen}
           setValue={setValue}
           setItems={setItems}
-          onChangeValue={(value) => setSelectedClub(value)}
+          onChangeValue={(value) => setSelectedClub(value as number | null)}
           placeholder="Избери видимост"
           style={styles.dropdown}
           dropDownContainerStyle={styles.dropdownList}
@@ -180,52 +202,53 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 10,
     paddingTop: 15,
-    textAlignVertical: "top",
+    textAlignVertical: 'top',
     minHeight: 100,
     marginBottom: 15,
   },
   imageSelector: {
     marginBottom: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 120,
+    borderWidth: 1,
+    borderColor: Colors.LIGHT_GRAY,
+    borderRadius: 10,
+    backgroundColor: Colors.WHITE,
   },
   selectedImage: {
-    width: "100%",
-    height: 200,
+    width: 100,
+    height: 100,
     borderRadius: 10,
   },
   imagePlaceholder: {
+    width: 100,
     height: 100,
-    borderWidth: 1,
-    borderColor: Colors.GRAY,
     borderRadius: 10,
-    borderStyle: "dashed",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: Colors.LIGHT_GRAY,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   placeholderText: {
     color: Colors.GRAY,
-    fontSize: 16,
+    fontSize: 14,
   },
   uhtCheckboxContainer: {
     marginBottom: 15,
-    padding: 12,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
   },
   checkboxContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   checkbox: {
     width: 22,
     height: 22,
     borderWidth: 2,
     borderColor: Colors.PRIMARY,
-    borderRadius: 4,
-    justifyContent: "center",
-    alignItems: "center",
+    borderRadius: 5,
+    marginRight: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: Colors.WHITE,
   },
   checkboxChecked: {
@@ -233,29 +256,28 @@ const styles = StyleSheet.create({
   },
   checkmark: {
     color: Colors.WHITE,
-    fontSize: 14,
-    fontWeight: "bold",
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   checkboxLabel: {
-    fontSize: 14,
-    color: Colors.BLACK,
-    flex: 1,
-    fontWeight: "500",
+    fontSize: 16,
+    color: Colors.PRIMARY,
   },
   dropdownContainer: {
-    marginBottom: 20,
+    marginBottom: 15,
   },
   dropdownLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 8,
-    color: Colors.BLACK,
+    fontSize: 15,
+    marginBottom: 5,
+    color: Colors.GRAY,
   },
   dropdown: {
     borderColor: Colors.GRAY,
-    borderRadius: 8,
+    borderRadius: 10,
+    minHeight: 40,
   },
   dropdownList: {
     borderColor: Colors.GRAY,
+    borderRadius: 10,
   },
 })

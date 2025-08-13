@@ -1,50 +1,66 @@
-import React, { useState, useContext } from "react"
-import { View, Text, TextInput, TouchableOpacity, Alert } from "react-native"
-import { AuthContext } from "@/context/AuthContext"
+import React, { useState, useContext } from 'react'
+import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native'
+import { AuthContext } from '@/context/AuthContext'
 import {
   updatePassword,
   EmailAuthProvider,
   reauthenticateWithCredential,
-} from "firebase/auth"
-import { auth } from "@/configs/FirebaseConfig"
-import Colors from "@/data/Colors"
-import axios from "axios"
+} from 'firebase/auth'
+import { auth } from '@/configs/FirebaseConfig'
+import Colors from '@/data/Colors'
+import axios from 'axios'
 
 export default function Settings() {
   const { user, setUser } = useContext(AuthContext)
-  const [newName, setNewName] = useState("")
-  const [currentPassword, setCurrentPassword] = useState("")
-  const [newPassword, setNewPassword] = useState("")
+  const [newName, setNewName] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
 
   const updateName = async () => {
     if (!newName.trim()) {
-      Alert.alert("Грешка", "Моля, въведете ново име.")
+      Alert.alert('Грешка', 'Моля, въведете ново име.')
       return
     }
+
+    if (!user?.email || !user?.image) {
+      Alert.alert('Грешка', 'Потребителят не е намерен.')
+      return
+    }
+
     try {
-      const response = await axios.put(
-        `${process.env.EXPO_PUBLIC_HOST_URL}/user`,
-        {
-          email: user?.email,
-          name: newName,
-        }
-      )
-      setUser({ ...user, name: newName })
-      Alert.alert("Успех", "Името е успешно променено.")
+      await axios.put(`${process.env.EXPO_PUBLIC_HOST_URL}/user`, {
+        email: user.email,
+        name: newName,
+      })
+
+      // Ensure all required fields are present and properly typed
+      setUser({
+        name: newName,
+        email: user.email,
+        image: user.image,
+        role: user.role || '',
+      })
+
+      Alert.alert('Успех', 'Името е успешно променено.')
     } catch (error) {
-      console.error("Грешка при промяна на името:", error)
-      Alert.alert("Грешка", "Неуспешна промяна на името.")
+      console.error('Грешка при промяна на името:', error)
+      Alert.alert('Грешка', 'Неуспешна промяна на името.')
     }
   }
 
   const updatePasswordHandler = async () => {
     if (!currentPassword || !newPassword) {
-      Alert.alert("Грешка", "Моля, попълнете всички полета.")
+      Alert.alert('Грешка', 'Моля, попълнете всички полета.')
       return
     }
 
     if (!auth.currentUser) {
-      Alert.alert("Грешка", "Не сте влезли в профила си.")
+      Alert.alert('Грешка', 'Не сте влезли в профила си.')
+      return
+    }
+
+    if (!user?.email) {
+      Alert.alert('Грешка', 'Потребителят не е намерен.')
       return
     }
 
@@ -58,16 +74,16 @@ export default function Settings() {
 
       // Смяна на паролата
       await updatePassword(auth.currentUser, newPassword)
-      Alert.alert("Успех", "Паролата е успешно променена.")
+      Alert.alert('Успех', 'Паролата е успешно променена.')
     } catch (error) {
-      console.error("Грешка при промяна на паролата:", error)
-      Alert.alert("Грешка", "Неуспешна промяна на паролата.")
+      console.error('Грешка при промяна на паролата:', error)
+      Alert.alert('Грешка', 'Неуспешна промяна на паролата.')
     }
   }
 
   return (
     <View style={{ padding: 20 }}>
-      <Text style={{ fontSize: 25, fontWeight: "bold", marginBottom: 20 }}>
+      <Text style={{ fontSize: 25, fontWeight: 'bold', marginBottom: 20 }}>
         Настройки
       </Text>
 
@@ -95,7 +111,7 @@ export default function Settings() {
             marginTop: 10,
           }}
         >
-          <Text style={{ color: "white", textAlign: "center" }}>Запази</Text>
+          <Text style={{ color: 'white', textAlign: 'center' }}>Запази</Text>
         </TouchableOpacity>
       </View>
 
@@ -137,7 +153,7 @@ export default function Settings() {
             marginTop: 10,
           }}
         >
-          <Text style={{ color: "white", textAlign: "center" }}>Запази</Text>
+          <Text style={{ color: 'white', textAlign: 'center' }}>Запази</Text>
         </TouchableOpacity>
       </View>
     </View>
