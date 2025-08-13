@@ -1,8 +1,36 @@
-import { createContext } from "react"
+import React, { createContext, useState, ReactNode } from "react"
 
-export const AuthContext = createContext<any>(undefined)
+interface User {
+  name: string
+  email: string
+  image: string
+  role?: string
+}
 
-export function isAdmin(userRole: string | undefined): boolean {
-  if (!userRole) return false
-  return userRole.toLowerCase() === "admin"
+interface AuthContextType {
+  user: User | null
+  setUser: (user: User | null) => void
+}
+
+export const AuthContext = createContext<AuthContextType>({
+  user: null,
+  setUser: () => {},
+})
+
+export function isAdmin(role?: string): boolean {
+  return role === "admin"
+}
+
+interface AuthContextProviderProps {
+  children: ReactNode
+}
+
+export function AuthContextProvider({ children }: AuthContextProviderProps) {
+  const [user, setUser] = useState<User | null>(null)
+
+  return (
+    <AuthContext.Provider value={{ user, setUser }}>
+      {children}
+    </AuthContext.Provider>
+  )
 }

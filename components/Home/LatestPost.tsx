@@ -1,74 +1,82 @@
-import { View, Text, Pressable, StyleSheet } from "react-native"
-import React, { useEffect, useState } from "react"
-import axios from "axios"
+import React, { useMemo, useState } from "react"
+import { Pressable, Text, View, StyleSheet } from "react-native"
 import Colors from "@/data/Colors"
-import PostList from "../Post/PostList"
-
-interface Post {
-  post_id: number
-  context: string
-  imageurl: string
-  createdby: string
-  createdon: string
-  createdon_local: string
-  name: string
-  image: string
-  role: string
-  like_count: number
-  comment_count: number
-  is_uht_related: boolean
-}
+import { useContext } from "react"
+import { AuthContext } from "@/context/AuthContext"
+import PostList from "@/components/Post/PostList"
+import { useAllPosts } from "@/hooks/usePosts"
 
 export default function LatestPost({ search }: { search: string }) {
-  const [selectedTab, setSelectedTab] = useState(0)
-  const [posts, setPosts] = useState<Post[]>([])
-  const [loading, setLoading] = useState(false)
+  const { user } = useContext(AuthContext)
+  const [selectedTab, setSelectedTab] = useState<0 | 1>(0)
 
-  useEffect(() => {
-    getPosts()
-  }, [selectedTab])
+  // Use React Query hook for posts - handles caching, loading states, and pagination automatically
+  const {
+    posts,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    fetchNextPage,
+    refetch,
+    likeMutation,
+    commentMutation,
+  } = useAllPosts(selectedTab, user?.email)
 
-  const getPosts = async () => {
-    setLoading(true)
-    let orderField = selectedTab === 0 ? "post.createdon" : "like_count.count"
-    const url = `${process.env.EXPO_PUBLIC_HOST_URL}/post?club=0&orderField=${orderField}`
+  // Filter posts based on search query
+  const filteredPosts = useMemo(() => {
+    const query = (search || "").toLowerCase()
+    if (!query) return posts
 
-    try {
-      const result = await axios.get(url)
-      const postsWithComments = await Promise.all(
-        result.data.map(async (post: Post) => {
-          try {
-            const commentsRes = await axios.get(
-              `${process.env.EXPO_PUBLIC_HOST_URL}/comment?postId=${post.post_id}`
-            )
-            return { ...post, comments: commentsRes.data }
-          } catch (error) {
-            return { ...post, comments: [] }
-          }
-        })
-      )
-      setPosts(postsWithComments)
-    } catch (error) {
-      console.error("Грешка при извличане на постовете", error)
+    return posts.filter((post) => post.context?.toLowerCase().includes(query))
+  }, [posts, search])
+
+  // Handle infinite scroll pagination
+  const handleLoadMore = () => {
+    if (hasMore && !isLoadingMore) {
+      fetchNextPage()
     }
-    setLoading(false)
   }
 
-  const filteredPosts = posts.filter(
-    (post) =>
-      post.context?.toLowerCase().includes(search.toLowerCase()) ||
-      post.comments?.some((c: any) =>
-        c.comment?.toLowerCase().includes(search.toLowerCase())
-      )
-  )
+  // Handle like/unlike with optimistic updates
+  const handleToggleLike = async (postId: number, isLiked: boolean) => {
+    if (!user?.email) return
+
+    try {
+      await likeMutation.mutateAsync({
+        postId,
+        userEmail: user.email,
+        isLiked,
+      })
+    } catch (error) {
+      console.error("Error toggling like:", error)
+    }
+  }
+
+  // Handle comment submission with optimistic updates
+  const handleAddComment = async (postId: number, comment: string) => {
+    if (!user?.email || !comment.trim()) return
+
+    try {
+      await commentMutation.mutateAsync({
+        postId,
+        userEmail: user.email,
+        comment,
+      })
+      return true
+    } catch (error) {
+      console.error("Error adding comment:", error)
+      return false
+    }
+  }
 
   return (
     <View style={{ marginTop: 15 }}>
+      {/* Tab buttons for Latest/Popular */}
       <View style={{ flexDirection: "row", gap: 8 }}>
         <Pressable onPress={() => setSelectedTab(0)}>
           <Text
             style={[
-              styles.tabtext,
+              styles.tabText,
               {
                 backgroundColor:
                   selectedTab === 0 ? Colors.PRIMARY : Colors.WHITE,
@@ -82,7 +90,7 @@ export default function LatestPost({ search }: { search: string }) {
         <Pressable onPress={() => setSelectedTab(1)}>
           <Text
             style={[
-              styles.tabtext,
+              styles.tabText,
               {
                 backgroundColor:
                   selectedTab === 1 ? Colors.PRIMARY : Colors.WHITE,
@@ -90,24 +98,34 @@ export default function LatestPost({ search }: { search: string }) {
               },
             ]}
           >
-            Популарни
+            Популярни
           </Text>
         </Pressable>
       </View>
-      <PostList posts={filteredPosts} loading={loading} onRefresh={getPosts} />
+
+      {/* Posts list with all optimizations */}
+      <PostList
+        posts={filteredPosts}
+        loading={isLoading}
+        loadingMore={isLoadingMore}
+        hasMore={hasMore}
+        onRefresh={refetch}
+        onLoadMore={handleLoadMore}
+        onToggleLike={handleToggleLike}
+        onAddComment={handleAddComment}
+      />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  tabtext: {
-    paddingHorizontal: 18,
+  tabText: {
+    borderColor: Colors.PRIMARY,
+    paddingHorizontal: 20,
     paddingVertical: 8,
-    borderRadius: 25,
+    borderRadius: 8,
+    borderWidth: 1,
     overflow: "hidden",
     fontWeight: "600",
-    borderWidth: 1,
-    borderColor: Colors.PRIMARY,
-    textAlign: "center" as const,
   },
 })
