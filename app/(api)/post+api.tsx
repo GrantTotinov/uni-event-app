@@ -1,30 +1,14 @@
-import { pool } from "@/configs/NilePostgresConfig"
-import { isAdmin } from "@/context/AuthContext"
+import { pool } from '@/configs/NilePostgresConfig'
+import { isAdmin } from '@/context/AuthContext'
 
-type OrderField = "post.createdon" | "like_count" | "comment_count"
-
-function sanitizeOrder(field: string | null): OrderField {
-  switch (field) {
-    case "like_count":
-      return "like_count"
-    case "comment_count":
-      return "comment_count"
-    default:
-      return "post.createdon"
-  }
-}
-
-function sanitizeDir(dir: string | null): "ASC" | "DESC" {
-  return dir?.toUpperCase() === "ASC" ? "ASC" : "DESC"
-}
-
+// Създаване на публикация
 export async function POST(request: Request) {
   try {
     const body = await request.json()
 
     if (!body || !body.content || !body.email) {
       return Response.json(
-        { error: "Липсват задължителни данни" },
+        { error: 'Липсват задължителни данни' },
         { status: 400 }
       )
     }
@@ -40,30 +24,32 @@ export async function POST(request: Request) {
 
     return Response.json({ newPostId: result.rows[0].id })
   } catch (error) {
-    console.error("Грешка при създаване на пост:", error)
+    console.error('Грешка при създаване на пост:', error)
     return Response.json(
-      { error: "Грешка при създаване на пост" },
+      { error: 'Грешка при създаване на пост' },
       { status: 500 }
     )
   }
 }
 
+// Извличане на публикации с търсене, pagination и филтриране
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  const club = url.searchParams.get("club")
-  const uEmail = url.searchParams.get("u_email")
-  const followedOnly = url.searchParams.get("followedOnly") // Нов параметър
-  const orderField = sanitizeOrder(url.searchParams.get("orderField"))
-  const orderDir = sanitizeDir(url.searchParams.get("orderDir"))
+  const club = url.searchParams.get('club')
+  const uEmail = url.searchParams.get('u_email')
+  const followedOnly = url.searchParams.get('followedOnly')
+  const search = url.searchParams.get('search')
+  const orderField = sanitizeOrder(url.searchParams.get('orderField'))
+  const orderDir = sanitizeDir(url.searchParams.get('orderDir'))
   const limit = Math.max(
     1,
-    Math.min(100, Number(url.searchParams.get("limit") ?? 20))
+    Math.min(100, Number(url.searchParams.get('limit') ?? 20))
   )
-  const offset = Math.max(0, Number(url.searchParams.get("offset") ?? 0))
+  const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0))
 
   try {
     let baseQuery = `
-      SELECT 
+      SELECT DISTINCT
         post.id AS post_id,
         post.context,
         post.imageurl,
@@ -105,34 +91,63 @@ export async function GET(request: Request) {
     }
 
     // Ако се търсят само постове от последвани клубове
-    if (followedOnly === "true" && uEmail) {
+    if (followedOnly === 'true' && uEmail) {
       params.push(uEmail)
       conditions.push(
         `post.club IN (SELECT club_id FROM clubfollowers WHERE u_email = $${params.length})`
       )
     }
 
+    // Ако има search параметър, добавяме търсене в съдържанието на поста И в коментарите
+    if (search && search.trim()) {
+      const searchTerm = `%${search.trim()}%`
+      params.push(searchTerm, searchTerm)
+
+      // Search in both post content AND comments
+      conditions.push(`(
+        post.context ILIKE $${params.length - 1} 
+        OR EXISTS (
+          SELECT 1 FROM comments 
+          WHERE comments.post_id = post.id 
+          AND comments.comment ILIKE $${params.length}
+        )
+      )`)
+    }
+
     // Ако има WHERE условия, добави ги
     if (conditions.length > 0) {
-      baseQuery += ` WHERE ${conditions.join(" AND ")}`
+      baseQuery += ` WHERE ${conditions.join(' AND ')}`
     }
 
     // Поръчка (само позволени полета)
     baseQuery += ` ORDER BY ${orderField} ${orderDir}`
+
+    // Pagination
     baseQuery += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
     params.push(limit, offset)
 
     const result = await pool.query(baseQuery, params)
     return Response.json(result.rows)
   } catch (error) {
-    console.error("Грешка при извличане на постове:", error)
+    console.error('Грешка при извличане на постове:', error)
     return Response.json(
-      { error: "Грешка при извличане на постове" },
+      { error: 'Грешка при извличане на постове' },
       { status: 500 }
     )
   }
 }
 
+// Санитизиране на поредността за защита от SQL injection
+function sanitizeOrder(field: string | null): string {
+  const allowedFields = ['createdon', 'like_count']
+  return allowedFields.includes(field || '') ? field! : 'createdon'
+}
+
+function sanitizeDir(dir: string | null): string {
+  return dir === 'ASC' ? 'ASC' : 'DESC'
+}
+
+// Обновяване на публикация
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
@@ -144,30 +159,30 @@ export async function PUT(request: Request) {
       (!content && !imageUrl && isUhtRelated === undefined)
     ) {
       return Response.json(
-        { error: "Липсват задължителни данни" },
+        { error: 'Липсват задължителни данни' },
         { status: 400 }
       )
     }
 
     const userQuery = await pool.query(
-      "SELECT role FROM users WHERE email = $1",
+      'SELECT role FROM users WHERE email = $1',
       [userEmail]
     )
     if (userQuery.rows.length === 0) {
       return Response.json(
-        { error: "Потребителят не съществува" },
+        { error: 'Потребителят не съществува' },
         { status: 404 }
       )
     }
     const userRole = userQuery.rows[0].role
 
     const postQuery = await pool.query(
-      "SELECT createdby FROM post WHERE id = $1",
+      'SELECT createdby FROM post WHERE id = $1',
       [postId]
     )
     if (postQuery.rows.length === 0) {
       return Response.json(
-        { error: "Публикацията не съществува" },
+        { error: 'Публикацията не съществува' },
         { status: 404 }
       )
     }
@@ -175,7 +190,7 @@ export async function PUT(request: Request) {
 
     if (!isAdmin(userRole) && postAuthor !== userEmail) {
       return Response.json(
-        { error: "Нямате права да редактирате тази публикация" },
+        { error: 'Нямате права да редактирате тази публикация' },
         { status: 403 }
       )
     }
@@ -199,19 +214,20 @@ export async function PUT(request: Request) {
     values.push(postId)
 
     const updateQuery = `UPDATE post SET ${fields.join(
-      ", "
+      ', '
     )} WHERE id = $${idx} RETURNING id`
     const updateRes = await pool.query(updateQuery, values)
     return Response.json({ updatedPostId: updateRes.rows[0].id })
   } catch (error) {
-    console.error("Грешка при обновяване на поста:", error)
+    console.error('Грешка при обновяване на поста:', error)
     return Response.json(
-      { error: "Грешка при обновяване на поста" },
+      { error: 'Грешка при обновяване на поста' },
       { status: 500 }
     )
   }
 }
 
+// Изтриване на публикация
 export async function DELETE(request: Request) {
   try {
     const body = await request.json()
@@ -219,30 +235,30 @@ export async function DELETE(request: Request) {
 
     if (!postId || !userEmail) {
       return Response.json(
-        { error: "Липсват задължителни данни" },
+        { error: 'Липсват задължителни данни' },
         { status: 400 }
       )
     }
 
     const userQuery = await pool.query(
-      "SELECT role FROM users WHERE email = $1",
+      'SELECT role FROM users WHERE email = $1',
       [userEmail]
     )
     if (userQuery.rows.length === 0) {
       return Response.json(
-        { error: "Потребителят не съществува" },
+        { error: 'Потребителят не съществува' },
         { status: 404 }
       )
     }
     const userRole = userQuery.rows[0].role
 
     const postQuery = await pool.query(
-      "SELECT createdby FROM post WHERE id = $1",
+      'SELECT createdby FROM post WHERE id = $1',
       [postId]
     )
     if (postQuery.rows.length === 0) {
       return Response.json(
-        { error: "Публикацията не съществува" },
+        { error: 'Публикацията не съществува' },
         { status: 404 }
       )
     }
@@ -250,20 +266,20 @@ export async function DELETE(request: Request) {
 
     if (!isAdmin(userRole) && postAuthor !== userEmail) {
       return Response.json(
-        { error: "Нямате права да изтриете тази публикация" },
+        { error: 'Нямате права да изтриете тази публикация' },
         { status: 403 }
       )
     }
 
     const result = await pool.query(
-      "DELETE FROM post WHERE id = $1 RETURNING id",
+      'DELETE FROM post WHERE id = $1 RETURNING id',
       [postId]
     )
     return Response.json({ deletedPostId: result.rows[0].id })
   } catch (error) {
-    console.error("Грешка при изтриване на публикацията:", error)
+    console.error('Грешка при изтриване на публикацията:', error)
     return Response.json(
-      { error: "Грешка при изтриване на публикацията" },
+      { error: 'Грешка при изтриване на публикацията' },
       { status: 500 }
     )
   }

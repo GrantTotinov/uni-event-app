@@ -1,16 +1,36 @@
-import React, { useMemo, useState } from 'react'
-import { Pressable, Text, View, StyleSheet } from 'react-native'
-import Colors from '@/data/Colors'
-import { useContext } from 'react'
+import React, { useState, useContext, useEffect } from 'react'
+import { View, Text, Pressable, TextInput } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { AuthContext } from '@/context/AuthContext'
+import Colors from '@/data/Colors'
 import PostList from '@/components/Post/PostList'
-import { useAllPosts } from '@/hooks/usePosts'
+import { useAllPosts, usePopularPosts } from '@/hooks/usePosts'
 
 export default function LatestPost({ search }: { search: string }) {
   const { user } = useContext(AuthContext)
-  const [selectedTab, setSelectedTab] = useState<0 | 1>(0)
+  const [selectedTab, setSelectedTab] = useState<number>(0)
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('')
 
-  // Use React Query hook for posts - handles caching, loading states, and pagination automatically
+  // Debounce search query to avoid too many API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  // Use the hooks based on selected tab with search functionality
+  const latestPostsQuery = useAllPosts(user?.email, false, debouncedSearchQuery)
+  const popularPostsQuery = usePopularPosts(
+    user?.email,
+    false,
+    debouncedSearchQuery
+  )
+
+  // Select the appropriate query based on selected tab
+  const currentQuery = selectedTab === 0 ? latestPostsQuery : popularPostsQuery
   const {
     posts,
     isLoading,
@@ -20,24 +40,15 @@ export default function LatestPost({ search }: { search: string }) {
     refetch,
     likeMutation,
     commentMutation,
-  } = useAllPosts(selectedTab, user?.email)
+  } = currentQuery
 
-  // Filter posts based on search query
-  const filteredPosts = useMemo(() => {
-    const query = (search || '').toLowerCase()
-    if (!query) return posts
-
-    return posts.filter((post) => post.context?.toLowerCase().includes(query))
-  }, [posts, search])
-
-  // Handle infinite scroll pagination
   const handleLoadMore = () => {
-    if (hasMore && !isLoadingMore) {
+    if (hasMore && !isLoadingMore && !isLoading) {
       fetchNextPage()
     }
   }
 
-  // Handle like/unlike with optimistic updates
+  // Handle like toggle with optimistic updates
   const handleToggleLike = async (postId: number, isLiked: boolean) => {
     if (!user?.email) return
 
@@ -52,7 +63,7 @@ export default function LatestPost({ search }: { search: string }) {
     }
   }
 
-  // Handle comment submission with optimistic updates - now always returns boolean
+  // Handle comment submission with optimistic updates
   const handleAddComment = async (
     postId: number,
     comment: string
@@ -72,63 +83,137 @@ export default function LatestPost({ search }: { search: string }) {
     }
   }
 
+  const clearSearch = () => {
+    setSearchQuery('')
+  }
+
+  // Show skeleton on initial load when we have no data yet
+  const showSkeleton = isLoading && posts.length === 0
+
   return (
     <View style={{ marginTop: 15 }}>
+      {/* Search Bar */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: Colors.WHITE,
+          borderRadius: 25,
+          paddingHorizontal: 15,
+          paddingVertical: 10,
+          marginHorizontal: 20,
+          marginBottom: 15,
+          elevation: 2,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.1,
+          shadowRadius: 2,
+        }}
+      >
+        <Ionicons
+          name="search"
+          size={20}
+          color={Colors.GRAY}
+          style={{ marginRight: 10 }}
+        />
+        <TextInput
+          placeholder="Търси в публикации и коментари..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          style={{
+            flex: 1,
+            fontSize: 16,
+            color: Colors.BLACK,
+          }}
+          placeholderTextColor={Colors.GRAY}
+        />
+        {searchQuery.length > 0 && (
+          <Pressable onPress={clearSearch} style={{ padding: 5 }}>
+            <Ionicons name="close-circle" size={20} color={Colors.GRAY} />
+          </Pressable>
+        )}
+      </View>
+
       {/* Tab buttons for Latest/Popular */}
-      <View style={{ flexDirection: 'row', gap: 8 }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          gap: 8,
+          paddingHorizontal: 20,
+          marginBottom: 10,
+        }}
+      >
         <Pressable onPress={() => setSelectedTab(0)}>
           <Text
-            style={[
-              styles.tabText,
-              {
-                backgroundColor:
-                  selectedTab === 0 ? Colors.PRIMARY : Colors.WHITE,
-                color: selectedTab === 0 ? Colors.WHITE : Colors.PRIMARY,
-              },
-            ]}
+            style={{
+              padding: 10,
+              paddingHorizontal: 20,
+              borderRadius: 25,
+              fontWeight: 'bold',
+              fontSize: 14,
+              backgroundColor:
+                selectedTab === 0 ? Colors.PRIMARY : Colors.WHITE,
+              color: selectedTab === 0 ? Colors.WHITE : Colors.PRIMARY,
+              elevation: selectedTab === 0 ? 3 : 1,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.1,
+              shadowRadius: 2,
+            }}
           >
             Последни
           </Text>
         </Pressable>
         <Pressable onPress={() => setSelectedTab(1)}>
           <Text
-            style={[
-              styles.tabText,
-              {
-                backgroundColor:
-                  selectedTab === 1 ? Colors.PRIMARY : Colors.WHITE,
-                color: selectedTab === 1 ? Colors.WHITE : Colors.PRIMARY,
-              },
-            ]}
+            style={{
+              padding: 10,
+              paddingHorizontal: 20,
+              borderRadius: 25,
+              fontWeight: 'bold',
+              fontSize: 14,
+              backgroundColor:
+                selectedTab === 1 ? Colors.PRIMARY : Colors.WHITE,
+              color: selectedTab === 1 ? Colors.WHITE : Colors.PRIMARY,
+              elevation: selectedTab === 1 ? 3 : 1,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.1,
+              shadowRadius: 2,
+            }}
           >
             Популярни
           </Text>
         </Pressable>
       </View>
 
+      {/* Search Results Info */}
+      {debouncedSearchQuery.trim() && (
+        <View style={{ paddingHorizontal: 20, marginBottom: 10 }}>
+          <Text style={{ color: Colors.GRAY, fontSize: 14 }}>
+            {isLoading
+              ? 'Търсене в публикации и коментари...'
+              : `Намерени ${posts.length} публикации за "${debouncedSearchQuery}"`}
+          </Text>
+          <Text style={{ color: Colors.GRAY, fontSize: 12, marginTop: 2 }}>
+            Търсенето включва съдържание на публикации и коментари
+          </Text>
+        </View>
+      )}
+
       {/* Posts list with all optimizations */}
       <PostList
-        posts={filteredPosts}
+        posts={posts}
         loading={isLoading}
         loadingMore={isLoadingMore}
         hasMore={hasMore}
+        showSkeleton={showSkeleton}
         onRefresh={refetch}
         onLoadMore={handleLoadMore}
         onToggleLike={handleToggleLike}
         onAddComment={handleAddComment}
+        searchQuery={debouncedSearchQuery}
       />
     </View>
   )
 }
-
-const styles = StyleSheet.create({
-  tabText: {
-    borderColor: Colors.PRIMARY,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    overflow: 'hidden',
-    fontWeight: '600',
-  },
-})

@@ -50,15 +50,17 @@ export async function POST(request: Request) {
   }
 }
 
-// Извличане на събития с pagination:
+// Извличане на събития с pagination и търсене:
 // - без параметри: списък с броячи (пагиниран)
 // - ?email=...: списък + isRegistered/isInterested за този user (пагиниран)
 // - ?id=... [&email=...]: конкретно събитие (детайлна страница)
 // - ?limit=... & offset=...: pagination параметри
+// - ?search=...: търсене в име, локация и детайли
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const email = url.searchParams.get('email')
   const id = url.searchParams.get('id')
+  const search = url.searchParams.get('search')
   const limit = Math.max(
     1,
     Math.min(50, Number(url.searchParams.get('limit') || 10))
@@ -123,8 +125,37 @@ export async function GET(request: Request) {
       }
     }
 
-    // Списък със събития (с pagination)
+    // Построяваме WHERE условията за търсене
+    const conditions: string[] = []
+    const params: any[] = []
+    let paramIndex = 1
+
+    // Ако има search параметър, добавяме търсене в name, location и details
+    if (search && search.trim()) {
+      const searchTerm = `%${search.trim()}%`
+      conditions.push(
+        `(events.name ILIKE $${paramIndex} OR events.location ILIKE $${
+          paramIndex + 1
+        } OR events.details ILIKE $${paramIndex + 2})`
+      )
+      params.push(searchTerm, searchTerm, searchTerm)
+      paramIndex += 3
+    }
+
+    // Списък със събития (с pagination и търсене)
     if (email) {
+      // Добавяме email параметър
+      params.push(email)
+      const emailParamIndex = paramIndex++
+
+      // Добавяме limit и offset
+      params.push(limit, offset)
+      const limitParamIndex = paramIndex++
+      const offsetParamIndex = paramIndex++
+
+      const whereClause =
+        conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
       const result = await pool.query(
         `SELECT 
            events.*,
@@ -135,8 +166,8 @@ export async function GET(request: Request) {
            COALESCE(int_count.count, 0)::integer as "interestedCount"
          FROM events
          INNER JOIN users ON events.createdby = users.email
-         LEFT JOIN event_registration er ON events.id = er.event_id AND er.user_email = $1
-         LEFT JOIN event_interest ei ON events.id = ei.event_id AND ei.user_email = $1
+         LEFT JOIN event_registration er ON events.id = er.event_id AND er.user_email = $${emailParamIndex}
+         LEFT JOIN event_interest ei ON events.id = ei.event_id AND ei.user_email = $${emailParamIndex}
          LEFT JOIN (
            SELECT event_id, COUNT(*)::integer as count 
            FROM event_registration 
@@ -147,12 +178,21 @@ export async function GET(request: Request) {
            FROM event_interest 
            GROUP BY event_id
          ) int_count ON events.id = int_count.event_id
+         ${whereClause}
          ORDER BY events.id DESC
-         LIMIT $2 OFFSET $3`,
-        [email, limit, offset]
+         LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`,
+        params
       )
       return Response.json(result.rows)
     } else {
+      // Добавяме limit и offset
+      params.push(limit, offset)
+      const limitParamIndex = paramIndex++
+      const offsetParamIndex = paramIndex++
+
+      const whereClause =
+        conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
       const result = await pool.query(
         `SELECT 
            events.*,
@@ -171,9 +211,10 @@ export async function GET(request: Request) {
            FROM event_interest 
            GROUP BY event_id
          ) int_count ON events.id = int_count.event_id
+         ${whereClause}
          ORDER BY events.id DESC
-         LIMIT $1 OFFSET $2`,
-        [limit, offset]
+         LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`,
+        params
       )
       return Response.json(result.rows)
     }

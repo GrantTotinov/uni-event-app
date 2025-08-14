@@ -21,6 +21,7 @@ interface EventListProps {
   onLoadMore?: () => void
   onEventUpdate: () => void
   selectedTab: number
+  searchQuery?: string
 }
 
 const EventItem = memo(function EventItem({
@@ -48,6 +49,7 @@ const EventList = memo(function EventList({
   onLoadMore,
   onEventUpdate,
   selectedTab,
+  searchQuery = '',
 }: EventListProps) {
   const renderEvent = ({ item }: { item: Event }) => (
     <EventItem item={item} onUpdate={onEventUpdate} />
@@ -65,13 +67,29 @@ const EventList = memo(function EventList({
   const renderEmptyComponent = () => {
     if (loading || showSkeleton) return null
 
+    const isSearching = searchQuery.trim().length > 0
+
     return (
       <View style={{ padding: 30, alignItems: 'center' }}>
         <Text style={{ textAlign: 'center', color: Colors.GRAY, fontSize: 16 }}>
-          {selectedTab === 0
+          {isSearching
+            ? `Няма намерени събития за "${searchQuery}"`
+            : selectedTab === 0
             ? 'Няма предстоящи събития.'
             : 'Нямате записани събития.'}
         </Text>
+        {isSearching && (
+          <Text
+            style={{
+              textAlign: 'center',
+              color: Colors.GRAY,
+              fontSize: 14,
+              marginTop: 8,
+            }}
+          >
+            Опитайте с различни ключови думи
+          </Text>
+        )}
       </View>
     )
   }

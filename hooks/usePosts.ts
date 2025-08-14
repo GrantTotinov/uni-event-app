@@ -6,10 +6,11 @@ import {
 } from '@tanstack/react-query'
 import axios from 'axios'
 
-interface Post {
+export interface Post {
   post_id: number
   context: string
-  imageurl: string
+  imageurl?: string
+  club?: number
   createdby: string
   createdon: string
   createdon_local: string
@@ -18,19 +19,21 @@ interface Post {
   role: string
   like_count: number
   comment_count: number
-  is_uht_related: boolean
-  is_liked?: boolean
+  is_liked: boolean
+  is_uht_related?: boolean
 }
 
-interface UsePostsOptions {
-  selectedTab: 0 | 1
+export interface UsePostsOptions {
+  selectedTab: number
   userEmail?: string
   followedOnly?: boolean
   enabled?: boolean
   postsPerPage?: number
+  prefetchNextPage?: boolean
+  searchQuery?: string
 }
 
-interface PostsResponse {
+export interface PostsResponse {
   posts: Post[]
   nextOffset?: number
 }
@@ -41,11 +44,11 @@ export function usePosts({
   followedOnly = false,
   enabled = true,
   postsPerPage = 10,
+  prefetchNextPage = true,
+  searchQuery = '',
 }: UsePostsOptions) {
   const queryClient = useQueryClient()
-  const orderField = selectedTab === 1 ? 'like_count' : 'post.createdon'
-
-  const queryKey = ['posts', selectedTab, userEmail, followedOnly]
+  const queryKey = ['posts', selectedTab, userEmail, followedOnly, searchQuery]
 
   const {
     data,
@@ -62,41 +65,75 @@ export function usePosts({
       const pageParam =
         typeof context.pageParam === 'number' ? context.pageParam : 0
 
+      const baseUrl = `${process.env.EXPO_PUBLIC_HOST_URL}/post`
       const params: any = {
-        u_email: userEmail ?? null,
-        orderField,
-        orderDir: 'DESC',
         limit: postsPerPage,
         offset: pageParam,
+        orderField: selectedTab === 0 ? 'createdon' : 'like_count',
+        orderDir: 'DESC',
       }
 
+      // Add email parameter if provided for user-specific flags
+      if (userEmail) {
+        params.u_email = userEmail
+      }
+
+      // Add followed only filter if enabled
       if (followedOnly) {
         params.followedOnly = 'true'
       }
 
-      const response = await axios.get(
-        `${process.env.EXPO_PUBLIC_HOST_URL}/post`,
-        { params }
-      )
+      // Add search query parameter if provided
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim()
+      }
+
+      const response = await axios.get(baseUrl, { params })
+
+      let posts: Post[] = response.data || []
+
+      // Disable prefetching when searching to avoid unnecessary requests
+      const shouldPrefetch = prefetchNextPage && !searchQuery.trim()
+
+      // Prefetch next page if enabled and we have a full page
+      if (shouldPrefetch && posts.length === postsPerPage) {
+        const nextOffset = pageParam + postsPerPage
+        queryClient.prefetchInfiniteQuery({
+          queryKey,
+          queryFn: async () => {
+            const nextParams = { ...params, offset: nextOffset }
+            const nextResponse = await axios.get(baseUrl, {
+              params: nextParams,
+            })
+            return {
+              posts: nextResponse.data || [],
+              nextOffset:
+                nextResponse.data?.length === postsPerPage
+                  ? nextOffset + postsPerPage
+                  : undefined,
+            }
+          },
+          initialPageParam: 0,
+          staleTime: 2 * 60 * 1000,
+        })
+      }
 
       return {
-        posts: response.data || [],
+        posts,
         nextOffset:
-          response.data?.length === postsPerPage
-            ? pageParam + postsPerPage
-            : undefined,
+          posts.length === postsPerPage ? pageParam + postsPerPage : undefined,
       }
     },
     getNextPageParam: (lastPage: PostsResponse) => lastPage.nextOffset,
     enabled,
-    staleTime: 5 * 60 * 1000, // 5 minutes cache
-    gcTime: 10 * 60 * 1000, // 10 minutes in memory (updated from cacheTime)
+    staleTime: searchQuery.trim() ? 30 * 1000 : 5 * 60 * 1000, // Shorter cache for search results
+    gcTime: 10 * 60 * 1000,
     retry: 2,
     refetchOnWindowFocus: false,
     initialPageParam: 0,
   })
 
-  // Mutation for like/unlike with optimistic updates
+  // Mutation for like/unlike posts with optimistic updates
   const likeMutation = useMutation({
     mutationFn: async ({
       postId,
@@ -119,7 +156,7 @@ export function usePosts({
       }
     },
     onSuccess: (_, variables) => {
-      // Optimistic update to cache - shows immediate UI feedback
+      // Optimistic update for like toggle
       queryClient.setQueryData(queryKey, (oldData: any) => {
         if (!oldData) return oldData
 
@@ -190,7 +227,7 @@ export function usePosts({
     queryClient.invalidateQueries({ queryKey: ['posts'] })
   }
 
-  // Combine all pages into a single array with proper type guards
+  // Combine all pages into a single array
   const posts =
     data?.pages?.flatMap((page: PostsResponse) =>
       Array.isArray(page.posts) ? page.posts : []
@@ -199,7 +236,7 @@ export function usePosts({
   return {
     posts,
     error,
-    isLoading: status === 'pending', // Updated to use "pending" instead of "loading"
+    isLoading: status === 'pending',
     isLoadingMore: isFetchingNextPage,
     hasMore: !!hasNextPage,
     fetchNextPage,
@@ -210,21 +247,72 @@ export function usePosts({
   }
 }
 
+// Hook for all posts with search capability
+export function useAllPosts(
+  userEmail?: string,
+  followedOnly: boolean = false,
+  searchQuery?: string
+) {
+  return usePosts({
+    selectedTab: 0,
+    userEmail,
+    followedOnly,
+    enabled: true,
+    prefetchNextPage: true,
+    searchQuery,
+  })
+}
+
+// Hook for popular posts with search capability
+export function usePopularPosts(
+  userEmail?: string,
+  followedOnly: boolean = false,
+  searchQuery?: string
+) {
+  return usePosts({
+    selectedTab: 1,
+    userEmail,
+    followedOnly,
+    enabled: true,
+    prefetchNextPage: true,
+    searchQuery,
+  })
+}
+
 // Hook for followed posts only
-export function useFollowedPosts(userEmail?: string) {
+export function useFollowedPosts(userEmail?: string, searchQuery?: string) {
   return usePosts({
     selectedTab: 0,
     userEmail,
     followedOnly: true,
     enabled: !!userEmail,
+    prefetchNextPage: true,
+    searchQuery,
   })
 }
 
-// Hook for all posts with tab support
-export function useAllPosts(selectedTab: 0 | 1, userEmail?: string) {
-  return usePosts({
-    selectedTab,
-    userEmail,
-    followedOnly: false,
+// Hook for single event details
+export function useEventDetails(eventId?: string, userEmail?: string) {
+  return useInfiniteQuery<Event, Error>({
+    queryKey: ['event-details', eventId, userEmail],
+    queryFn: async () => {
+      if (!eventId) throw new Error('Event ID is required')
+
+      const url = `${
+        process.env.EXPO_PUBLIC_HOST_URL
+      }/events?id=${encodeURIComponent(eventId)}`
+      const finalUrl = userEmail
+        ? `${url}&email=${encodeURIComponent(userEmail)}`
+        : url
+
+      const { data } = await axios.get(finalUrl)
+      return data
+    },
+    enabled: !!eventId,
+    staleTime: 2 * 60 * 1000,
+    retry: 2,
+    refetchOnWindowFocus: false,
+    initialPageParam: 0,
+    getNextPageParam: () => undefined,
   })
 }

@@ -29,6 +29,7 @@ export interface UseEventsOptions {
   enabled?: boolean
   eventsPerPage?: number
   prefetchNextPage?: boolean
+  searchQuery?: string
 }
 
 export interface EventsResponse {
@@ -42,9 +43,10 @@ export function useEvents({
   enabled = true,
   eventsPerPage = 10,
   prefetchNextPage = true,
+  searchQuery = '',
 }: UseEventsOptions = {}) {
   const queryClient = useQueryClient()
-  const queryKey = ['events', userEmail, filterRegistered]
+  const queryKey = ['events', userEmail, filterRegistered, searchQuery]
 
   const {
     data,
@@ -72,17 +74,25 @@ export function useEvents({
         params.email = userEmail
       }
 
+      // Add search query parameter if provided
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim()
+      }
+
       const response = await axios.get(baseUrl, { params })
 
       let events: Event[] = response.data || []
 
-      // Apply client-side filtering if needed
+      // Apply client-side filtering if needed (for registered events)
       if (filterRegistered) {
         events = events.filter((e) => e.isRegistered)
       }
 
+      // Disable prefetching when searching to avoid unnecessary requests
+      const shouldPrefetch = prefetchNextPage && !searchQuery.trim()
+
       // Prefetch next page if enabled and we have a full page
-      if (prefetchNextPage && events.length === eventsPerPage) {
+      if (shouldPrefetch && events.length === eventsPerPage) {
         const nextOffset = pageParam + eventsPerPage
         queryClient.prefetchInfiniteQuery({
           queryKey,
@@ -99,8 +109,8 @@ export function useEvents({
                   : undefined,
             }
           },
-          initialPageParam: 0, // Added missing initialPageParam
-          staleTime: 2 * 60 * 1000, // Prefetched data stays fresh for 2 minutes
+          initialPageParam: 0,
+          staleTime: 2 * 60 * 1000,
         })
       }
 
@@ -114,8 +124,8 @@ export function useEvents({
     },
     getNextPageParam: (lastPage: EventsResponse) => lastPage.nextOffset,
     enabled,
-    staleTime: 5 * 60 * 1000, // 5 minutes cache
-    gcTime: 10 * 60 * 1000, // 10 minutes in memory
+    staleTime: searchQuery.trim() ? 30 * 1000 : 5 * 60 * 1000, // Shorter cache for search results
+    gcTime: 10 * 60 * 1000,
     retry: 2,
     refetchOnWindowFocus: false,
     initialPageParam: 0,
@@ -288,23 +298,25 @@ export function useEvents({
   }
 }
 
-// Hook for all events with prefetching enabled
-export function useAllEvents(userEmail?: string) {
+// Hook for all events with search capability
+export function useAllEvents(userEmail?: string, searchQuery?: string) {
   return useEvents({
     userEmail,
     filterRegistered: false,
     enabled: true,
     prefetchNextPage: true,
+    searchQuery,
   })
 }
 
-// Hook for registered events only with prefetching enabled
-export function useRegisteredEvents(userEmail?: string) {
+// Hook for registered events only with search capability
+export function useRegisteredEvents(userEmail?: string, searchQuery?: string) {
   return useEvents({
     userEmail,
     filterRegistered: true,
     enabled: !!userEmail,
     prefetchNextPage: true,
+    searchQuery,
   })
 }
 
@@ -326,10 +338,10 @@ export function useEventDetails(eventId?: string, userEmail?: string) {
       return data
     },
     enabled: !!eventId,
-    staleTime: 2 * 60 * 1000, // 2 minutes cache for details
+    staleTime: 2 * 60 * 1000,
     retry: 2,
     refetchOnWindowFocus: false,
     initialPageParam: 0,
-    getNextPageParam: () => undefined, // Single event, no pagination
+    getNextPageParam: () => undefined,
   })
 }

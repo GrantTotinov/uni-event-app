@@ -1,23 +1,23 @@
-import React, { useContext, useEffect, useState } from "react"
-import { View } from "react-native"
-import axios from "axios"
-import moment from "moment-timezone"
-import "moment/locale/bg"
-import { AuthContext, isAdmin } from "@/context/AuthContext"
-import PostHeader from "./PostHeader"
-import PostContent from "./PostContent"
-import PostActions from "./PostActions"
-import PostComments from "./PostComments"
-import PostEditModal from "./PostEditModal"
-import PostMenuModal from "./PostMenuModal"
-import { styles } from "./styles"
+import React, { useContext, useEffect, useState } from 'react'
+import { View } from 'react-native'
+import axios from 'axios'
+import moment from 'moment-timezone'
+import 'moment/locale/bg'
+import { AuthContext, isAdmin } from '@/context/AuthContext'
+import PostHeader from './PostHeader'
+import PostContent from './PostContent'
+import PostActions from './PostActions'
+import PostComments from './PostComments'
+import PostEditModal from './PostEditModal'
+import PostMenuModal from './PostMenuModal'
+import { styles } from './styles'
 
-moment.locale("bg")
+moment.locale('bg')
 
 export interface Post {
   post_id: number
   context: string
-  imageurl: string
+  imageurl?: string
   createdby: string
   createdon: string
   createdon_local: string
@@ -26,7 +26,7 @@ export interface Post {
   role: string
   like_count: number
   comment_count: number
-  is_uht_related: boolean
+  is_uht_related: boolean // Made required to match usage
   is_liked?: boolean
 }
 
@@ -45,14 +45,14 @@ export default function PostCard({
   const [likeCount, setLikeCount] = useState(post.like_count ?? 0)
   const [commentCount, setCommentCount] = useState(post.comment_count ?? 0)
 
-  const [commentText, setCommentText] = useState("")
+  const [commentText, setCommentText] = useState('')
   const [commentsVisible, setCommentsVisible] = useState(false)
   const [comments, setComments] = useState<any[]>([])
   const [isEditing, setIsEditing] = useState(false)
   const [editedContent, setEditedContent] = useState(post.context)
-  const [editedImageUrl, setEditedImageUrl] = useState(post.imageurl)
+  const [editedImageUrl, setEditedImageUrl] = useState(post.imageurl || '')
   const [editedUhtRelated, setEditedUhtRelated] = useState(
-    post.is_uht_related || false
+    post.is_uht_related ?? false
   )
   const [menuVisible, setMenuVisible] = useState(false)
 
@@ -68,16 +68,16 @@ export default function PostCard({
   )
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editingReplyId, setEditingReplyId] = useState<number | null>(null)
-  const [editedCommentText, setEditedCommentText] = useState<string>("")
-  const [editedReplyText, setEditedReplyText] = useState<string>("")
+  const [editedCommentText, setEditedCommentText] = useState<string>('')
+  const [editedReplyText, setEditedReplyText] = useState<string>('')
 
   useEffect(() => {
     setIsLiked(!!post.is_liked)
     setLikeCount(post.like_count ?? 0)
     setCommentCount(post.comment_count ?? 0)
     setEditedContent(post.context)
-    setEditedImageUrl(post.imageurl)
-    setEditedUhtRelated(post.is_uht_related || false)
+    setEditedImageUrl(post.imageurl || '')
+    setEditedUhtRelated(post.is_uht_related ?? false)
   }, [post])
 
   // Зареждай коментари само при отворена секция
@@ -92,7 +92,7 @@ export default function PostCard({
         setComments(res.data)
         setCommentCount(Array.isArray(res.data) ? res.data.length : 0)
       } catch (error) {
-        console.error("Error fetching comments", error)
+        console.error('Error fetching comments', error)
       }
     }
 
@@ -118,7 +118,7 @@ export default function PostCard({
         setLikeCount((prev) => Math.max(0, prev - 1))
       }
     } catch (error) {
-      console.error("Error toggling like", error)
+      console.error('Error toggling like', error)
     }
   }
 
@@ -131,7 +131,7 @@ export default function PostCard({
         comment: commentText,
         userEmail: user.email,
       })
-      setCommentText("")
+      setCommentText('')
 
       if (commentsVisible) {
         const res = await axios.get(
@@ -143,7 +143,7 @@ export default function PostCard({
         setCommentCount((prev) => prev + 1)
       }
     } catch (error) {
-      console.error("Error submitting comment", error)
+      console.error('Error submitting comment', error)
     }
   }
 
@@ -157,7 +157,7 @@ export default function PostCard({
       )
       setReplies((prev) => ({ ...prev, [commentId]: response.data }))
     } catch (error) {
-      console.error("Error fetching replies", error)
+      console.error('Error fetching replies', error)
     }
   }
 
@@ -175,7 +175,7 @@ export default function PostCard({
   const submitReply = async (parentId: number) => {
     if (!user) return
     const replyText = replyTexts[parentId]
-    if (!replyText || replyText.trim() === "") return
+    if (!replyText || replyText.trim() === '') return
 
     try {
       const response = await axios.post(
@@ -190,6 +190,7 @@ export default function PostCard({
 
       const now = new Date()
       const nowBG = moment(now).format()
+
       const newReply = {
         id: response.data.commentId,
         comment: replyText,
@@ -206,9 +207,9 @@ export default function PostCard({
         [parentId]: [...(prev[parentId] || []), newReply],
       }))
 
-      setReplyTexts((prev) => ({ ...prev, [parentId]: "" }))
+      setReplyTexts((prev) => ({ ...prev, [parentId]: '' }))
     } catch (error) {
-      console.error("Error submitting reply", error)
+      console.error('Error submitting reply', error)
     }
   }
 
@@ -253,9 +254,9 @@ export default function PostCard({
         )
       )
       setEditingCommentId(null)
-      setEditedCommentText("")
+      setEditedCommentText('')
     } catch (error) {
-      console.error("Error editing comment", error)
+      console.error('Error editing comment', error)
     }
   }
 
@@ -283,9 +284,9 @@ export default function PostCard({
         return newReplies
       })
       setEditingReplyId(null)
-      setEditedReplyText("")
+      setEditedReplyText('')
     } catch (error) {
-      console.error("Error editing reply", error)
+      console.error('Error editing reply', error)
     }
   }
 
@@ -301,7 +302,7 @@ export default function PostCard({
       setComments((prev) => prev.filter((comment) => comment.id !== commentId))
       setCommentCount((prev) => prev - 1)
     } catch (error) {
-      console.error("Error deleting comment", error)
+      console.error('Error deleting comment', error)
     }
   }
 
@@ -320,7 +321,7 @@ export default function PostCard({
           prev[parentId]?.filter((reply) => reply.id !== replyId) || [],
       }))
     } catch (error) {
-      console.error("Error deleting reply", error)
+      console.error('Error deleting reply', error)
     }
   }
 
@@ -331,7 +332,7 @@ export default function PostCard({
       })
       onUpdate && onUpdate()
     } catch (error) {
-      console.error("Error deleting post", error)
+      console.error('Error deleting post', error)
     }
   }
 

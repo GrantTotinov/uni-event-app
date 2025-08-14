@@ -1,10 +1,17 @@
-import React from "react"
-import { View, Text, TouchableOpacity, TextInput } from "react-native"
-import moment from "moment-timezone"
-import { MaterialIcons } from "@expo/vector-icons"
-import Colors from "@/data/Colors"
-import { isAdmin } from "@/context/AuthContext"
-import { styles } from "./styles"
+import React, { useState } from 'react'
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  ActivityIndicator,
+} from 'react-native'
+import moment from 'moment-timezone'
+import { MaterialIcons, Ionicons } from '@expo/vector-icons'
+import Colors from '@/data/Colors'
+import { isAdmin } from '@/context/AuthContext'
+import { usePostComments } from '@/hooks/useComments'
+import { styles } from './styles'
 
 interface PostCommentsProps {
   comments: any[]
@@ -57,6 +64,21 @@ export default function PostComments({
   onDeleteComment,
   onDeleteReply,
 }: PostCommentsProps) {
+  const [commentSearchQuery, setCommentSearchQuery] = useState<string>('')
+
+  // Use the new comments hook with search functionality
+  const { comments: searchedComments, isLoading: isSearching } =
+    usePostComments(post.post_id, commentSearchQuery)
+
+  // Use searched comments if there's a search query, otherwise use the passed comments
+  const displayComments = commentSearchQuery.trim()
+    ? searchedComments
+    : comments
+
+  const clearCommentSearch = () => {
+    setCommentSearchQuery('')
+  }
+
   return (
     <View style={styles.commentsContainer}>
       {(selectedCommentMenu !== null || selectedReplyMenu !== null) && (
@@ -69,8 +91,64 @@ export default function PostComments({
           }}
         />
       )}
-      {comments.length > 0 ? (
-        comments.map((c) => (
+
+      {/* Comment Search Bar */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: Colors.LIGHT_GRAY || '#F5F5F5',
+          borderRadius: 20,
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          marginBottom: 15,
+          marginHorizontal: 10,
+        }}
+      >
+        <Ionicons
+          name="search"
+          size={16}
+          color={Colors.GRAY}
+          style={{ marginRight: 8 }}
+        />
+        <TextInput
+          placeholder="Търси в коментарите..."
+          value={commentSearchQuery}
+          onChangeText={setCommentSearchQuery}
+          style={{
+            flex: 1,
+            fontSize: 14,
+            color: Colors.BLACK,
+          }}
+          placeholderTextColor={Colors.GRAY}
+        />
+        {commentSearchQuery.length > 0 && (
+          <TouchableOpacity onPress={clearCommentSearch} style={{ padding: 4 }}>
+            <Ionicons name="close-circle" size={16} color={Colors.GRAY} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Search Results Info */}
+      {commentSearchQuery.trim() && (
+        <View style={{ paddingHorizontal: 15, marginBottom: 10 }}>
+          <Text style={{ color: Colors.GRAY, fontSize: 12 }}>
+            {isSearching
+              ? 'Търсене в коментарите...'
+              : `Намерени ${displayComments.length} коментар(а) за "${commentSearchQuery}"`}
+          </Text>
+        </View>
+      )}
+
+      {/* Loading indicator for search */}
+      {isSearching && (
+        <View style={{ padding: 20, alignItems: 'center' }}>
+          <ActivityIndicator color={Colors.PRIMARY} size="small" />
+        </View>
+      )}
+
+      {displayComments.length > 0 ? (
+        displayComments.map((c) => (
           <View key={c.id} style={styles.commentItem}>
             <View style={styles.commentHeader}>
               <Text style={styles.commentAuthor}>{c.name}</Text>
@@ -114,7 +192,7 @@ export default function PostComments({
                     }}
                     style={styles.menuOption}
                   >
-                    <Text style={[styles.menuOptionText, { color: "red" }]}>
+                    <Text style={[styles.menuOptionText, { color: 'red' }]}>
                       Изтрий
                     </Text>
                   </TouchableOpacity>
@@ -132,12 +210,12 @@ export default function PostComments({
                 />
                 <View style={styles.editButtons}>
                   <TouchableOpacity onPress={onSaveEditedComment}>
-                    <Text style={{ color: Colors.PRIMARY, fontWeight: "bold" }}>
+                    <Text style={{ color: Colors.PRIMARY, fontWeight: 'bold' }}>
                       Запази
                     </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => onEditComment(0, "")}>
-                    <Text style={{ color: "red", fontWeight: "bold" }}>
+                  <TouchableOpacity onPress={() => onEditComment(0, '')}>
+                    <Text style={{ color: 'red', fontWeight: 'bold' }}>
                       Откажи
                     </Text>
                   </TouchableOpacity>
@@ -156,8 +234,8 @@ export default function PostComments({
                 <TouchableOpacity onPress={() => onToggleReplies(c.id)}>
                   <Text style={styles.replyButton}>
                     {expandedComments.includes(c.id)
-                      ? "Скрий отговорите"
-                      : "Покажи отговорите"}
+                      ? 'Скрий отговорите'
+                      : 'Покажи отговорите'}
                   </Text>
                 </TouchableOpacity>
               </>
@@ -183,7 +261,7 @@ export default function PostComments({
                 <View style={styles.replyInputContainer}>
                   <TextInput
                     style={styles.replyInput}
-                    value={replyTexts[c.id] || ""}
+                    value={replyTexts[c.id] || ''}
                     onChangeText={(text) => onUpdateReplyText(c.id, text)}
                     placeholder="Отговорете на този коментар..."
                     placeholderTextColor={Colors.GRAY}
@@ -200,7 +278,11 @@ export default function PostComments({
           </View>
         ))
       ) : (
-        <Text style={styles.noCommentsText}>Все още няма коментари.</Text>
+        <Text style={styles.noCommentsText}>
+          {commentSearchQuery.trim()
+            ? `Няма намерени коментари за "${commentSearchQuery}"`
+            : 'Все още няма коментари.'}
+        </Text>
       )}
     </View>
   )
