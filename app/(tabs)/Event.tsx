@@ -1,174 +1,101 @@
-import React, { useContext, useEffect, useState, useCallback } from 'react'
-import {
-  View,
-  Text,
-  Pressable,
-  FlatList,
-  RefreshControl,
-  ActivityIndicator,
-  StyleSheet,
-} from 'react-native'
-import axios from 'axios'
-import Colors from '@/data/Colors'
-import Button from '@/components/Shared/Button'
-import EventCard from '@/components/Events/EventCard'
+import React, { useContext, useState } from 'react'
+import { View, Text, Pressable } from 'react-native'
 import { AuthContext } from '@/context/AuthContext'
-
-interface EventItem {
-  id: number
-  name: string
-  bannerurl: string
-  location: string
-  link: string | null
-  details?: string | null
-  event_date: string
-  event_time: string
-  createdby: string
-  username: string
-  isRegistered?: boolean
-  isInterested?: boolean
-  registeredCount?: number
-  interestedCount?: number
-}
-
-// Updated EVENT type to properly handle optional boolean properties
-type EVENT = EventItem & {
-  onUnregister?: () => void
-  onDelete?: () => void
-}
+import Colors from '@/data/Colors'
+import EventList from '@/components/Events/EventList'
+import { useAllEvents, useRegisteredEvents } from '@/hooks/useEvents'
 
 export default function Event() {
   const { user } = useContext(AuthContext)
-  const [eventList, setEventList] = useState<EventItem[] | undefined>()
-  const [loading, setLoading] = useState(false)
   const [selectedTab, setSelectedTab] = useState<number>(0)
 
-  // Унифицирано извличане на събития (с флагове) – винаги ползваме /events
-  const fetchEvents = useCallback(
-    async (filterRegistered: boolean) => {
-      setLoading(true)
-      try {
-        const baseUrl = `${process.env.EXPO_PUBLIC_HOST_URL}/events`
-        const url = user?.email
-          ? `${baseUrl}?email=${encodeURIComponent(user.email)}`
-          : baseUrl
-        const { data } = await axios.get(url)
-        let list: EventItem[] = data || []
-        if (filterRegistered) {
-          list = list.filter((e) => e.isRegistered)
-        }
-        setEventList(list)
-      } catch (error) {
-        console.error('Error fetching events:', error)
-      } finally {
-        setLoading(false)
-      }
-    },
-    [user?.email]
-  )
+  // Use the new hooks based on selected tab
+  const allEventsQuery = useAllEvents(user?.email)
+  const registeredEventsQuery = useRegisteredEvents(user?.email)
 
-  const GetAllEvents = useCallback(() => fetchEvents(false), [fetchEvents])
-  const GetUserEvents = useCallback(() => fetchEvents(true), [fetchEvents])
-
-  // Превключване между табове
-  useEffect(() => {
-    if (selectedTab === 1) {
-      GetUserEvents()
-    } else {
-      GetAllEvents()
-    }
-  }, [selectedTab, GetAllEvents, GetUserEvents])
-
-  // Презареждане след промяна на потребителя (логин/лог-аут)
-  useEffect(() => {
-    if (selectedTab === 1) {
-      GetUserEvents()
-    } else {
-      GetAllEvents()
-    }
-  }, [user, GetAllEvents, GetUserEvents, selectedTab])
+  // Select the appropriate query based on selected tab
+  const currentQuery =
+    selectedTab === 0 ? allEventsQuery : registeredEventsQuery
+  const {
+    events,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    fetchNextPage,
+    refetch,
+    invalidateEvents,
+  } = currentQuery
 
   const onRefresh = () => {
-    if (selectedTab === 1) {
-      GetUserEvents()
-    } else {
-      GetAllEvents()
+    refetch()
+  }
+
+  const handleEventUpdate = () => {
+    // Invalidate cache to ensure fresh data after changes
+    invalidateEvents()
+    // Also refresh the current query
+    refetch()
+  }
+
+  const handleLoadMore = () => {
+    if (hasMore && !isLoadingMore && !isLoading) {
+      fetchNextPage()
     }
   }
 
-  const renderItem = ({ item, index }: { item: EventItem; index: number }) => (
-    <EventCard
-      key={index}
-      {...(item as EVENT)}
-      onUnregister={() => {
-        // След отписване – презареди текущия списък (филтърът остава)
-        if (selectedTab === 1) {
-          GetUserEvents()
-        } else {
-          GetAllEvents()
-        }
-      }}
-      onDelete={() => {
-        // След изтриване – презареди
-        if (selectedTab === 1) {
-          GetUserEvents()
-        } else {
-          GetAllEvents()
-        }
-      }}
-    />
-  )
+  // Show skeleton on initial load when we have no data yet
+  const showSkeleton = isLoading && events.length === 0
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: Colors.LIGHT_GRAY }}>
       {/* Header */}
       <View
         style={{
-          paddingHorizontal: 20,
-          display: 'flex',
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingVertical: 12,
+          padding: 20,
+          paddingTop: 50,
+          backgroundColor: Colors.PRIMARY,
+          borderBottomLeftRadius: 25,
+          borderBottomRightRadius: 25,
         }}
       >
         <Text
           style={{
             fontSize: 30,
             fontWeight: 'bold',
+            textAlign: 'center',
+            color: Colors.WHITE,
           }}
         >
           Събития
         </Text>
-        <Button
-          text="   +   "
-          onPress={() =>
-            (window as any).expoRouter?.push
-              ? (window as any).expoRouter.push('/add-event')
-              : null
-          }
-        />
       </View>
 
-      {/* Tabs */}
+      {/* Tab Navigation */}
       <View
         style={{
           display: 'flex',
           flexDirection: 'row',
-          gap: 10,
           backgroundColor: Colors.WHITE,
-          paddingHorizontal: 20,
-          padding: 10,
+          margin: 20,
+          borderRadius: 10,
+          padding: 5,
+          elevation: 2,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.1,
+          shadowRadius: 2,
         }}
       >
-        <Pressable
-          onPress={() => {
-            setSelectedTab(0)
-          }}
-        >
+        <Pressable style={{ flex: 1 }} onPress={() => setSelectedTab(0)}>
           <Text
             style={[
-              styles.tabtext,
+              {
+                padding: 10,
+                textAlign: 'center',
+                borderRadius: 10,
+                fontWeight: 'bold',
+                fontSize: 16,
+              },
               {
                 backgroundColor:
                   selectedTab === 0 ? Colors.PRIMARY : Colors.WHITE,
@@ -179,14 +106,16 @@ export default function Event() {
             Предстоящи
           </Text>
         </Pressable>
-        <Pressable
-          onPress={() => {
-            setSelectedTab(1)
-          }}
-        >
+        <Pressable style={{ flex: 1 }} onPress={() => setSelectedTab(1)}>
           <Text
             style={[
-              styles.tabtext,
+              {
+                padding: 10,
+                textAlign: 'center',
+                borderRadius: 10,
+                fontWeight: 'bold',
+                fontSize: 16,
+              },
               {
                 backgroundColor:
                   selectedTab === 1 ? Colors.PRIMARY : Colors.WHITE,
@@ -199,46 +128,18 @@ export default function Event() {
         </Pressable>
       </View>
 
-      {/* List */}
-      {loading && !eventList && (
-        <View style={{ flex: 1, justifyContent: 'center' }}>
-          <ActivityIndicator color={Colors.PRIMARY} />
-        </View>
-      )}
-
-      <FlatList
-        data={eventList}
-        keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={{ paddingBottom: 120 }}
-        refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          !loading ? (
-            <View style={{ padding: 30 }}>
-              <Text style={{ textAlign: 'center', color: Colors.GRAY }}>
-                {selectedTab === 0
-                  ? 'Няма предстоящи събития.'
-                  : 'Нямате записани събития.'}
-              </Text>
-            </View>
-          ) : null
-        }
-        renderItem={renderItem}
+      {/* Events List with Skeleton Loading */}
+      <EventList
+        events={events}
+        loading={isLoading}
+        loadingMore={isLoadingMore}
+        hasMore={hasMore}
+        showSkeleton={showSkeleton}
+        onRefresh={onRefresh}
+        onLoadMore={handleLoadMore}
+        onEventUpdate={handleEventUpdate}
+        selectedTab={selectedTab}
       />
     </View>
   )
 }
-
-const styles = StyleSheet.create({
-  tabtext: {
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 25,
-    overflow: 'hidden',
-    fontWeight: '600' as const,
-    borderWidth: 1,
-    borderColor: Colors.PRIMARY,
-    textAlign: 'center' as const,
-  },
-})

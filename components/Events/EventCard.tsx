@@ -1,50 +1,48 @@
-import React, { useContext, useEffect, useState } from 'react'
+import React, { useContext, useEffect, useState, memo } from 'react'
 import {
   View,
   Text,
-  Image,
-  StyleSheet,
+  TouchableOpacity,
   Alert,
   Modal,
-  TouchableOpacity,
+  StyleSheet,
 } from 'react-native'
-import Entypo from '@expo/vector-icons/Entypo'
-import Ionicons from '@expo/vector-icons/Ionicons'
-import { MaterialIcons } from '@expo/vector-icons'
-import * as FileSystem from 'expo-file-system'
-// FIX: correct malformed import to a valid namespace import
-import * as Sharing from 'expo-sharing'
+import { Entypo, Ionicons, MaterialIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
+import { Image } from 'expo-image'
+import * as FileSystem from 'expo-file-system'
+import * as Sharing from 'expo-sharing'
 import axios from 'axios'
+import moment from 'moment'
+import 'moment/locale/bg'
 
 import Colors from '@/data/Colors'
-import Button from '../Shared/Button'
+import Button from '@/components/Shared/Button'
 import { AuthContext, isAdmin } from '@/context/AuthContext'
+import { useEvents } from '@/hooks/useEvents'
+import type { Event } from '@/hooks/useEvents'
 
-// Updated EVENT type to match the EventItem interface and handle optional properties
-type EVENT = {
-  id: number
-  name: string
-  bannerurl: string
-  location: string
-  link: string | null
-  event_date: string
-  event_time: string
-  createdby: string
-  username: string
-  details?: string | null
-  isRegistered?: boolean // Made optional to handle undefined values
-  isInterested?: boolean // Made optional to handle undefined values
-  registeredCount?: number
-  interestedCount?: number
+moment.locale('bg')
+
+interface EVENT extends Event {
   onUnregister?: () => void
   onDelete?: () => void
 }
 
-export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
+const EventCard = memo(function EventCard({
+  onUnregister,
+  onDelete,
+  ...event
+}: EVENT) {
   const { user } = useContext(AuthContext)
+  const router = useRouter()
 
-  // Handle optional boolean values with proper defaults
+  // Use the events hook for mutations
+  const { registerMutation, unregisterMutation, interestMutation } = useEvents({
+    userEmail: user?.email,
+  })
+
+  // Local state for UI updates
   const [isRegistered, setIsRegistered] = useState(event.isRegistered ?? false)
   const [isInterested, setIsInterested] = useState(event.isInterested ?? false)
   const [registeredCount, setRegisteredCount] = useState(
@@ -53,12 +51,12 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
   const [interestedCount, setInterestedCount] = useState(
     event.interestedCount ?? 0
   )
-  const canManage = isAdmin(user?.role) || user?.email === event.createdby
   const [menuVisible, setMenuVisible] = useState(false)
-  const router = useRouter()
 
+  const canManage = isAdmin(user?.role) || user?.email === event.createdby
+
+  // Sync with props when they change
   useEffect(() => {
-    // Update state when props change, with proper defaults for optional values
     setIsRegistered(event.isRegistered ?? false)
     setIsInterested(event.isInterested ?? false)
     setRegisteredCount(event.registeredCount ?? 0)
@@ -80,21 +78,32 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
   }
 
   const handleRegister = () => {
+    if (!user?.email) {
+      Alert.alert('Вход', 'Трябва да сте влезли.')
+      return
+    }
+
     Alert.alert('Регистрация за събитие!', 'Потвърди регистрацията!', [
       {
         text: 'Потвърдете',
-        onPress: async () => {
-          try {
-            await axios.post(
-              `${process.env.EXPO_PUBLIC_HOST_URL}/event-register`,
-              { eventId: event.id, userEmail: user?.email }
-            )
-            setIsRegistered(true)
-            setRegisteredCount((prev) => prev + 1)
-          } catch (error) {
-            console.error('Register error', error)
-            Alert.alert('Грешка!', 'Неуспешна регистрация.')
-          }
+        onPress: () => {
+          registerMutation.mutate(
+            {
+              eventId: event.id,
+              userEmail: user.email,
+            },
+            {
+              onSuccess: () => {
+                setIsRegistered(true)
+                setRegisteredCount((prev) => prev + 1)
+                Alert.alert('Успех!', 'Регистрирахте се успешно!')
+              },
+              onError: (error) => {
+                console.error('Register error', error)
+                Alert.alert('Грешка!', 'Неуспешна регистрация.')
+              },
+            }
+          )
         },
       },
       { text: 'Отказ', style: 'cancel' },
@@ -102,28 +111,36 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
   }
 
   const handleUnregister = () => {
+    if (!user?.email) {
+      Alert.alert('Вход', 'Трябва да сте влезли.')
+      return
+    }
+
     Alert.alert(
       'Отписване от събитие!',
       'Сигурни ли сте, че искате да се отпишете?',
       [
         {
           text: 'Да',
-          onPress: async () => {
-            try {
-              await axios.delete(
-                `${process.env.EXPO_PUBLIC_HOST_URL}/event-register`,
-                {
-                  data: { eventId: event.id, userEmail: user?.email },
-                }
-              )
-              setIsRegistered(false)
-              setRegisteredCount((prev) => Math.max(0, prev - 1))
-              Alert.alert('Готово!', 'Вече не сте записани за събитието.')
-              onUnregister && onUnregister()
-            } catch (error) {
-              console.error('Unregister error', error)
-              Alert.alert('Грешка!', 'Неуспешно отписване.')
-            }
+          onPress: () => {
+            unregisterMutation.mutate(
+              {
+                eventId: event.id,
+                userEmail: user.email,
+              },
+              {
+                onSuccess: () => {
+                  setIsRegistered(false)
+                  setRegisteredCount((prev) => Math.max(0, prev - 1))
+                  Alert.alert('Готово!', 'Вече не сте записани за събитието.')
+                  onUnregister && onUnregister()
+                },
+                onError: (error) => {
+                  console.error('Unregister error', error)
+                  Alert.alert('Грешка!', 'Неуспешно отписване.')
+                },
+              }
+            )
           },
         },
         { text: 'Отказ', style: 'cancel' },
@@ -132,26 +149,39 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
   }
 
   const handleInterest = async () => {
+    if (!user?.email) {
+      Alert.alert('Вход', 'Трябва да сте влезли.')
+      return
+    }
+
     try {
-      if (!isInterested) {
-        await axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/event-interest`, {
+      interestMutation.mutate(
+        {
           eventId: event.id,
-          userEmail: user?.email,
-        })
-        setIsInterested(true)
-        setInterestedCount((prev) => prev + 1)
-        Alert.alert('Чудесно!', 'Проявихте интерес към събитието!')
-      } else {
-        await axios.delete(
-          `${process.env.EXPO_PUBLIC_HOST_URL}/event-interest`,
-          {
-            data: { eventId: event.id, userEmail: user?.email },
-          }
-        )
-        setIsInterested(false)
-        setInterestedCount((prev) => Math.max(0, prev - 1))
-        Alert.alert('Готово!', 'Вече не проявявате интерес към събитието.')
-      }
+          userEmail: user.email,
+          isInterested,
+        },
+        {
+          onSuccess: () => {
+            if (!isInterested) {
+              setIsInterested(true)
+              setInterestedCount((prev) => prev + 1)
+              Alert.alert('Чудесно!', 'Проявихте интерес към събитието!')
+            } else {
+              setIsInterested(false)
+              setInterestedCount((prev) => Math.max(0, prev - 1))
+              Alert.alert(
+                'Готово!',
+                'Вече не проявявате интерес към събитието.'
+              )
+            }
+          },
+          onError: (error) => {
+            console.error('Interest toggle error', error)
+            Alert.alert('Грешка!', 'Неуспешна операция.')
+          },
+        }
+      )
     } catch (error) {
       console.error('Interest toggle error', error)
       Alert.alert('Грешка!', 'Неуспешна операция.')
@@ -209,7 +239,15 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
       )}
 
       <TouchableOpacity onPress={openDetails} activeOpacity={0.85}>
-        <Image source={{ uri: event.bannerurl }} style={styles.banner} />
+        <Image
+          source={{ uri: event.bannerurl }}
+          style={styles.banner}
+          contentFit="cover"
+          transition={200}
+          cachePolicy="memory-disk"
+          placeholder={require('@/assets/images/image.png')}
+          placeholderContentFit="cover"
+        />
       </TouchableOpacity>
 
       <TouchableOpacity onPress={openDetails} activeOpacity={0.8}>
@@ -330,102 +368,103 @@ export default function EventCard({ onUnregister, onDelete, ...event }: EVENT) {
       </Modal>
     </View>
   )
-}
+})
 
 const styles = StyleSheet.create({
   card: {
     padding: 20,
-    backgroundColor: Colors.WHITE,
-    marginVertical: 10,
-    borderRadius: 10,
+    margin: 10,
     marginHorizontal: 20,
-    elevation: 2,
+    backgroundColor: Colors.WHITE,
+    borderRadius: 15,
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    marginBottom: 3,
-    position: 'relative',
+    shadowRadius: 3,
   },
   menuButton: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    padding: 6,
-    zIndex: 10,
+    top: 15,
+    right: 15,
+    zIndex: 1,
+    backgroundColor: Colors.WHITE,
+    borderRadius: 15,
+    padding: 5,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   banner: {
-    aspectRatio: 1.5,
-    borderRadius: 5,
     width: '100%',
+    height: 150,
+    borderRadius: 15,
+    marginBottom: 15,
   },
   title: {
-    fontSize: 23,
+    fontSize: 18,
     fontWeight: 'bold',
+    marginBottom: 5,
     color: Colors.BLACK,
-    marginTop: 10,
   },
   createdBy: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.GRAY,
-    marginTop: 5,
+    marginBottom: 10,
   },
   subContainer: {
-    display: 'flex',
     flexDirection: 'row',
-    gap: 8,
     alignItems: 'center',
-    marginTop: 10,
+    marginBottom: 8,
+    gap: 8,
   },
   metaText: {
-    fontSize: 16,
+    fontSize: 14,
     color: Colors.GRAY,
+    flex: 1,
   },
   countPrimary: {
-    fontSize: 16,
+    fontSize: 14,
     color: Colors.PRIMARY,
     fontWeight: '600',
   },
   countInterested: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#e74c3c',
     fontWeight: '600',
   },
   buttonContainer: {
-    display: 'flex',
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 15,
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 15,
+    gap: 10,
   },
   interestButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    padding: 8,
-    borderRadius: 8,
+    padding: 10,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.PRIMARY,
     backgroundColor: Colors.WHITE,
+    gap: 5,
   },
   interestButtonText: {
     fontSize: 14,
     fontWeight: '600',
   },
   overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   sheet: {
     backgroundColor: Colors.WHITE,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
-    paddingBottom: 40,
   },
   sheetOption: {
     paddingVertical: 15,
@@ -434,11 +473,13 @@ const styles = StyleSheet.create({
   sheetOptionTextPrimary: {
     fontSize: 18,
     color: Colors.PRIMARY,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
   sheetOptionTextDanger: {
     fontSize: 18,
-    color: '#e74c3c',
-    fontWeight: '600',
+    color: 'red',
+    fontWeight: 'bold',
   },
 })
+
+export default EventCard

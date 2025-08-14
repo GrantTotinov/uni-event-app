@@ -1,5 +1,5 @@
-import { pool } from "@/configs/NilePostgresConfig"
-import { isAdmin } from "@/context/AuthContext"
+import { pool } from '@/configs/NilePostgresConfig'
+import { isAdmin } from '@/context/AuthContext'
 
 // Създаване на събитие (вкл. details)
 export async function POST(request: Request) {
@@ -8,7 +8,7 @@ export async function POST(request: Request) {
 
     if (!body || !body.eventName || !body.email) {
       return Response.json(
-        { error: "Липсват задължителни данни" },
+        { error: 'Липсват задължителни данни' },
         { status: 400 }
       )
     }
@@ -42,25 +42,31 @@ export async function POST(request: Request) {
 
     return Response.json({ newEventId: result.rows[0].id })
   } catch (error) {
-    console.error("Грешка при създаване на събитие:", error)
+    console.error('Грешка при създаване на събитие:', error)
     return Response.json(
-      { error: "Грешка при създаване на събитие" },
+      { error: 'Грешка при създаване на събитие' },
       { status: 500 }
     )
   }
 }
 
-// Извличане на събития:
-// - без параметри: списък с броячи
-// - ?email=...: списък + isRegistered/isInterested за този user
+// Извличане на събития с pagination:
+// - без параметри: списък с броячи (пагиниран)
+// - ?email=...: списък + isRegistered/isInterested за този user (пагиниран)
 // - ?id=... [&email=...]: конкретно събитие (детайлна страница)
+// - ?limit=... & offset=...: pagination параметри
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  const email = url.searchParams.get("email")
-  const id = url.searchParams.get("id")
+  const email = url.searchParams.get('email')
+  const id = url.searchParams.get('id')
+  const limit = Math.max(
+    1,
+    Math.min(50, Number(url.searchParams.get('limit') || 10))
+  )
+  const offset = Math.max(0, Number(url.searchParams.get('offset') || 0))
 
   try {
-    // Детайл за конкретно събитие
+    // Детайл за конкретно събитие (без pagination)
     if (id) {
       if (email) {
         const result = await pool.query(
@@ -117,7 +123,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // Списък със събития (с флагове ако има email)
+    // Списък със събития (с pagination)
     if (email) {
       const result = await pool.query(
         `SELECT 
@@ -141,8 +147,9 @@ export async function GET(request: Request) {
            FROM event_interest 
            GROUP BY event_id
          ) int_count ON events.id = int_count.event_id
-         ORDER BY events.id DESC`,
-        [email]
+         ORDER BY events.id DESC
+         LIMIT $2 OFFSET $3`,
+        [email, limit, offset]
       )
       return Response.json(result.rows)
     } else {
@@ -164,14 +171,16 @@ export async function GET(request: Request) {
            FROM event_interest 
            GROUP BY event_id
          ) int_count ON events.id = int_count.event_id
-         ORDER BY events.id DESC`
+         ORDER BY events.id DESC
+         LIMIT $1 OFFSET $2`,
+        [limit, offset]
       )
       return Response.json(result.rows)
     }
   } catch (error) {
-    console.error("Грешка при извличане на събития:", error)
+    console.error('Грешка при извличане на събития:', error)
     return Response.json(
-      { error: "Грешка при извличане на събития" },
+      { error: 'Грешка при извличане на събития' },
       { status: 500 }
     )
   }
@@ -183,7 +192,6 @@ export async function PUT(request: Request) {
     const body = await request.json()
     const {
       eventId,
-      userEmail,
       eventName,
       bannerUrl,
       location,
@@ -193,42 +201,8 @@ export async function PUT(request: Request) {
       eventTime,
     } = body
 
-    if (!eventId || !userEmail) {
-      return Response.json(
-        { error: "Липсват задължителни данни" },
-        { status: 400 }
-      )
-    }
-
-    const eventQuery = await pool.query(
-      "SELECT createdby FROM events WHERE id = $1",
-      [eventId]
-    )
-    if (eventQuery.rows.length === 0) {
-      return Response.json(
-        { error: "Събитието не съществува" },
-        { status: 404 }
-      )
-    }
-
-    const userQuery = await pool.query(
-      "SELECT role FROM users WHERE email = $1",
-      [userEmail]
-    )
-    if (userQuery.rows.length === 0) {
-      return Response.json(
-        { error: "Потребителят не съществува" },
-        { status: 404 }
-      )
-    }
-
-    const userRole = userQuery.rows[0].role
-    const creator = eventQuery.rows[0].createdby
-    if (!isAdmin(userRole) && creator !== userEmail) {
-      return Response.json(
-        { error: "Нямате права да редактирате това събитие" },
-        { status: 403 }
-      )
+    if (!eventId) {
+      return Response.json({ error: 'Липсва ID на събитието' }, { status: 400 })
     }
 
     const fields: string[] = []
@@ -266,21 +240,21 @@ export async function PUT(request: Request) {
 
     if (fields.length === 0) {
       return Response.json(
-        { error: "Няма полета за обновяване" },
+        { error: 'Няма полета за обновяване' },
         { status: 400 }
       )
     }
 
     values.push(eventId)
     const updateQuery = `UPDATE events SET ${fields.join(
-      ", "
+      ', '
     )} WHERE id = $${i} RETURNING id`
     const res = await pool.query(updateQuery, values)
     return Response.json({ updatedEventId: res.rows[0].id })
   } catch (error) {
-    console.error("Грешка при обновяване на събитието:", error)
+    console.error('Грешка при обновяване на събитието:', error)
     return Response.json(
-      { error: "Грешка при обновяване на събитието" },
+      { error: 'Грешка при обновяване на събитието' },
       { status: 500 }
     )
   }
@@ -294,29 +268,29 @@ export async function DELETE(request: Request) {
 
     if (!eventId || !userEmail) {
       return Response.json(
-        { error: "Липсват задължителни данни" },
+        { error: 'Липсват задължителни данни' },
         { status: 400 }
       )
     }
 
     const eventQuery = await pool.query(
-      "SELECT createdby FROM events WHERE id = $1",
+      'SELECT createdby FROM events WHERE id = $1',
       [eventId]
     )
     if (eventQuery.rows.length === 0) {
       return Response.json(
-        { error: "Събитието не съществува" },
+        { error: 'Събитието не съществува' },
         { status: 404 }
       )
     }
 
     const userQuery = await pool.query(
-      "SELECT role FROM users WHERE email = $1",
+      'SELECT role FROM users WHERE email = $1',
       [userEmail]
     )
     if (userQuery.rows.length === 0) {
       return Response.json(
-        { error: "Потребителят не съществува" },
+        { error: 'Потребителят не съществува' },
         { status: 404 }
       )
     }
@@ -325,20 +299,20 @@ export async function DELETE(request: Request) {
     const eventCreator = eventQuery.rows[0]?.createdby
     if (!isAdmin(userRole) && eventCreator !== userEmail) {
       return Response.json(
-        { error: "Нямате права да изтриете това събитие" },
+        { error: 'Нямате права да изтриете това събитие' },
         { status: 403 }
       )
     }
 
     const deleteRes = await pool.query(
-      "DELETE FROM events WHERE id = $1 RETURNING id",
+      'DELETE FROM events WHERE id = $1 RETURNING id',
       [eventId]
     )
     return Response.json({ deletedEventId: deleteRes.rows[0].id })
   } catch (error) {
-    console.error("Грешка при изтриване на събитието:", error)
+    console.error('Грешка при изтриване на събитието:', error)
     return Response.json(
-      { error: "Грешка при изтриване на събитието" },
+      { error: 'Грешка при изтриване на събитието' },
       { status: 500 }
     )
   }

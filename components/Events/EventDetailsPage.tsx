@@ -1,171 +1,106 @@
-import React, { useCallback, useContext, useEffect, useState } from "react"
+import React, { useContext, useState, memo } from 'react'
 import {
   View,
   Text,
-  Image,
-  StyleSheet,
-  ActivityIndicator,
   ScrollView,
-  Alert,
   TouchableOpacity,
-} from "react-native"
-import axios from "axios"
-import Colors from "@/data/Colors"
-import Button from "@/components/Shared/Button"
-import { AuthContext, isAdmin } from "@/context/AuthContext"
-import Ionicons from "@expo/vector-icons/Ionicons"
-import Entypo from "@expo/vector-icons/Entypo"
-import { useRouter } from "expo-router"
+  Alert,
+  ActivityIndicator,
+  StyleSheet,
+} from 'react-native'
+import { Entypo, Ionicons } from '@expo/vector-icons'
+import { useRouter } from 'expo-router'
+import { Image } from 'expo-image'
 
-type EventDetailsPageProps = {
+import Colors from '@/data/Colors'
+import Button from '@/components/Shared/Button'
+import { AuthContext, isAdmin } from '@/context/AuthContext'
+import { useEventDetails, useEvents } from '@/hooks/useEvents'
+
+interface EventDetailsPageProps {
   eventId?: string
 }
 
-type EventData = {
-  id: number
-  name: string
-  bannerurl: string
-  location: string
-  link: string | null
-  event_date: string
-  event_time: string
-  createdby: string
-  username: string
-  details?: string | null
-  isRegistered?: boolean
-  isInterested?: boolean
-  registeredCount?: number
-  interestedCount?: number
-}
-
-export default function EventDetailsPage({ eventId }: EventDetailsPageProps) {
+const EventDetailsPage = memo(function EventDetailsPage({
+  eventId,
+}: EventDetailsPageProps) {
   const { user } = useContext(AuthContext)
-  const [event, setEvent] = useState<EventData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [registering, setRegistering] = useState(false)
-  const [interestedLoading, setInterestedLoading] = useState(false)
   const router = useRouter()
 
-  const loadEvent = useCallback(async () => {
-    if (!eventId) return
-    setLoading(true)
-    try {
-      const url =
-        `${process.env.EXPO_PUBLIC_HOST_URL}/events?id=${encodeURIComponent(
-          eventId
-        )}` + (user?.email ? `&email=${encodeURIComponent(user.email)}` : "")
-      const { data } = await axios.get(url)
-      // API (GET /events?id=...) връща единичен обект
-      setEvent(data)
-    } catch (error) {
-      console.error("Error fetching event details:", error)
-      Alert.alert("Грешка", "Неуспешно зареждане на събитие.")
-    } finally {
-      setLoading(false)
-    }
-  }, [eventId, user?.email])
+  // Use the event details hook
+  const {
+    data: eventData,
+    isLoading,
+    error,
+    refetch,
+  } = useEventDetails(eventId, user?.email)
 
-  useEffect(() => {
-    loadEvent()
-  }, [loadEvent])
+  // Use the events hook for mutations
+  const { registerMutation, unregisterMutation, interestMutation } = useEvents({
+    userEmail: user?.email,
+  })
+
+  const [registering, setRegistering] = useState(false)
+  const [interestedLoading, setInterestedLoading] = useState(false)
+
+  // Extract event from query data
+  const event = eventData?.pages?.[0]
 
   const toggleRegister = async () => {
-    if (!event) return
-    if (!user?.email) {
-      Alert.alert("Вход", "Трябва да сте влезли.")
+    if (!event || !user?.email) {
+      Alert.alert('Вход', 'Трябва да сте влезли.')
       return
     }
+
     setRegistering(true)
     try {
       if (!event.isRegistered) {
-        await axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/event-register`, {
+        await registerMutation.mutateAsync({
           eventId: event.id,
           userEmail: user.email,
         })
-        setEvent((prev) =>
-          prev
-            ? {
-                ...prev,
-                isRegistered: true,
-                registeredCount: (prev.registeredCount || 0) + 1,
-              }
-            : prev
-        )
-        Alert.alert("Успех", "Регистрирахте се.")
+        Alert.alert('Успех', 'Регистрирахте се.')
       } else {
-        await axios.delete(
-          `${process.env.EXPO_PUBLIC_HOST_URL}/event-register`,
-          {
-            data: { eventId: event.id, userEmail: user.email },
-          }
-        )
-        setEvent((prev) =>
-          prev
-            ? {
-                ...prev,
-                isRegistered: false,
-                registeredCount: Math.max(0, (prev.registeredCount || 1) - 1),
-              }
-            : prev
-        )
-        Alert.alert("Готово", "Отписахте се.")
+        await unregisterMutation.mutateAsync({
+          eventId: event.id,
+          userEmail: user.email,
+        })
+        Alert.alert('Готово', 'Отписахте се.')
       }
+      // Refresh the event details to get updated counts
+      refetch()
     } catch (e) {
-      console.error("Registration toggle error:", e)
-      Alert.alert("Грешка", "Операцията не беше успешна.")
+      console.error('Registration toggle error:', e)
+      Alert.alert('Грешка', 'Операцията не беше успешна.')
     } finally {
       setRegistering(false)
     }
   }
 
   const toggleInterest = async () => {
-    if (!event) return
-    if (!user?.email) {
-      Alert.alert("Вход", "Трябва да сте влезли.")
+    if (!event || !user?.email) {
+      Alert.alert('Вход', 'Трябва да сте влезли.')
       return
     }
+
     setInterestedLoading(true)
     try {
-      if (!event.isInterested) {
-        await axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/event-interest`, {
-          eventId: event.id,
-          userEmail: user.email,
-        })
-        setEvent((prev) =>
-          prev
-            ? {
-                ...prev,
-                isInterested: true,
-                interestedCount: (prev.interestedCount || 0) + 1,
-              }
-            : prev
-        )
-      } else {
-        await axios.delete(
-          `${process.env.EXPO_PUBLIC_HOST_URL}/event-interest`,
-          {
-            data: { eventId: event.id, userEmail: user.email },
-          }
-        )
-        setEvent((prev) =>
-          prev
-            ? {
-                ...prev,
-                isInterested: false,
-                interestedCount: Math.max(0, (prev.interestedCount || 1) - 1),
-              }
-            : prev
-        )
-      }
+      await interestMutation.mutateAsync({
+        eventId: event.id,
+        userEmail: user.email,
+        isInterested: !!event.isInterested,
+      })
+      // Refresh the event details to get updated counts
+      refetch()
     } catch (e) {
-      console.error("Interest toggle error:", e)
-      Alert.alert("Грешка", "Операцията не беше успешна.")
+      console.error('Interest toggle error:', e)
+      Alert.alert('Грешка', 'Операцията не беше успешна.')
     } finally {
       setInterestedLoading(false)
     }
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={Colors.PRIMARY} />
@@ -173,10 +108,12 @@ export default function EventDetailsPage({ eventId }: EventDetailsPageProps) {
     )
   }
 
-  if (!event) {
+  if (error || !event) {
     return (
       <View style={styles.center}>
-        <Text style={{ color: Colors.GRAY }}>Събитието не е намерено.</Text>
+        <Text style={{ color: Colors.GRAY }}>
+          {error ? 'Грешка при зареждане.' : 'Събитието не е намерено.'}
+        </Text>
         <Button text="Назад" onPress={() => router.back()} outline />
       </View>
     )
@@ -187,7 +124,15 @@ export default function EventDetailsPage({ eventId }: EventDetailsPageProps) {
       contentContainerStyle={{ padding: 20, paddingBottom: 60 }}
       style={{ backgroundColor: Colors.WHITE }}
     >
-      <Image source={{ uri: event.bannerurl }} style={styles.banner} />
+      <Image
+        source={{ uri: event.bannerurl }}
+        style={styles.banner}
+        contentFit="cover"
+        transition={200}
+        cachePolicy="memory-disk"
+        placeholder={require('@/assets/images/image.png')}
+        placeholderContentFit="cover"
+      />
 
       <Text style={styles.title}>{event.name}</Text>
       <Text style={styles.createdBy}>Създадено от: {event.username}</Text>
@@ -206,18 +151,18 @@ export default function EventDetailsPage({ eventId }: EventDetailsPageProps) {
       <View style={styles.row}>
         <Ionicons name="people" size={22} color={Colors.PRIMARY} />
         <Text style={styles.countPrimary}>
-          {event.registeredCount ?? 0}{" "}
-          {(event.registeredCount ?? 0) === 1 ? "регистриран" : "регистрирани"}
+          {event.registeredCount ?? 0}{' '}
+          {(event.registeredCount ?? 0) === 1 ? 'регистриран' : 'регистрирани'}
         </Text>
       </View>
 
       <View style={styles.row}>
         <Ionicons name="heart" size={22} color="#e74c3c" />
         <Text style={styles.countInterested}>
-          {event.interestedCount ?? 0}{" "}
+          {event.interestedCount ?? 0}{' '}
           {(event.interestedCount ?? 0) === 1
-            ? "заинтересован"
-            : "заинтересовани"}
+            ? 'заинтересован'
+            : 'заинтересовани'}
         </Text>
       </View>
 
@@ -232,7 +177,7 @@ export default function EventDetailsPage({ eventId }: EventDetailsPageProps) {
         <TouchableOpacity
           style={{ marginTop: 10 }}
           onPress={() => {
-            Alert.alert("Линк", event.link || "")
+            Alert.alert('Линк', event.link || '')
           }}
         >
           <Text style={styles.linkText}>Виж допълнителен линк</Text>
@@ -241,7 +186,7 @@ export default function EventDetailsPage({ eventId }: EventDetailsPageProps) {
 
       <View style={styles.actions}>
         <Button
-          text={event.isRegistered ? "Отпиши се" : "Регистрирай се"}
+          text={event.isRegistered ? 'Отпиши се' : 'Регистрирай се'}
           onPress={toggleRegister}
           loading={registering}
           outline={!!event.isRegistered}
@@ -252,24 +197,24 @@ export default function EventDetailsPage({ eventId }: EventDetailsPageProps) {
           style={[
             styles.interestBtn,
             event.isInterested && {
-              backgroundColor: "#ffe6e6",
-              borderColor: "#e74c3c",
+              backgroundColor: '#ffe6e6',
+              borderColor: '#e74c3c',
             },
           ]}
           disabled={interestedLoading}
         >
           <Ionicons
-            name={event.isInterested ? "heart" : "heart-outline"}
+            name={event.isInterested ? 'heart' : 'heart-outline'}
             size={20}
-            color={event.isInterested ? "#e74c3c" : Colors.PRIMARY}
+            color={event.isInterested ? '#e74c3c' : Colors.PRIMARY}
           />
           <Text
             style={[
               styles.interestText,
-              { color: event.isInterested ? "#e74c3c" : Colors.PRIMARY },
+              { color: event.isInterested ? '#e74c3c' : Colors.PRIMARY },
             ]}
           >
-            {event.isInterested ? "Имам интерес" : "Интерес"}
+            {event.isInterested ? 'Имам интерес' : 'Интерес'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -277,23 +222,23 @@ export default function EventDetailsPage({ eventId }: EventDetailsPageProps) {
       {(isAdmin(user?.role) || user?.email === event.createdby) && (
         <View style={{ marginTop: 20 }}>
           <Text style={styles.sectionTitle}>Админ опции</Text>
-          <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
             <Button
               text="Редактирай"
               outline
               onPress={() =>
                 router.push({
-                  pathname: "/add-event",
+                  pathname: '/add-event',
                   params: {
-                    edit: "1",
+                    edit: '1',
                     id: String(event.id),
                     name: event.name,
                     bannerurl: event.bannerurl,
                     location: event.location,
-                    link: event.link ?? "",
+                    link: event.link ?? '',
                     event_date: event.event_date,
                     event_time: event.event_time,
-                    details: event.details ?? "",
+                    details: event.details ?? '',
                   },
                 })
               }
@@ -303,86 +248,88 @@ export default function EventDetailsPage({ eventId }: EventDetailsPageProps) {
       )}
     </ScrollView>
   )
-}
+})
 
 const styles = StyleSheet.create({
   center: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.WHITE,
+    justifyContent: 'center',
+    alignItems: 'center',
     padding: 20,
   },
   banner: {
-    width: "100%",
-    aspectRatio: 1.6,
-    borderRadius: 12,
+    width: '100%',
+    height: 200,
+    borderRadius: 15,
     marginBottom: 15,
   },
   title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    marginBottom: 6,
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 5,
     color: Colors.BLACK,
   },
   createdBy: {
+    fontSize: 16,
     color: Colors.GRAY,
-    fontSize: 15,
-    marginBottom: 10,
+    marginBottom: 15,
   },
   row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 8,
   },
   meta: {
-    fontSize: 15,
+    fontSize: 16,
     color: Colors.GRAY,
+    flex: 1,
   },
   countPrimary: {
+    fontSize: 16,
     color: Colors.PRIMARY,
-    fontSize: 15,
-    fontWeight: "600",
+    fontWeight: '600',
   },
   countInterested: {
-    color: "#e74c3c",
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 16,
+    color: '#e74c3c',
+    fontWeight: '600',
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "600",
-    marginTop: 10,
-    marginBottom: 4,
-  },
-  details: {
-    fontSize: 15,
-    lineHeight: 20,
+    fontWeight: 'bold',
+    marginBottom: 8,
     color: Colors.BLACK,
   },
+  details: {
+    fontSize: 16,
+    color: Colors.BLACK,
+    lineHeight: 24,
+  },
   linkText: {
+    fontSize: 16,
     color: Colors.PRIMARY,
-    fontWeight: "600",
+    textDecorationLine: 'underline',
   },
   actions: {
-    flexDirection: "row",
+    marginTop: 20,
     gap: 10,
-    marginTop: 25,
-    alignItems: "center",
   },
   interestBtn: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.PRIMARY,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 10,
-    gap: 6,
+    backgroundColor: Colors.WHITE,
+    gap: 8,
   },
   interestText: {
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: '600',
   },
 })
+
+export default EventDetailsPage
