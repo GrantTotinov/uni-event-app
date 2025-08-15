@@ -39,6 +39,7 @@ export async function GET(request: Request) {
   const uEmail = url.searchParams.get('u_email')
   const followedOnly = url.searchParams.get('followedOnly')
   const search = url.searchParams.get('search')
+  const uhtOnly = url.searchParams.get('uhtOnly') // UHT filter parameter
   const orderField = sanitizeOrder(url.searchParams.get('orderField'))
   const orderDir = sanitizeDir(url.searchParams.get('orderDir'))
   const limit = Math.max(
@@ -83,6 +84,29 @@ export async function GET(request: Request) {
 
     const params: any[] = [uEmail] // може да е null – OK за LEFT JOIN
     const conditions: string[] = []
+
+    // Enhanced UHT filter - public UHT posts + UHT posts from user's clubs
+    if (uhtOnly === 'true') {
+      conditions.push('post.is_uht_related = true')
+
+      if (uEmail) {
+        // Include public UHT posts AND UHT posts from clubs where user is member/creator
+        conditions.push(`(
+          post.club IS NULL 
+          OR post.club IN (
+            SELECT club_id FROM clubfollowers WHERE u_email = $${
+              params.length + 1
+            }
+            UNION
+            SELECT id FROM clubs WHERE createdby = $${params.length + 1}
+          )
+        )`)
+        params.push(uEmail)
+      } else {
+        // If no user email, only show public UHT posts
+        conditions.push('post.club IS NULL')
+      }
+    }
 
     // Ако се търси конкретен клуб
     if (club) {
