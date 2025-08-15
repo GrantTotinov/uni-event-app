@@ -1,10 +1,15 @@
-import React, { useContext, useState, useEffect } from 'react'
+import React, { useContext, useEffect, useState } from 'react'
 import { View, Text, Pressable, TextInput } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { AuthContext } from '@/context/AuthContext'
 import Colors from '@/data/Colors'
 import EventList from '@/components/Events/EventList'
-import { useAllEvents, useRegisteredEvents } from '@/hooks/useEvents'
+import {
+  useAllEvents,
+  useRegisteredEvents,
+  useMyEvents,
+  usePopularEvents,
+} from '@/hooks/useEvents'
 
 export default function Event() {
   const { user } = useContext(AuthContext)
@@ -21,16 +26,32 @@ export default function Event() {
     return () => clearTimeout(timer)
   }, [searchQuery])
 
-  // Use the new hooks based on selected tab with search functionality
+  // Use the hooks based on selected tab with search functionality
   const allEventsQuery = useAllEvents(user?.email, debouncedSearchQuery)
   const registeredEventsQuery = useRegisteredEvents(
     user?.email,
     debouncedSearchQuery
   )
+  const myEventsQuery = useMyEvents(user?.email, debouncedSearchQuery)
+  const popularEventsQuery = usePopularEvents(user?.email, debouncedSearchQuery)
 
   // Select the appropriate query based on selected tab
-  const currentQuery =
-    selectedTab === 0 ? allEventsQuery : registeredEventsQuery
+  const getCurrentQuery = () => {
+    switch (selectedTab) {
+      case 0:
+        return allEventsQuery
+      case 1:
+        return registeredEventsQuery
+      case 2:
+        return myEventsQuery
+      case 3:
+        return popularEventsQuery
+      default:
+        return allEventsQuery
+    }
+  }
+
+  const currentQuery = getCurrentQuery()
   const {
     events,
     isLoading,
@@ -64,6 +85,39 @@ export default function Event() {
   const clearSearch = () => {
     setSearchQuery('')
   }
+
+  // Get tab specific information
+  const getTabInfo = () => {
+    switch (selectedTab) {
+      case 0:
+        return {
+          name: 'Предстоящи',
+          searchText: 'предстоящи събития',
+        }
+      case 1:
+        return {
+          name: 'Регистрации',
+          searchText: 'ваши регистрации',
+        }
+      case 2:
+        return {
+          name: 'Мои събития',
+          searchText: 'ваши създадени събития',
+        }
+      case 3:
+        return {
+          name: 'Популярни',
+          searchText: 'популярни събития',
+        }
+      default:
+        return {
+          name: 'Предстоящи',
+          searchText: 'предстоящи събития',
+        }
+    }
+  }
+
+  const tabInfo = getTabInfo()
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.LIGHT_GRAY }}>
@@ -108,7 +162,7 @@ export default function Event() {
             style={{ marginRight: 10 }}
           />
           <TextInput
-            placeholder="Търси събития..."
+            placeholder={`Търси в ${tabInfo.searchText}...`}
             value={searchQuery}
             onChangeText={setSearchQuery}
             style={{
@@ -129,59 +183,125 @@ export default function Event() {
       {/* Tab Navigation */}
       <View
         style={{
-          display: 'flex',
-          flexDirection: 'row',
           backgroundColor: Colors.WHITE,
           margin: 20,
-          borderRadius: 10,
-          padding: 5,
-          elevation: 2,
+          borderRadius: 15,
+          padding: 8,
+          elevation: 3,
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: 1 },
+          shadowOffset: { width: 0, height: 2 },
           shadowOpacity: 0.1,
-          shadowRadius: 2,
+          shadowRadius: 3,
         }}
       >
-        <Pressable style={{ flex: 1 }} onPress={() => setSelectedTab(0)}>
-          <Text
-            style={[
-              {
-                padding: 10,
-                textAlign: 'center',
-                borderRadius: 10,
-                fontWeight: 'bold',
-                fontSize: 16,
-              },
-              {
-                backgroundColor:
-                  selectedTab === 0 ? Colors.PRIMARY : Colors.WHITE,
-                color: selectedTab === 0 ? Colors.WHITE : Colors.PRIMARY,
-              },
-            ]}
+        {/* First Row - Предстоящи and Регистрации */}
+        <View
+          style={{
+            flexDirection: 'row',
+            marginBottom: 8,
+          }}
+        >
+          <Pressable
+            style={{ flex: 1, marginRight: 4 }}
+            onPress={() => setSelectedTab(0)}
           >
-            Предстоящи
-          </Text>
-        </Pressable>
-        <Pressable style={{ flex: 1 }} onPress={() => setSelectedTab(1)}>
-          <Text
-            style={[
-              {
-                padding: 10,
-                textAlign: 'center',
-                borderRadius: 10,
-                fontWeight: 'bold',
-                fontSize: 16,
-              },
-              {
-                backgroundColor:
-                  selectedTab === 1 ? Colors.PRIMARY : Colors.WHITE,
-                color: selectedTab === 1 ? Colors.WHITE : Colors.PRIMARY,
-              },
-            ]}
+            <Text
+              style={[
+                {
+                  padding: 12,
+                  textAlign: 'center',
+                  borderRadius: 10,
+                  fontWeight: 'bold',
+                  fontSize: 14,
+                },
+                {
+                  backgroundColor:
+                    selectedTab === 0 ? Colors.PRIMARY : Colors.LIGHT_GRAY,
+                  color: selectedTab === 0 ? Colors.WHITE : Colors.PRIMARY,
+                },
+              ]}
+            >
+              Предстоящи
+            </Text>
+          </Pressable>
+          <Pressable
+            style={{ flex: 1, marginLeft: 4 }}
+            onPress={() => setSelectedTab(1)}
           >
-            Записани
-          </Text>
-        </Pressable>
+            <Text
+              style={[
+                {
+                  padding: 12,
+                  textAlign: 'center',
+                  borderRadius: 10,
+                  fontWeight: 'bold',
+                  fontSize: 14,
+                },
+                {
+                  backgroundColor:
+                    selectedTab === 1 ? Colors.PRIMARY : Colors.LIGHT_GRAY,
+                  color: selectedTab === 1 ? Colors.WHITE : Colors.PRIMARY,
+                },
+              ]}
+            >
+              Регистрации
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Second Row - Мои събития and Популярни */}
+        <View
+          style={{
+            flexDirection: 'row',
+          }}
+        >
+          <Pressable
+            style={{ flex: 1, marginRight: 4 }}
+            onPress={() => setSelectedTab(2)}
+          >
+            <Text
+              style={[
+                {
+                  padding: 12,
+                  textAlign: 'center',
+                  borderRadius: 10,
+                  fontWeight: 'bold',
+                  fontSize: 14,
+                },
+                {
+                  backgroundColor:
+                    selectedTab === 2 ? Colors.PRIMARY : Colors.LIGHT_GRAY,
+                  color: selectedTab === 2 ? Colors.WHITE : Colors.PRIMARY,
+                },
+              ]}
+            >
+              Мои събития
+            </Text>
+          </Pressable>
+          <Pressable
+            style={{ flex: 1, marginLeft: 4 }}
+            onPress={() => setSelectedTab(3)}
+          >
+            <Text
+              style={[
+                {
+                  padding: 12,
+                  textAlign: 'center',
+                  borderRadius: 10,
+                  fontWeight: 'bold',
+                  fontSize: 14,
+                },
+                {
+                  backgroundColor:
+                    selectedTab === 3 ? Colors.PRIMARY : Colors.LIGHT_GRAY,
+                  color: selectedTab === 3 ? Colors.WHITE : Colors.PRIMARY,
+                },
+              ]}
+            >
+              Популярни
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Search Results Info */}
@@ -191,6 +311,28 @@ export default function Event() {
             {isLoading
               ? 'Търсене...'
               : `Резултати за "${debouncedSearchQuery}" (${events.length})`}
+          </Text>
+          <Text style={{ color: Colors.GRAY, fontSize: 12, marginTop: 2 }}>
+            {selectedTab === 3
+              ? 'Търсенето включва популярни събития подредени по брой регистрирани'
+              : 'Търсенето включва име, локация и детайли на събитията'}
+          </Text>
+        </View>
+      )}
+
+      {/* Tab specific info */}
+      {selectedTab === 2 && !debouncedSearchQuery.trim() && (
+        <View style={{ paddingHorizontal: 20, marginBottom: 10 }}>
+          <Text style={{ color: Colors.GRAY, fontSize: 12 }}>
+            Показват се само събития, които сте създали
+          </Text>
+        </View>
+      )}
+
+      {selectedTab === 3 && !debouncedSearchQuery.trim() && (
+        <View style={{ paddingHorizontal: 20, marginBottom: 10 }}>
+          <Text style={{ color: Colors.GRAY, fontSize: 12 }}>
+            Събития подредени по брой регистрирани потребители
           </Text>
         </View>
       )}
@@ -206,6 +348,7 @@ export default function Event() {
         onLoadMore={handleLoadMore}
         onEventUpdate={handleEventUpdate}
         selectedTab={selectedTab}
+        searchQuery={debouncedSearchQuery}
       />
     </View>
   )

@@ -56,11 +56,14 @@ export async function POST(request: Request) {
 // - ?id=... [&email=...]: конкретно събитие (детайлна страница)
 // - ?limit=... & offset=...: pagination параметри
 // - ?search=...: търсене в име, локация и детайли
+// - ?orderBy=registeredCount&orderDir=DESC: подреждане по брой регистрирани
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const email = url.searchParams.get('email')
   const id = url.searchParams.get('id')
   const search = url.searchParams.get('search')
+  const orderBy = url.searchParams.get('orderBy')
+  const orderDir = url.searchParams.get('orderDir')
   const limit = Math.max(
     1,
     Math.min(50, Number(url.searchParams.get('limit') || 10))
@@ -142,6 +145,13 @@ export async function GET(request: Request) {
       paramIndex += 3
     }
 
+    // Determine the ORDER BY clause based on orderBy parameter
+    let orderByClause = 'ORDER BY events.id DESC' // Default ordering
+    if (orderBy === 'registeredCount') {
+      const direction = orderDir === 'ASC' ? 'ASC' : 'DESC'
+      orderByClause = `ORDER BY COALESCE(reg_count.count, 0) ${direction}, events.id DESC`
+    }
+
     // Списък със събития (с pagination и търсене)
     if (email) {
       // Добавяме email параметър
@@ -179,7 +189,7 @@ export async function GET(request: Request) {
            GROUP BY event_id
          ) int_count ON events.id = int_count.event_id
          ${whereClause}
-         ORDER BY events.id DESC
+         ${orderByClause}
          LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`,
         params
       )
@@ -212,7 +222,7 @@ export async function GET(request: Request) {
            GROUP BY event_id
          ) int_count ON events.id = int_count.event_id
          ${whereClause}
-         ORDER BY events.id DESC
+         ${orderByClause}
          LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`,
         params
       )

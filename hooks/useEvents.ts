@@ -26,6 +26,8 @@ export interface Event {
 export interface UseEventsOptions {
   userEmail?: string
   filterRegistered?: boolean
+  filterMyEvents?: boolean
+  orderByPopular?: boolean
   enabled?: boolean
   eventsPerPage?: number
   prefetchNextPage?: boolean
@@ -40,13 +42,22 @@ export interface EventsResponse {
 export function useEvents({
   userEmail,
   filterRegistered = false,
+  filterMyEvents = false,
+  orderByPopular = false,
   enabled = true,
   eventsPerPage = 10,
   prefetchNextPage = true,
   searchQuery = '',
 }: UseEventsOptions = {}) {
   const queryClient = useQueryClient()
-  const queryKey = ['events', userEmail, filterRegistered, searchQuery]
+  const queryKey = [
+    'events',
+    userEmail,
+    filterRegistered,
+    filterMyEvents,
+    orderByPopular,
+    searchQuery,
+  ]
 
   const {
     data,
@@ -79,13 +90,31 @@ export function useEvents({
         params.search = searchQuery.trim()
       }
 
+      // Add ordering parameter for popular events
+      if (orderByPopular) {
+        params.orderBy = 'registeredCount'
+        params.orderDir = 'DESC'
+      }
+
       const response = await axios.get(baseUrl, { params })
 
       let events: Event[] = response.data || []
 
-      // Apply client-side filtering if needed (for registered events)
+      // Apply client-side filtering if needed
       if (filterRegistered) {
         events = events.filter((e) => e.isRegistered)
+      }
+
+      // Filter for user's own created events
+      if (filterMyEvents && userEmail) {
+        events = events.filter((e) => e.createdby === userEmail)
+      }
+
+      // Sort by popularity if requested (backup client-side sorting)
+      if (orderByPopular && !searchQuery.trim()) {
+        events = events.sort(
+          (a, b) => (b.registeredCount || 0) - (a.registeredCount || 0)
+        )
       }
 
       // Disable prefetching when searching to avoid unnecessary requests
@@ -101,10 +130,28 @@ export function useEvents({
             const nextResponse = await axios.get(baseUrl, {
               params: nextParams,
             })
+            let nextEvents = nextResponse.data || []
+
+            // Apply same filtering to prefetched data
+            if (filterRegistered) {
+              nextEvents = nextEvents.filter((e: Event) => e.isRegistered)
+            }
+            if (filterMyEvents && userEmail) {
+              nextEvents = nextEvents.filter(
+                (e: Event) => e.createdby === userEmail
+              )
+            }
+            if (orderByPopular && !searchQuery.trim()) {
+              nextEvents = nextEvents.sort(
+                (a: Event, b: Event) =>
+                  (b.registeredCount || 0) - (a.registeredCount || 0)
+              )
+            }
+
             return {
-              events: nextResponse.data || [],
+              events: nextEvents,
               nextOffset:
-                nextResponse.data?.length === eventsPerPage
+                nextEvents.length === eventsPerPage
                   ? nextOffset + eventsPerPage
                   : undefined,
             }
@@ -124,7 +171,7 @@ export function useEvents({
     },
     getNextPageParam: (lastPage: EventsResponse) => lastPage.nextOffset,
     enabled,
-    staleTime: searchQuery.trim() ? 30 * 1000 : 5 * 60 * 1000, // Shorter cache for search results
+    staleTime: searchQuery.trim() ? 30 * 1000 : 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     retry: 2,
     refetchOnWindowFocus: false,
@@ -303,6 +350,8 @@ export function useAllEvents(userEmail?: string, searchQuery?: string) {
   return useEvents({
     userEmail,
     filterRegistered: false,
+    filterMyEvents: false,
+    orderByPopular: false,
     enabled: true,
     prefetchNextPage: true,
     searchQuery,
@@ -314,7 +363,35 @@ export function useRegisteredEvents(userEmail?: string, searchQuery?: string) {
   return useEvents({
     userEmail,
     filterRegistered: true,
+    filterMyEvents: false,
+    orderByPopular: false,
     enabled: !!userEmail,
+    prefetchNextPage: true,
+    searchQuery,
+  })
+}
+
+// Hook for user's own created events with search capability
+export function useMyEvents(userEmail?: string, searchQuery?: string) {
+  return useEvents({
+    userEmail,
+    filterRegistered: false,
+    filterMyEvents: true,
+    orderByPopular: false,
+    enabled: !!userEmail,
+    prefetchNextPage: true,
+    searchQuery,
+  })
+}
+
+// Hook for popular events (ordered by registration count) with search capability
+export function usePopularEvents(userEmail?: string, searchQuery?: string) {
+  return useEvents({
+    userEmail,
+    filterRegistered: false,
+    filterMyEvents: false,
+    orderByPopular: true,
+    enabled: true,
     prefetchNextPage: true,
     searchQuery,
   })
