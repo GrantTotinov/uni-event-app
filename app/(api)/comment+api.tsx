@@ -1,10 +1,14 @@
 import { pool } from '@/configs/NilePostgresConfig'
 import { isAdmin } from '@/context/AuthContext'
 
+/**
+ * GET all comments for a post, including all levels of nesting.
+ * Returns a flat array with parent_id for each comment.
+ * The frontend should build the nested tree.
+ */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const postId = searchParams.get('postId')
-  const parentId = searchParams.get('parentId')
   const search = searchParams.get('search')
 
   if (!postId) {
@@ -12,35 +16,33 @@ export async function GET(request: Request) {
   }
 
   try {
-    let query = parentId
-      ? `SELECT comments.id, comments.comment, comments.created_at, 
-                comments.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS created_at_local, 
-                users.name, users.image, users.email AS user_email
-         FROM comments
-         INNER JOIN users ON comments.user_email = users.email
-         WHERE comments.post_id = $1 AND comments.parent_id = $2`
-      : `SELECT comments.id, comments.comment, comments.created_at, 
-                comments.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS created_at_local, 
-                users.name, users.image, users.email AS user_email
-         FROM comments
-         INNER JOIN users ON comments.user_email = users.email
-         WHERE comments.post_id = $1 AND comments.parent_id IS NULL`
+    let query = `
+      SELECT 
+        comments.id, 
+        comments.comment, 
+        comments.created_at, 
+        comments.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS created_at_local, 
+        users.name, 
+        users.image, 
+        users.email AS user_email, 
+        users.role, 
+        comments.parent_id
+      FROM comments
+      INNER JOIN users ON comments.user_email = users.email
+      WHERE comments.post_id = $1
+    `
+    const params: any[] = [postId]
 
-    let params = parentId ? [postId, parentId] : [postId]
-
-    // Ако има search параметър, добавяме търсене в съдържанието на коментара
+    // Add search filter if provided
     if (search && search.trim()) {
       const searchTerm = `%${search.trim()}%`
-      query += ` AND comments.comment ILIKE $${params.length + 1}`
+      query += ` AND comments.comment ILIKE $2`
       params.push(searchTerm)
     }
 
-    query += parentId
-      ? ` ORDER BY comments.created_at ASC`
-      : ` ORDER BY comments.created_at DESC`
+    query += ` ORDER BY comments.created_at ASC`
 
     const result = await pool.query(query, params)
-
     return Response.json(result.rows)
   } catch (error) {
     console.error('Error fetching comments', error)
@@ -51,10 +53,11 @@ export async function GET(request: Request) {
   }
 }
 
+/**
+ * POST a new comment or reply (to any comment, parent or child)
+ */
 export async function POST(request: Request) {
   const { postId, userEmail, comment, parentId } = await request.json()
-  console.log('Received data:', { postId, userEmail, comment, parentId })
-
   if (!postId || !userEmail || !comment) {
     return Response.json(
       { error: 'Липсват задължителни данни' },
@@ -69,7 +72,6 @@ export async function POST(request: Request) {
        RETURNING id, created_at`,
       [postId, userEmail, comment, parentId || null]
     )
-    console.log('Comment added successfully:', result.rows[0])
     return Response.json({
       message: 'Коментарът е добавен успешно',
       commentId: result.rows[0].id,
@@ -94,7 +96,6 @@ export async function PUT(request: Request) {
   }
 
   try {
-    // Проверка дали коментарът съществува и кой го е създал
     const commentQuery = await pool.query(
       'SELECT user_email FROM comments WHERE id = $1',
       [commentId]
@@ -109,7 +110,6 @@ export async function PUT(request: Request) {
 
     const commentAuthor = commentQuery.rows[0].user_email
 
-    // Проверка дали потребителят е автор на коментара
     if (userEmail !== commentAuthor) {
       return Response.json(
         { error: 'Нямате права да редактирате този коментар' },
@@ -117,7 +117,6 @@ export async function PUT(request: Request) {
       )
     }
 
-    // Актуализиране на коментара
     const updateRes = await pool.query(
       'UPDATE comments SET comment = $1 WHERE id = $2 RETURNING id, comment',
       [newComment, commentId]
@@ -147,7 +146,6 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    // Проверка за ролята на потребителя
     const userQuery = await pool.query(
       'SELECT role FROM users WHERE email = $1',
       [userEmail]
@@ -162,7 +160,6 @@ export async function DELETE(request: Request) {
 
     const userRole = userQuery.rows[0].role
 
-    // Проверка дали коментарът съществува и кой го е създал
     const commentQuery = await pool.query(
       'SELECT user_email FROM comments WHERE id = $1',
       [commentId]
@@ -177,7 +174,6 @@ export async function DELETE(request: Request) {
 
     const commentAuthor = commentQuery.rows[0].user_email
 
-    // Проверка за права: администратор, автор на коментара или автор на поста
     if (
       !isAdmin(userRole) &&
       userEmail !== commentAuthor &&
@@ -189,7 +185,6 @@ export async function DELETE(request: Request) {
       )
     }
 
-    // Изтриване на коментара
     const deleteRes = await pool.query(
       'DELETE FROM comments WHERE id = $1 RETURNING id',
       [commentId]

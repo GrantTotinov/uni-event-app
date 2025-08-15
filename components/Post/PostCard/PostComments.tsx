@@ -5,9 +5,10 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
+  Image,
 } from 'react-native'
 import moment from 'moment-timezone'
-import { MaterialIcons, Ionicons } from '@expo/vector-icons'
+import { MaterialIcons, Ionicons, AntDesign } from '@expo/vector-icons'
 import Colors from '@/data/Colors'
 import { isAdmin } from '@/context/AuthContext'
 import { usePostComments } from '@/hooks/useComments'
@@ -39,6 +40,8 @@ interface PostCommentsProps {
   onDeleteReply: (replyId: number, parentId: number) => void
 }
 
+const REPLY_INDENT = 52
+
 export default function PostComments({
   comments,
   replies,
@@ -65,18 +68,200 @@ export default function PostComments({
   onDeleteReply,
 }: PostCommentsProps) {
   const [commentSearchQuery, setCommentSearchQuery] = useState<string>('')
+  const [commentLikes, setCommentLikes] = useState<{
+    [key: number]: { isLiked: boolean; count: number }
+  }>({})
 
-  // Use the new comments hook with search functionality
   const { comments: searchedComments, isLoading: isSearching } =
     usePostComments(post.post_id, commentSearchQuery)
 
-  // Use searched comments if there's a search query, otherwise use the passed comments
-  const displayComments = commentSearchQuery.trim()
-    ? searchedComments
-    : comments
+  // Only show root comments (parent_id == null) as top-level
+  const displayComments = (
+    commentSearchQuery.trim() ? searchedComments : comments
+  ).filter((c) => !c.parent_id)
 
-  const clearCommentSearch = () => {
-    setCommentSearchQuery('')
+  const clearCommentSearch = () => setCommentSearchQuery('')
+
+  const getRoleDisplayText = (userRole: string | null | undefined): string => {
+    switch (userRole) {
+      case 'admin':
+        return 'Админ'
+      case 'teacher':
+        return 'Преподавател'
+      case 'user':
+      case 'student':
+        return 'Студент'
+      default:
+        return 'Студент'
+    }
+  }
+
+  const getRoleColor = (userRole: string | null | undefined): string => {
+    switch (userRole) {
+      case 'admin':
+        return '#dc3545'
+      case 'teacher':
+        return '#007bff'
+      case 'user':
+      case 'student':
+        return Colors.GRAY
+      default:
+        return Colors.GRAY
+    }
+  }
+
+  const handleCommentLike = (commentId: number) => {
+    setCommentLikes((prev) => {
+      const current = prev[commentId] || { isLiked: false, count: 0 }
+      return {
+        ...prev,
+        [commentId]: {
+          isLiked: !current.isLiked,
+          count: current.isLiked
+            ? Math.max(0, current.count - 1)
+            : current.count + 1,
+        },
+      }
+    })
+  }
+
+  // Recursive rendering for replies, with correct indentation and cycle protection
+  const renderReplies = (
+    parentId: number,
+    level: number = 1,
+    visited: Set<number> = new Set()
+  ): React.ReactNode => {
+    const childReplies = replies[parentId] || []
+    if (!childReplies.length) return null
+
+    return childReplies.map((reply) => {
+      if (visited.has(reply.id)) {
+        return null
+      }
+      const newVisited = new Set(visited)
+      newVisited.add(reply.id)
+
+      const isExpanded = expandedComments.includes(reply.id)
+      return (
+        <View
+          key={reply.id}
+          style={{
+            marginLeft: REPLY_INDENT,
+            marginTop: 8,
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+          }}
+        >
+          {/* Avatar OUTSIDE the rectangle */}
+          <Image
+            source={{ uri: reply.image }}
+            style={styles.discordReplyAvatar}
+          />
+          {/* Content: rectangle and actions below */}
+          <View style={{ flex: 1 }}>
+            <View style={[styles.discordReplyContentContainer]}>
+              <View>
+                <View style={styles.discordCommentNameRow}>
+                  <Text style={styles.discordReplyAuthor}>{reply.name}</Text>
+                  <Text
+                    style={[
+                      styles.discordReplyRole,
+                      { color: getRoleColor(reply.role) },
+                    ]}
+                  >
+                    {getRoleDisplayText(reply.role)}
+                  </Text>
+                </View>
+                <Text style={styles.discordReplyText}>{reply.comment}</Text>
+              </View>
+            </View>
+            {/* Date and actions BELOW the rectangle */}
+            <View
+              style={[styles.discordActionRow, { marginLeft: 0, marginTop: 4 }]}
+            >
+              <Text style={styles.discordCommentDate}>
+                {reply.created_at_local
+                  ? moment(reply.created_at_local).fromNow()
+                  : moment(reply.created_at).fromNow()}
+              </Text>
+              <TouchableOpacity
+                onPress={() => handleCommentLike(reply.id)}
+                style={styles.discordActionButton}
+              >
+                <AntDesign
+                  name="like2"
+                  size={14}
+                  color={
+                    commentLikes[reply.id]?.isLiked
+                      ? Colors.PRIMARY
+                      : Colors.GRAY
+                  }
+                />
+                <Text
+                  style={[
+                    styles.discordActionText,
+                    {
+                      color: commentLikes[reply.id]?.isLiked
+                        ? Colors.PRIMARY
+                        : Colors.GRAY,
+                    },
+                  ]}
+                >
+                  {commentLikes[reply.id]?.isLiked ? 'Харесано' : 'Харесай'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => onToggleReplies(reply.id)}
+                style={styles.discordActionButton}
+              >
+                <MaterialIcons name="reply" size={14} color={Colors.GRAY} />
+                <Text style={styles.discordActionText}>Отговори</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.discordLikeCountContainer, { marginLeft: 0 }]}>
+              <AntDesign
+                name="heart"
+                size={12}
+                color={
+                  commentLikes[reply.id]?.isLiked ? Colors.PRIMARY : Colors.GRAY
+                }
+              />
+              <Text style={styles.discordLikeCountText}>
+                {commentLikes[reply.id]?.count || 0}
+              </Text>
+            </View>
+            {isExpanded && (
+              <View style={styles.discordRepliesContainer}>
+                {renderReplies(reply.id, level + 1, newVisited)}
+                <View style={styles.discordReplyInputContainer}>
+                  <Image
+                    source={{ uri: user?.image }}
+                    style={styles.discordReplyAvatar}
+                  />
+                  <View style={styles.discordReplyInputWrapper}>
+                    <TextInput
+                      style={styles.discordReplyInput}
+                      value={replyTexts[reply.id] || ''}
+                      onChangeText={(text) => onUpdateReplyText(reply.id, text)}
+                      placeholder="Отговорете на този коментар..."
+                      placeholderTextColor={Colors.GRAY}
+                    />
+                    <TouchableOpacity
+                      onPress={() => onSubmitReply(reply.id)}
+                      style={styles.discordReplySubmitButton}
+                    >
+                      <Text style={styles.discordReplySubmitButtonText}>
+                        Отговори
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      )
+    })
   }
 
   return (
@@ -93,18 +278,7 @@ export default function PostComments({
       )}
 
       {/* Comment Search Bar */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          backgroundColor: Colors.LIGHT_GRAY || '#F5F5F5',
-          borderRadius: 20,
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          marginBottom: 15,
-          marginHorizontal: 10,
-        }}
-      >
+      <View style={styles.searchContainer}>
         <Ionicons
           name="search"
           size={16}
@@ -115,11 +289,7 @@ export default function PostComments({
           placeholder="Търси в коментарите..."
           value={commentSearchQuery}
           onChangeText={setCommentSearchQuery}
-          style={{
-            flex: 1,
-            fontSize: 14,
-            color: Colors.BLACK,
-          }}
+          style={styles.searchInput}
           placeholderTextColor={Colors.GRAY}
         />
         {commentSearchQuery.length > 0 && (
@@ -131,8 +301,8 @@ export default function PostComments({
 
       {/* Search Results Info */}
       {commentSearchQuery.trim() && (
-        <View style={{ paddingHorizontal: 15, marginBottom: 10 }}>
-          <Text style={{ color: Colors.GRAY, fontSize: 12 }}>
+        <View style={styles.searchResultsInfo}>
+          <Text style={styles.searchResultsText}>
             {isSearching
               ? 'Търсене в коментарите...'
               : `Намерени ${displayComments.length} коментар(а) за "${commentSearchQuery}"`}
@@ -142,139 +312,206 @@ export default function PostComments({
 
       {/* Loading indicator for search */}
       {isSearching && (
-        <View style={{ padding: 20, alignItems: 'center' }}>
+        <View style={styles.loadingContainer}>
           <ActivityIndicator color={Colors.PRIMARY} size="small" />
         </View>
       )}
 
       {displayComments.length > 0 ? (
         displayComments.map((c) => (
-          <View key={c.id} style={styles.commentItem}>
-            <View style={styles.commentHeader}>
-              <Text style={styles.commentAuthor}>{c.name}</Text>
-              {(user?.email === c.user_email ||
-                isAdmin(user?.role) ||
-                user?.email === post.createdby) && (
-                <TouchableOpacity
-                  onPress={() => onToggleCommentMenu(c.id)}
-                  style={styles.commentMenuIcon}
-                >
-                  <MaterialIcons
-                    name="more-vert"
-                    size={20}
-                    color={Colors.GRAY}
-                  />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Comment menu */}
-            {selectedCommentMenu === c.id && (
-              <View style={styles.commentMenu}>
-                {user?.email === c.user_email && (
-                  <TouchableOpacity
-                    onPress={() => {
-                      onEditComment(c.id, c.comment)
-                      onToggleCommentMenu(null)
-                    }}
-                    style={styles.menuOption}
-                  >
-                    <Text style={styles.menuOptionText}>Редактирай</Text>
-                  </TouchableOpacity>
-                )}
-                {(isAdmin(user?.role) ||
-                  user?.email === c.user_email ||
+          <View
+            key={c.id}
+            style={[
+              styles.discordCommentItem,
+              { flexDirection: 'row', alignItems: 'flex-start' },
+            ]}
+          >
+            {/* Avatar OUTSIDE the rectangle */}
+            <Image
+              source={{ uri: c.image }}
+              style={styles.discordCommentAvatar}
+            />
+            {/* Content: rectangle and actions below */}
+            <View style={{ flex: 1 }}>
+              <View style={[styles.discordCommentContentContainer]}>
+                <View>
+                  <View style={styles.discordCommentNameRow}>
+                    <Text style={styles.discordCommentAuthor}>{c.name}</Text>
+                    <Text
+                      style={[
+                        styles.discordCommentRole,
+                        { color: getRoleColor(c.role) },
+                      ]}
+                    >
+                      {getRoleDisplayText(c.role)}
+                    </Text>
+                  </View>
+                  {editingCommentId === c.id ? (
+                    <View style={styles.discordEditContainer}>
+                      <TextInput
+                        style={styles.discordEditInput}
+                        value={editedCommentText}
+                        onChangeText={(text) => onEditComment(c.id, text)}
+                        placeholder="Редактирайте коментара..."
+                        multiline
+                      />
+                      <View style={styles.discordEditButtons}>
+                        <TouchableOpacity
+                          onPress={onSaveEditedComment}
+                          style={styles.discordSaveButton}
+                        >
+                          <Text style={styles.discordSaveButtonText}>
+                            Запази
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => onEditComment(0, '')}
+                          style={styles.discordCancelButton}
+                        >
+                          <Text style={styles.discordCancelButtonText}>
+                            Откажи
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <Text style={styles.discordCommentText}>{c.comment}</Text>
+                  )}
+                </View>
+                {(user?.email === c.user_email ||
+                  isAdmin(user?.role) ||
                   user?.email === post.createdby) && (
                   <TouchableOpacity
-                    onPress={() => {
-                      onDeleteComment(c.id)
-                      onToggleCommentMenu(null)
-                    }}
-                    style={styles.menuOption}
+                    onPress={() => onToggleCommentMenu(c.id)}
+                    style={styles.discordCommentMenuButton}
                   >
-                    <Text style={[styles.menuOptionText, { color: 'red' }]}>
-                      Изтрий
-                    </Text>
+                    <MaterialIcons
+                      name="more-vert"
+                      size={18}
+                      color={Colors.GRAY}
+                    />
                   </TouchableOpacity>
                 )}
               </View>
-            )}
-
-            {editingCommentId === c.id ? (
-              <>
-                <TextInput
-                  style={styles.commentInput}
-                  value={editedCommentText}
-                  onChangeText={(text) => onEditComment(c.id, text)}
-                  placeholder="Редактирайте коментара..."
-                />
-                <View style={styles.editButtons}>
-                  <TouchableOpacity onPress={onSaveEditedComment}>
-                    <Text style={{ color: Colors.PRIMARY, fontWeight: 'bold' }}>
-                      Запази
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => onEditComment(0, '')}>
-                    <Text style={{ color: 'red', fontWeight: 'bold' }}>
-                      Откажи
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={styles.commentText}>{c.comment}</Text>
-                <Text style={styles.commentDate}>
+              {/* Date and actions BELOW the rectangle */}
+              <View
+                style={[
+                  styles.discordActionRow,
+                  { marginLeft: 0, marginTop: 4 },
+                ]}
+              >
+                <Text style={styles.discordCommentDate}>
                   {c.created_at_local
                     ? moment(c.created_at_local).fromNow()
                     : moment(c.created_at).fromNow()}
                 </Text>
-
-                {/* Show/hide replies button */}
-                <TouchableOpacity onPress={() => onToggleReplies(c.id)}>
-                  <Text style={styles.replyButton}>
-                    {expandedComments.includes(c.id)
-                      ? 'Скрий отговорите'
-                      : 'Покажи отговорите'}
+                <TouchableOpacity
+                  onPress={() => handleCommentLike(c.id)}
+                  style={styles.discordActionButton}
+                >
+                  <AntDesign
+                    name="like2"
+                    size={14}
+                    color={
+                      commentLikes[c.id]?.isLiked ? Colors.PRIMARY : Colors.GRAY
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.discordActionText,
+                      {
+                        color: commentLikes[c.id]?.isLiked
+                          ? Colors.PRIMARY
+                          : Colors.GRAY,
+                      },
+                    ]}
+                  >
+                    {commentLikes[c.id]?.isLiked ? 'Харесано' : 'Харесай'}
                   </Text>
                 </TouchableOpacity>
-              </>
-            )}
-
-            {/* Replies section */}
-            {expandedComments.includes(c.id) && (
-              <View style={styles.repliesContainer}>
-                {/* Show existing replies */}
-                {replies[c.id]?.map((reply) => (
-                  <View key={reply.id} style={styles.replyItem}>
-                    {/* Reply content and actions */}
-                    <Text style={styles.replyText}>{reply.comment}</Text>
-                    <Text style={styles.commentDate}>
-                      {reply.created_at_local
-                        ? moment(reply.created_at_local).fromNow()
-                        : moment(reply.created_at).fromNow()}
-                    </Text>
-                  </View>
-                ))}
-
-                {/* Reply input */}
-                <View style={styles.replyInputContainer}>
-                  <TextInput
-                    style={styles.replyInput}
-                    value={replyTexts[c.id] || ''}
-                    onChangeText={(text) => onUpdateReplyText(c.id, text)}
-                    placeholder="Отговорете на този коментар..."
-                    placeholderTextColor={Colors.GRAY}
-                  />
-                  <TouchableOpacity
-                    onPress={() => onSubmitReply(c.id)}
-                    style={styles.replySubmitButton}
-                  >
-                    <Text style={styles.replySubmitButtonText}>Отговори</Text>
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity
+                  onPress={() => onToggleReplies(c.id)}
+                  style={styles.discordActionButton}
+                >
+                  <MaterialIcons name="reply" size={14} color={Colors.GRAY} />
+                  <Text style={styles.discordActionText}>Отговори</Text>
+                </TouchableOpacity>
               </View>
-            )}
+              <View
+                style={[styles.discordLikeCountContainer, { marginLeft: 0 }]}
+              >
+                <AntDesign
+                  name="heart"
+                  size={12}
+                  color={
+                    commentLikes[c.id]?.isLiked ? Colors.PRIMARY : Colors.GRAY
+                  }
+                />
+                <Text style={styles.discordLikeCountText}>
+                  {commentLikes[c.id]?.count || 0}
+                </Text>
+              </View>
+              {/* Replies section (recursive, indented) */}
+              {expandedComments.includes(c.id) && (
+                <View style={styles.discordRepliesContainer}>
+                  {renderReplies(c.id, 1, new Set([c.id]))}
+                  <View style={styles.discordReplyInputContainer}>
+                    <Image
+                      source={{ uri: user?.image }}
+                      style={styles.discordReplyAvatar}
+                    />
+                    <View style={styles.discordReplyInputWrapper}>
+                      <TextInput
+                        style={styles.discordReplyInput}
+                        value={replyTexts[c.id] || ''}
+                        onChangeText={(text) => onUpdateReplyText(c.id, text)}
+                        placeholder="Отговорете на този коментар..."
+                        placeholderTextColor={Colors.GRAY}
+                      />
+                      <TouchableOpacity
+                        onPress={() => onSubmitReply(c.id)}
+                        style={styles.discordReplySubmitButton}
+                      >
+                        <Text style={styles.discordReplySubmitButtonText}>
+                          Отговори
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              )}
+              {/* Comment menu */}
+              {selectedCommentMenu === c.id && (
+                <View style={styles.commentMenu}>
+                  {user?.email === c.user_email && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        onEditComment(c.id, c.comment)
+                        onToggleCommentMenu(null)
+                      }}
+                      style={styles.menuOption}
+                    >
+                      <Text style={styles.menuOptionText}>Редактирай</Text>
+                    </TouchableOpacity>
+                  )}
+                  {(isAdmin(user?.role) ||
+                    user?.email === c.user_email ||
+                    user?.email === post.createdby) && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        onDeleteComment(c.id)
+                        onToggleCommentMenu(null)
+                      }}
+                      style={styles.menuOption}
+                    >
+                      <Text style={[styles.menuOptionText, { color: 'red' }]}>
+                        Изтрий
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+            </View>
           </View>
         ))
       ) : (

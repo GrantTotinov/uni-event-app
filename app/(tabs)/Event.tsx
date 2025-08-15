@@ -96,7 +96,7 @@ export default function Event() {
         }
       case 1:
         return {
-          name: 'Регистрации',
+          name: 'Ще присъствам',
           searchText: 'ваши регистрации',
         }
       case 2:

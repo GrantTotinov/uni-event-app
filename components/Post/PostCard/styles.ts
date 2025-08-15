@@ -1,5 +1,5 @@
-import { StyleSheet } from "react-native"
-import Colors from "@/data/Colors"
+import { StyleSheet } from 'react-native'
+import Colors from '@/data/Colors'
 
 export const styles = StyleSheet.create({
   cardContainer: {
@@ -13,21 +13,21 @@ export const styles = StyleSheet.create({
     marginTop: 10,
   },
   postImage: {
-    width: "100%",
+    width: '100%',
     aspectRatio: 4 / 5,
-    resizeMode: "cover",
+    resizeMode: 'cover',
     borderRadius: 5,
     marginTop: 10,
   },
   actionsContainer: {
     marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 20,
   },
   subContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 7,
   },
   actionText: {
@@ -40,8 +40,8 @@ export const styles = StyleSheet.create({
   },
   commentInputContainer: {
     marginTop: 15,
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     borderColor: Colors.GRAY,
     borderWidth: 1,
     borderRadius: 8,
@@ -57,14 +57,292 @@ export const styles = StyleSheet.create({
   },
   submitButtonText: {
     color: Colors.PRIMARY,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   commentsContainer: {
     marginTop: 15,
     borderTopWidth: 1,
     borderColor: Colors.LIGHT_GRAY,
-    paddingTop: 10,
+    paddingTop: 15,
   },
+
+  // Search styles
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.LIGHT_GRAY || '#F5F5F5',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 15,
+    marginHorizontal: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: Colors.BLACK,
+  },
+  searchResultsInfo: {
+    paddingHorizontal: 15,
+    marginBottom: 10,
+  },
+  searchResultsText: {
+    color: Colors.GRAY,
+    fontSize: 12,
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+
+  // Discord-style comment styles
+  discordCommentItem: {
+    marginBottom: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  discordCommentHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  discordCommentHeaderText: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  // --- КОМЕНТАР: правоъгълник с аватар, име, роля, текст ---
+  discordCommentContentContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 0,
+    marginLeft: 0,
+    marginTop: 0,
+    position: 'relative',
+  },
+  discordCommentAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  discordCommentContentInner: {
+    flex: 1,
+  },
+  discordCommentNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  discordCommentAuthor: {
+    fontWeight: 'bold',
+    fontSize: 15,
+    color: Colors.BLACK,
+  },
+  discordCommentRole: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  discordCommentMenuButton: {
+    padding: 4,
+    marginLeft: 8,
+    alignSelf: 'flex-start',
+  },
+  discordCommentText: {
+    fontSize: 14,
+    color: Colors.BLACK,
+    lineHeight: 20,
+    marginBottom: 0,
+  },
+
+  // --- Дата и действия: под правоъгълника, подравнени вляво ---
+  discordActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 4,
+    marginLeft: 52, // 40 (аватар) + 12 (marginRight)
+  },
+  discordCommentDate: {
+    fontSize: 12,
+    color: Colors.GRAY,
+  },
+  discordActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+  },
+  discordActionText: {
+    fontSize: 12,
+    color: Colors.GRAY,
+    fontWeight: '500',
+  },
+  discordLikeCountContainer: {
+    position: 'absolute',
+    top: -2,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.WHITE,
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    gap: 4,
+  },
+  discordLikeCountText: {
+    fontSize: 11,
+    color: Colors.GRAY,
+    fontWeight: '600',
+  },
+
+  // Edit styles
+  discordEditContainer: {
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 4,
+  },
+  discordEditInput: {
+    borderWidth: 1,
+    borderColor: Colors.LIGHT_GRAY,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    color: Colors.BLACK,
+    minHeight: 60,
+    textAlignVertical: 'top',
+    backgroundColor: Colors.WHITE,
+  },
+  discordEditButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  discordSaveButton: {
+    backgroundColor: Colors.PRIMARY,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  discordSaveButtonText: {
+    color: Colors.WHITE,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  discordCancelButton: {
+    backgroundColor: Colors.GRAY,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  discordCancelButtonText: {
+    color: Colors.WHITE,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  // --- ОТГОВОР: правоъгълник с аватар, име, роля, текст ---
+  discordRepliesContainer: {
+    marginLeft: 52,
+    marginTop: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: Colors.LIGHT_GRAY,
+    paddingLeft: 16,
+  },
+  discordReplyItem: {
+    marginBottom: 12,
+  },
+  discordReplyContentContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 0,
+    marginLeft: 0,
+    marginTop: 0,
+    position: 'relative',
+  },
+  discordReplyAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 10,
+  },
+  discordReplyContentInner: {
+    flex: 1,
+  },
+  discordReplyNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  discordReplyAuthor: {
+    fontWeight: 'bold',
+    fontSize: 14,
+    color: Colors.BLACK,
+  },
+  discordReplyRole: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  discordReplyText: {
+    fontSize: 13,
+    color: Colors.BLACK,
+    lineHeight: 18,
+    marginBottom: 0,
+  },
+  discordReplyInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 12,
+    gap: 10,
+  },
+  discordReplyInputWrapper: {
+    flex: 1,
+  },
+  discordReplyInput: {
+    borderWidth: 1,
+    borderColor: Colors.LIGHT_GRAY,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 13,
+    color: Colors.BLACK,
+    minHeight: 36,
+    textAlignVertical: 'top',
+  },
+  discordReplySubmitButton: {
+    backgroundColor: Colors.PRIMARY,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginTop: 8,
+    alignSelf: 'flex-end',
+  },
+  discordReplySubmitButtonText: {
+    color: Colors.WHITE,
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+
+  // Legacy styles (keeping for compatibility)
   commentItem: {
     marginBottom: 12,
     paddingVertical: 8,
@@ -72,13 +350,13 @@ export const styles = StyleSheet.create({
     borderColor: Colors.LIGHT_GRAY,
   },
   commentHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 5,
   },
   commentAuthor: {
-    fontWeight: "bold",
+    fontWeight: 'bold',
     fontSize: 16,
     color: Colors.BLACK,
   },
@@ -91,8 +369,10 @@ export const styles = StyleSheet.create({
     color: Colors.GRAY,
   },
   noCommentsText: {
-    fontStyle: "italic",
+    fontStyle: 'italic',
     color: Colors.GRAY,
+    textAlign: 'center',
+    padding: 20,
   },
   editInput: {
     borderWidth: 1,
@@ -106,14 +386,14 @@ export const styles = StyleSheet.create({
   uhtCheckboxContainer: {
     marginTop: 15,
     padding: 12,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: '#f8f9fa',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#e9ecef",
+    borderColor: '#e9ecef',
   },
   checkboxContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
   },
   checkbox: {
@@ -122,8 +402,8 @@ export const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.PRIMARY,
     borderRadius: 4,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: Colors.WHITE,
   },
   checkboxChecked: {
@@ -132,17 +412,17 @@ export const styles = StyleSheet.create({
   checkmark: {
     color: Colors.WHITE,
     fontSize: 14,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   checkboxLabel: {
     fontSize: 14,
     color: Colors.BLACK,
     flex: 1,
-    fontWeight: "500",
+    fontWeight: '500',
   },
   editButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginTop: 10,
   },
   saveButton: {
@@ -161,23 +441,23 @@ export const styles = StyleSheet.create({
   },
   saveButtonText: {
     color: Colors.WHITE,
-    textAlign: "center",
+    textAlign: 'center',
   },
   cancelButtonText: {
     color: Colors.WHITE,
-    textAlign: "center",
+    textAlign: 'center',
   },
   editImage: {
     width: 150,
     height: 150,
     borderRadius: 10,
     marginTop: 10,
-    alignSelf: "center",
+    alignSelf: 'center',
   },
   imagePlaceholder: {
     backgroundColor: Colors.LIGHT_GRAY,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   placeholderText: {
     color: Colors.GRAY,
@@ -186,7 +466,7 @@ export const styles = StyleSheet.create({
   replyButton: {
     color: Colors.PRIMARY,
     marginTop: 5,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   repliesContainer: {
     marginTop: 10,
@@ -202,11 +482,11 @@ export const styles = StyleSheet.create({
     paddingLeft: 10,
     marginBottom: 8,
     padding: 8,
-    backgroundColor: Colors.LIGHT_GRAY + "20",
+    backgroundColor: Colors.LIGHT_GRAY + '20',
     borderRadius: 8,
   },
   replyAuthor: {
-    fontWeight: "bold",
+    fontWeight: 'bold',
     color: Colors.BLACK,
     fontSize: 14,
   },
@@ -217,8 +497,8 @@ export const styles = StyleSheet.create({
   },
   replyInputContainer: {
     marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
   },
   replyInput: {
@@ -238,20 +518,20 @@ export const styles = StyleSheet.create({
   },
   replySubmitButtonText: {
     color: Colors.WHITE,
-    fontWeight: "bold",
+    fontWeight: 'bold',
     fontSize: 12,
   },
   commentMenuIcon: {
     padding: 5,
   },
   commentMenu: {
-    position: "absolute",
+    position: 'absolute',
     top: 30,
     right: 10,
     backgroundColor: Colors.WHITE,
     borderRadius: 8,
     elevation: 5,
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
@@ -259,13 +539,13 @@ export const styles = StyleSheet.create({
     minWidth: 120,
   },
   replyMenu: {
-    position: "absolute",
+    position: 'absolute',
     top: 25,
     right: 10,
     backgroundColor: Colors.WHITE,
     borderRadius: 8,
     elevation: 5,
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
@@ -273,17 +553,16 @@ export const styles = StyleSheet.create({
     minWidth: 120,
   },
   menuOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 15,
+    padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.LIGHT_GRAY,
   },
   menuOptionText: {
-    fontSize: 16,
+    fontSize: 14,
     color: Colors.BLACK,
   },
   overlay: {
-    position: "absolute",
+    position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
