@@ -1,12 +1,13 @@
-import { View, Text, Image } from "react-native"
-import React, { useContext } from "react"
-import { Tabs } from "expo-router"
-import Ionicons from "@expo/vector-icons/Ionicons"
-import { AuthContext } from "@/context/AuthContext"
-import Colors from "@/data/Colors"
+import React, { useContext } from 'react'
+import { Tabs } from 'expo-router'
+import { Image } from 'react-native'
+import Ionicons from '@expo/vector-icons/Ionicons'
+import { AuthContext } from '@/context/AuthContext'
+import Colors from '@/data/Colors'
 
 export default function TabLayout() {
   const { user } = useContext(AuthContext)
+
   return (
     <Tabs
       screenOptions={{
@@ -20,7 +21,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
           ),
-          tabBarLabel: "Начало",
+          tabBarLabel: 'Начало',
         }}
       />
       <Tabs.Screen
@@ -29,16 +30,16 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar" size={size} color={color} />
           ),
-          tabBarLabel: "Събития",
+          tabBarLabel: 'Събития',
         }}
       />
       <Tabs.Screen
         name="AddPost"
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="create" size={size} color={color} />
+            <Ionicons name="add-circle" size={size} color={color} />
           ),
-          tabBarLabel: "Добави Публикация",
+          tabBarLabel: 'Добави Публикация',
         }}
       />
       <Tabs.Screen
@@ -47,7 +48,16 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="people" size={size} color={color} />
           ),
-          tabBarLabel: "Групи",
+          tabBarLabel: 'Групи',
+        }}
+      />
+      <Tabs.Screen
+        name="Chat"
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubbles" size={size} color={color} />
+          ),
+          tabBarLabel: 'Чат',
         }}
       />
       <Tabs.Screen
@@ -63,7 +73,7 @@ export default function TabLayout() {
               }}
             />
           ),
-          tabBarLabel: "Профил",
+          tabBarLabel: 'Профил',
         }}
       />
     </Tabs>

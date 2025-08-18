@@ -1,19 +1,9 @@
-import { Client } from "node-postgres"
-
-export const client = new Client({
-  user: process.env.EXPO_PUBLIC_DB_USERNAME,
-  password: process.env.EXPO_PUBLIC_DB_PASSWORD,
-  host: "us-west-2.db.thenile.dev",
-  port: 5432,
-  database: "uni_event_app",
-})
-
-import { Pool } from "pg"
+import { Pool } from 'pg'
 
 export const pool = new Pool({
-  user: process.env.EXPO_PUBLIC_DB_USERNAME,
-  password: process.env.EXPO_PUBLIC_DB_PASSWORD,
-  host: "us-west-2.db.thenile.dev",
+  user: process.env.EXPO_PUBLIC_NILE_DB_USERNAME,
+  password: process.env.EXPO_PUBLIC_NILE_DB_PASSWORD,
+  host: 'us-west-2.db.thenile.dev',
   port: 5432,
-  database: "uni_event_app",
+  database: 'uni_event_app',
 })

@@ -1,9 +1,9 @@
-import { Cloudinary } from "@cloudinary/url-gen"
+import { Cloudinary } from '@cloudinary/url-gen'
 
 export const cld = new Cloudinary({
   cloud: {
-    cloudName: process.env.EXPO_PUBLIC_CLOUD_NAME,
-    apiKey: process.env.EXPO_PUBLIC_CLOUD_API_KEY,
+    cloudName: process.env.EXPO_PUBLIC_CLOUDINARY_NAME,
+    apiKey: process.env.EXPO_PUBLIC_CLOUDINARY_API_KEY,
   },
   url: {
     secure: true,
@@ -11,7 +11,7 @@ export const cld = new Cloudinary({
 })
 
 export const options = {
-  upload_preset: "uni-event-app",
-  tag: "sample",
+  upload_preset: 'uni-event-app',
+  tag: 'sample',
   unsigned: true,
 }

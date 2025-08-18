@@ -47,6 +47,8 @@ export default function RootLayout() {
             name="settings/index"
             options={{ headerShown: false }}
           />
+          {/* Added the missing chat route registration */}
+          <Stack.Screen name="chat/index" options={{ headerShown: false }} />
         </Stack>
       </AuthContextProvider>
     </QueryClientProvider>

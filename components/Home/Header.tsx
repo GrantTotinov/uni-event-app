@@ -1,73 +1,78 @@
-import { View, Text, Image, TextInput } from "react-native"
-import React, { useContext } from "react"
-import Colors from "@/data/Colors"
-import { AuthContext } from "@/context/AuthContext"
+import React, { useContext } from 'react'
+import { View, Text, Image, TouchableOpacity } from 'react-native'
+import { useRouter } from 'expo-router'
+import Ionicons from '@expo/vector-icons/Ionicons'
+import Colors from '@/data/Colors'
+import { AuthContext } from '@/context/AuthContext'
 
-export default function Header({
-  search,
-  setSearch,
-}: {
-  search: string
-  setSearch: (v: string) => void
-}) {
+export default function Header() {
   const { user } = useContext(AuthContext)
+  const router = useRouter()
+
+  // Handler for navigating to the chat page
+  const handleChatPress = () => {
+    try {
+      // Use the correct route for Expo Router
+      router.push('/chat')
+    } catch (error) {
+      console.error('Navigation error:', error)
+    }
+  }
+
   return (
-    <View
-      style={{
-        display: "flex",
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        //paddingHorizontal: 16,
-        //paddingVertical: 8,
-      }}
-    >
-      <View>
-        <Text
-          style={{
-            fontSize: 24,
-            fontWeight: "bold",
-            color: Colors.PRIMARY,
-            marginBottom: 4,
-          }}
-        >
-          Здравейте!
-        </Text>
-        <Text
-          style={{
-            fontSize: 16,
-            color: Colors.GRAY,
-            marginBottom: 6,
-          }}
-        >
-          {user?.name}
-        </Text>
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Търси пост или коментар..."
-          style={{
-            marginTop: 8,
-            padding: 10,
-            borderRadius: 10,
-            backgroundColor: Colors.WHITE,
-            borderWidth: 1,
-            borderColor: Colors.GRAY,
-            fontSize: 16,
-            width: 300,
-            maxWidth: 235,
-          }}
-        />
-      </View>
-      <Image
-        source={{ uri: user?.image }}
+    <View style={{ paddingBottom: 10 }}>
+      <View
         style={{
-          height: 50,
-          width: 50,
-          borderRadius: 25,
-          marginLeft: 12,
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
         }}
-      />
+      >
+        <View>
+          <Text
+            style={{
+              fontSize: 24,
+              fontWeight: 'bold',
+              color: Colors.PRIMARY,
+              marginBottom: 4,
+            }}
+          >
+            Здравейте!
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Image
+              source={{ uri: user?.image }}
+              style={{
+                height: 50,
+                width: 50,
+                borderRadius: 25,
+                marginRight: 12,
+              }}
+            />
+            <Text
+              style={{
+                fontSize: 16,
+                color: Colors.GRAY,
+              }}
+            >
+              {user?.name}
+            </Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          onPress={handleChatPress}
+          style={{
+            backgroundColor: Colors.PRIMARY,
+            borderRadius: 25,
+            padding: 10,
+            marginLeft: 10,
+            marginTop: 2,
+          }}
+          accessibilityLabel="Чат"
+        >
+          <Ionicons name="chatbubble-ellipses" size={28} color="#fff" />
+        </TouchableOpacity>
+      </View>
     </View>
   )
 }

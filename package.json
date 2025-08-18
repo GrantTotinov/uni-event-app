@@ -60,7 +60,9 @@
     "react-native-screens": "~4.4.0",
     "react-native-size-matters": "^0.4.2",
     "react-native-web": "~0.19.13",
-    "react-native-webview": "13.12.5"
+    "react-native-webview": "13.12.5",
+    "stream-chat-expo": "^8.3.3",
+    "stream-chat-react-native": "^8.3.3"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
