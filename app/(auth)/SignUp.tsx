@@ -5,33 +5,33 @@ import {
   StyleSheet,
   TouchableOpacity,
   ToastAndroid,
-} from "react-native"
-import React, { useContext, useState } from "react"
-import Ionicons from "@expo/vector-icons/Ionicons"
-import Colors from "@/data/Colors"
-import TextInputField from "@/components/Shared/TextInputField"
-import Button from "@/components/Shared/Button"
-import * as ImagePicker from "expo-image-picker"
-import { createUserWithEmailAndPassword } from "firebase/auth"
-import { auth } from "@/configs/FirebaseConfig"
-import { upload } from "cloudinary-react-native"
-import { cld, options } from "@/configs/CloudinaryConfig"
-import axios from "axios"
-import { name } from "@cloudinary/url-gen/actions/namedTransformation"
-import { useRouter } from "expo-router"
-import { AuthContext } from "@/context/AuthContext"
+} from 'react-native'
+import React, { useContext, useState } from 'react'
+import Ionicons from '@expo/vector-icons/Ionicons'
+import Colors from '@/data/Colors'
+import TextInputField from '@/components/Shared/TextInputField'
+import Button from '@/components/Shared/Button'
+import * as ImagePicker from 'expo-image-picker'
+import { createUserWithEmailAndPassword } from 'firebase/auth'
+import { auth } from '@/configs/FirebaseConfig'
+import { upload } from 'cloudinary-react-native'
+import { cld, options } from '@/configs/CloudinaryConfig'
+import axios from 'axios'
+import { name } from '@cloudinary/url-gen/actions/namedTransformation'
+import { useRouter } from 'expo-router'
+import { AuthContext } from '@/context/AuthContext'
 
 export default function SignUp() {
-  const [profileImage, setProfileImage] = useState<string | undefined>("")
-  const [fullName, setFullName] = useState<string | undefined>("")
-  const [email, setEmail] = useState<string | undefined>("")
-  const [password, setPassword] = useState<string | undefined>("")
+  const [profileImage, setProfileImage] = useState<string | undefined>('')
+  const [fullName, setFullName] = useState<string | undefined>('')
+  const [email, setEmail] = useState<string | undefined>('')
+  const [password, setPassword] = useState<string | undefined>('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const { user, setUser } = useContext(AuthContext)
   const onBtnPress = () => {
     if (!email || !password || !fullName || !profileImage) {
-      ToastAndroid.show("Моля попълнете всички полета", ToastAndroid.BOTTOM)
+      ToastAndroid.show('Моля попълнете всички полета', ToastAndroid.BOTTOM)
       return
     }
 
@@ -50,20 +50,20 @@ export default function SignUp() {
               console.log(response?.url)
               try {
                 const result = await axios.post(
-                  process.env.EXPO_PUBLIC_HOST_URL + "/user",
+                  process.env.EXPO_PUBLIC_HOST_URL + '/user',
                   {
                     name: fullName,
                     email: email,
-                    image: response?.url ?? "",
+                    image: response?.url ?? '',
                   }
                 )
                 console.log(result)
                 setUser({
                   name: fullName,
                   email: email,
-                  image: response?.url ?? "",
+                  image: response?.url ?? '',
                 })
-                router.push("/landing")
+                router.push('/landing')
                 setLoading(false)
               } catch (e) {
                 console.log(e)
@@ -82,7 +82,7 @@ export default function SignUp() {
   const pickImage = async () => {
     // No permissions request is necessary for launching the image library
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [4, 4],
       quality: 0.5,
@@ -104,7 +104,7 @@ export default function SignUp() {
       <Text
         style={{
           fontSize: 25,
-          fontWeight: "bold",
+          fontWeight: 'bold',
         }}
       >
         Създайте нов акаунт
@@ -112,8 +112,8 @@ export default function SignUp() {
 
       <View
         style={{
-          display: "flex",
-          alignItems: "center",
+          display: 'flex',
+          alignItems: 'center',
         }}
       >
         <View>
@@ -126,12 +126,12 @@ export default function SignUp() {
             ) : (
               <Image
                 style={styles.profileImage}
-                source={require("./../../assets/images/profile.png")}
+                source={require('./../../assets/images/profile.png')}
               />
             )}
             <Ionicons
               style={{
-                position: "absolute",
+                position: 'absolute',
                 bottom: 0,
                 right: 0,
               }}
