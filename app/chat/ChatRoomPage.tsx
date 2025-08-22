@@ -1,181 +1,131 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+
 import {
-  View,
+  Platform,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  Platform,
-  Keyboard,
-  SafeAreaView,
-  BackHandler,
-  KeyboardAvoidingView,
-  TouchableWithoutFeedback,
+  View,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+
+import { useLocalSearchParams, useRouter } from 'expo-router'
+
 import {
-  Chat,
   Channel,
-  MessageList,
+  Chat,
   MessageInput,
-  Thread,
+  MessageList,
+  OverlayProvider,
 } from 'stream-chat-expo'
+
+import { chatClient } from '@/configs/streamChatConfig'
+
 import Colors from '@/data/Colors'
 
-interface ChatRoomProps {
-  chatClient: any
-  channel: any
-  onBack: () => void
-}
+import Ionicons from '@expo/vector-icons/Ionicons'
 
-export default function ChatRoomPage({
-  chatClient,
-  channel,
-  onBack,
-}: ChatRoomProps) {
-  const [thread, setThread] = useState<any>(null)
-  const [keyboardHeight, setKeyboardHeight] = useState(0)
-  const [keyboardVisible, setKeyboardVisible] = useState(false)
-  const isAndroid = Platform.OS === 'android'
+export default function ChatRoomRoute() {
+  const router = useRouter()
 
-  // --- Keyboard listeners ---
+  const { cid } = useLocalSearchParams<{ cid: string }>()
+
+  const [channelReady, setChannelReady] = useState(false)
+
+  const channel = useMemo(() => {
+    if (!cid || !chatClient) return null
+
+    const [type, id] = String(cid).split(':')
+
+    return chatClient.channel(type, id)
+  }, [cid])
+
   useEffect(() => {
-    const showEvent = isAndroid ? 'keyboardDidShow' : 'keyboardWillShow'
-    const hideEvent = isAndroid ? 'keyboardDidHide' : 'keyboardWillHide'
+    let mounted = true
 
-    const showListener = Keyboard.addListener(showEvent, (e) => {
-      setKeyboardVisible(true)
-      setKeyboardHeight(e.endCoordinates.height)
-    })
-    const hideListener = Keyboard.addListener(hideEvent, () => {
-      setKeyboardVisible(false)
-      setKeyboardHeight(0)
-    })
+    ;(async () => {
+      if (!channel) return
+
+      try {
+        await channel.watch()
+
+        if (mounted) setChannelReady(true)
+      } catch (e) {
+        console.warn('Channel watch error:', e)
+      }
+    })()
 
     return () => {
-      showListener.remove()
-      hideListener.remove()
+      mounted = false
     }
-  }, [])
+  }, [channel])
 
-  // --- Android back button ---
-  useEffect(() => {
-    const handleBack = () => {
-      if (keyboardVisible) {
-        Keyboard.dismiss()
-        return true
-      }
-      if (thread) {
-        setThread(null)
-        return true
-      }
-      return false
-    }
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      handleBack
-    )
-    return () => backHandler.remove()
-  }, [keyboardVisible, thread])
-
-  if (!chatClient || !channel) {
-    return (
-      <SafeAreaView style={styles.center}>
-        <Text style={{ color: Colors.GRAY }}>
-          Чат клиентът не е инициализиран.
-        </Text>
-      </SafeAreaView>
-    )
+  if (!channel || !channelReady) {
+    return <View style={{ flex: 1, backgroundColor: Colors.WHITE }} />
   }
 
-  const channelName = channel.data?.name || 'Чат'
-  const dismissKeyboard = useCallback(() => Keyboard.dismiss(), [])
+  // name is a custom field – not present in the SDK’s default type, so cast to any
+
+  const channelName =
+    ((channel.data as any) && (channel.data as any).name) || 'Чат'
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <OverlayProvider>
       <Chat client={chatClient}>
         <Channel
           channel={channel}
-          thread={thread}
-          disableKeyboardCompatibleView={true} // важно за pan
-          AttachmentPicker={() => null}
+          // Keep Android "pan/resize" conflicts away by letting Stream skip its own wrapper
+
+          disableKeyboardCompatibleView={Platform.OS === 'android'}
         >
-          <ChatHeader
-            channelName={channelName}
-            onBack={onBack}
-            dismissKeyboard={dismissKeyboard}
-          />
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.back}>
+              <Ionicons name="arrow-back" size={24} color={Colors.PRIMARY} />
+            </TouchableOpacity>
 
-          {/* KeyboardAvoidingView с правилно отместване */}
-          <KeyboardAvoidingView
-            behavior={isAndroid ? 'height' : 'padding'}
-            style={{ flex: 1 }}
-            keyboardVerticalOffset={isAndroid ? -240 : 60}
-          >
-            <TouchableWithoutFeedback onPress={dismissKeyboard}>
-              <View style={{ flex: 1 }}>
-                <MessageList
-                  onThreadSelect={setThread}
-                  onPress={dismissKeyboard}
-                  contentContainerStyle={{
-                    paddingBottom: keyboardVisible ? keyboardHeight + 8 : 8, // 8px padding над Input
-                  }}
-                />
-                <MessageInput disableAttachments dismissKeyboardOnSubmit />
-              </View>
-            </TouchableWithoutFeedback>
-          </KeyboardAvoidingView>
+            <Text style={styles.title} numberOfLines={1}>
+              {channelName}
+            </Text>
 
-          {thread && (
-            <Thread
-              thread={thread}
-              onThreadDismount={() => setThread(null)}
-              MessageInput={() => (
-                <MessageInput disableAttachments dismissKeyboardOnSubmit />
-              )}
-            />
-          )}
+            <View style={{ width: 40 }} />
+          </View>
+
+          <MessageList />
+
+          <MessageInput />
         </Channel>
       </Chat>
-    </SafeAreaView>
-  )
-}
-
-function ChatHeader({ channelName, onBack, dismissKeyboard }) {
-  return (
-    <View style={styles.header}>
-      <TouchableOpacity onPress={onBack} style={styles.backButton}>
-        <Ionicons name="arrow-back" size={24} color={Colors.PRIMARY} />
-      </TouchableOpacity>
-      <Text style={styles.title} numberOfLines={1}>
-        {channelName}
-      </Text>
-      <TouchableOpacity onPress={dismissKeyboard} style={styles.headerAction}>
-        <Ionicons name="chevron-down" size={24} color={Colors.PRIMARY} />
-      </TouchableOpacity>
-    </View>
+    </OverlayProvider>
   )
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: Colors.WHITE },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
     flexDirection: 'row',
+
     alignItems: 'center',
+
     paddingHorizontal: 15,
+
     paddingVertical: 10,
+
     borderBottomWidth: 1,
+
     borderBottomColor: Colors.LIGHT_GRAY,
+
     backgroundColor: Colors.WHITE,
-    zIndex: 10,
   },
-  backButton: { padding: 8 },
-  headerAction: { padding: 8, width: 40, alignItems: 'center' },
+
+  back: { padding: 8 },
+
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.PRIMARY,
-    marginLeft: 8,
     flex: 1,
+
+    marginLeft: 8,
+
+    fontSize: 18,
+
+    fontWeight: '600',
+
+    color: Colors.PRIMARY,
   },
 })

@@ -1,97 +1,69 @@
-import React, { useContext, useState, useEffect } from 'react'
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
-import { StreamChat } from 'stream-chat'
+import React, { useContext, useEffect, useState } from 'react'
+import { ActivityIndicator, View } from 'react-native'
+import { useRouter } from 'expo-router'
 import { Chat, ChannelList, OverlayProvider } from 'stream-chat-expo'
-import Colors from '@/data/Colors'
 import { AuthContext } from '@/context/AuthContext'
+import Colors from '@/data/Colors'
 import { auth } from '@/configs/FirebaseConfig'
-import ChatRoomPage from './ChatRoomPage'
+import { chatClient, connectStreamUser } from '@/configs/streamChatConfig'
 
-const STREAM_API_KEY = process.env.EXPO_PUBLIC_STREAM_CHAT_API_KEY
-
-let chatClient: StreamChat | null = null
-if (!chatClient && STREAM_API_KEY?.trim()) {
-  chatClient = StreamChat.getInstance(STREAM_API_KEY)
-}
-
-export default function ChatListPage() {
+export default function ChatIndex() {
+  const router = useRouter()
   const { user } = useContext(AuthContext)
-  const [clientReady, setClientReady] = useState(false)
-  const [selectedChannel, setSelectedChannel] = useState<any>(null)
+  const [ready, setReady] = useState(false)
 
-  const getFirebaseUid = () => auth.currentUser?.uid
+  // Firebase UID is the Stream user id
+  const uid = auth.currentUser?.uid || ''
 
   useEffect(() => {
-    const connectUser = async () => {
-      if (!chatClient || !user?.name || !user?.email) return
-      const uid = getFirebaseUid()
+    let mounted = true
+    ;(async () => {
       if (!uid) return
-
       try {
-        const token = chatClient.devToken(uid)
-        await chatClient.connectUser(
-          { id: uid, name: user.name, image: user.image || undefined },
-          token
-        )
-        setClientReady(true)
-      } catch (err) {
-        console.error('Chat connect error:', err)
+        await connectStreamUser({
+          id: uid,
+          name: user?.name,
+          image: user?.image,
+        })
+        if (mounted) setReady(true)
+      } catch (e) {
+        console.warn('Stream connect error:', e)
       }
-    }
-
-    connectUser()
+    })()
     return () => {
-      chatClient?.disconnectUser().catch(console.error)
+      mounted = false
     }
-  }, [user])
+  }, [uid, user?.name, user?.image])
 
-  if (!clientReady) {
+  if (!ready) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={Colors.PRIMARY} />
-        <Text style={{ marginTop: 10 }}>Свързване с чат сървъра...</Text>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={Colors.PRIMARY} />
       </View>
     )
   }
 
-  if (selectedChannel) {
-    return (
-      <OverlayProvider>
-        <ChatRoomPage
-          chatClient={chatClient!}
-          channel={selectedChannel}
-          onBack={() => setSelectedChannel(null)}
-        />
-      </OverlayProvider>
-    )
-  }
+  // Show channels where current user (by UID) is a member
+  const filters = { type: 'messaging', members: { $in: [uid] } }
+  const sort = { last_message_at: -1 as const }
+  const options = { state: true, watch: true, presence: true }
 
-  // Wrap Chat and ChannelList with OverlayProvider for theme/context support
   return (
     <OverlayProvider>
-      <Chat client={chatClient!}>
-        <View style={styles.container}>
-          <Text style={styles.header}>Чат канали</Text>
-          <ChannelList
-            onSelect={(channel) => setSelectedChannel(channel)}
-            filters={{ members: { $in: [getFirebaseUid()!] } }}
-            sort={{ last_message_at: -1 }}
-            options={{ state: true, presence: true, watch: true }}
-          />
-        </View>
+      <Chat client={chatClient}>
+        <ChannelList
+          filters={filters}
+          sort={sort}
+          options={options}
+          onSelect={(channel) => {
+            // Typed dynamic route push
+            router.push({
+              pathname: '/chat/[cid]',
+              params: { cid: channel.cid },
+            })
+          }}
+        />
       </Chat>
     </OverlayProvider>
   )
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.WHITE, paddingTop: 50 },
-  header: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginLeft: 20,
-    marginBottom: 10,
-  },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-})
