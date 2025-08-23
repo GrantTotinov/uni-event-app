@@ -24,7 +24,7 @@ export default function Home() {
       data={[]} // Replace with actual data if needed
       renderItem={null}
       ListHeaderComponent={
-        <View style={{ padding: 20, paddingTop: 40 }}>
+        <View style={{ paddingTop: 40 }}>
           <Header />
           <LatestPost search={search} />
         </View>

@@ -1,9 +1,6 @@
 import { StreamChat } from 'stream-chat'
 
-const API_KEY =
-  process.env.EXPO_PUBLIC_STREAM_CHAT_API_KEY ||
-  process.env.EXPO_PUBLIC_STREAM_API_KEY ||
-  ''
+const API_KEY = process.env.EXPO_PUBLIC_STREAM_CHAT_API_KEY || ''
 
 if (!API_KEY) {
   console.warn('Missing EXPO_PUBLIC_STREAM_CHAT_API_KEY in .env')
@@ -13,11 +10,33 @@ if (!API_KEY) {
 export const chatClient = StreamChat.getInstance(API_KEY)
 
 /**
+ * Generate dev token for a user (development only!)
+ * In production, generate tokens on your backend server
+ */
+export const generateUserToken = (userId: string): string => {
+  return chatClient.devToken(userId)
+}
+
+/**
+ * Create user data object from Firebase user info
+ */
+export const createStreamUserData = (firebaseUser: {
+  uid: string
+  displayName?: string | null
+  photoURL?: string | null
+  email?: string | null
+}) => ({
+  id: firebaseUser.uid,
+  name: firebaseUser.displayName || firebaseUser.email || firebaseUser.uid,
+  image: firebaseUser.photoURL || undefined,
+})
+
+/**
  * Connect the logged-in user to Stream by Firebase UID.
- * Uses dev tokens for development only.
+ * This is handled by useCreateChatClient hook in ChatWrapper
  */
 export async function connectStreamUser(user: {
-  id: string // Firebase UID
+  id: string
   name?: string
   image?: string
 }) {
@@ -32,7 +51,7 @@ export async function connectStreamUser(user: {
       await chatClient.disconnectUser()
     }
 
-    const token = chatClient.devToken(user.id)
+    const token = generateUserToken(user.id)
     await chatClient.connectUser(
       {
         id: user.id,

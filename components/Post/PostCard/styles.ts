@@ -6,11 +6,17 @@ export const styles = StyleSheet.create({
     backgroundColor: Colors.WHITE,
     borderRadius: 5,
     marginTop: 10,
-    padding: 10,
+    //padding: 10,
+  },
+  headerContainer: {
+    paddingLeft: 10,
+    paddingRight: 10,
   },
   contentText: {
     fontSize: 15,
     marginTop: 10,
+    paddingLeft: 10,
+    paddingRight: 10,
   },
   postImage: {
     width: '100%',

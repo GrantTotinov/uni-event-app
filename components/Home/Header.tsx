@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import Colors from '@/data/Colors'
 import { AuthContext } from '@/context/AuthContext'
+import { MaterialIcons } from '@expo/vector-icons'
 
 export default function Header() {
   const { user } = useContext(AuthContext)
@@ -12,15 +13,57 @@ export default function Header() {
   // Handler for navigating to the chat page
   const handleChatPress = () => {
     try {
-      // Use the correct route for Expo Router
       router.push('/chat')
     } catch (error) {
       console.error('Navigation error:', error)
     }
   }
 
+  // Handler for notifications (може да добавите логика по-късно)
+  const handleNotificationsPress = () => {
+    // TODO: Add navigation or modal for notifications
+    console.log('Notifications pressed')
+  }
+
   return (
     <View style={{ paddingBottom: 10 }}>
+      {/* Top bar */}
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          paddingTop: 10,
+          paddingBottom: 10,
+        }}
+      >
+        <TouchableOpacity
+          onPress={handleChatPress}
+          style={{
+            backgroundColor: Colors.PRIMARY,
+            borderRadius: 25,
+            padding: 10,
+            marginLeft: 10,
+          }}
+          accessibilityLabel="Чат"
+        >
+          <Ionicons name="chatbubbles-outline" size={24} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={handleNotificationsPress}
+          style={{
+            backgroundColor: Colors.PRIMARY,
+            borderRadius: 25,
+            padding: 10,
+            marginLeft: 10,
+          }}
+          accessibilityLabel="Известия"
+        >
+          <MaterialIcons name="notifications-none" size={24} color="#fff" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Старият header-контент */}
       <View
         style={{
           flexDirection: 'row',
@@ -59,19 +102,6 @@ export default function Header() {
             </Text>
           </View>
         </View>
-        <TouchableOpacity
-          onPress={handleChatPress}
-          style={{
-            backgroundColor: Colors.PRIMARY,
-            borderRadius: 25,
-            padding: 10,
-            marginLeft: 10,
-            marginTop: 2,
-          }}
-          accessibilityLabel="Чат"
-        >
-          <Ionicons name="chatbubble-ellipses" size={28} color="#fff" />
-        </TouchableOpacity>
       </View>
     </View>
   )
