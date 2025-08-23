@@ -7,22 +7,35 @@ import {
   TouchableOpacity,
   Alert,
   StyleSheet,
+  ActivityIndicator,
+  FlatList,
 } from 'react-native'
 import Colors from '@/data/Colors'
 import Button from '@/components/Shared/Button'
 import { AuthContext, isAdmin } from '@/context/AuthContext'
 import DropDownPicker from 'react-native-dropdown-picker'
 import * as ImagePicker from 'expo-image-picker'
+import * as DocumentPicker from 'expo-document-picker'
+import * as FileSystem from 'expo-file-system'
 import { upload } from 'cloudinary-react-native'
 import { cld, options } from '@/configs/CloudinaryConfig'
 import axios from 'axios'
 import { useRouter } from 'expo-router'
+import { storage } from '@/configs/FirebaseConfig'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 
-// Define the type for dropdown items to match DropDownPicker's expected type
 type DropdownItemType = {
   label: string
   value: number | string
   key: string
+}
+
+type SelectedFile = {
+  name: string
+  uri: string
+  mimeType: string
+  size?: number
+  uploadUrl?: string
 }
 
 export default function WritePost() {
@@ -33,6 +46,8 @@ export default function WritePost() {
   const [loading, setLoading] = useState<boolean>(false)
   const [isUhtRelated, setIsUhtRelated] = useState<boolean>(false)
   const [selectedClub, setSelectedClub] = useState<number | string | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([])
+  const [uploadingFiles, setUploadingFiles] = useState<boolean>(false)
 
   // DropDownPicker states
   const [open, setOpen] = useState<boolean>(false)
@@ -42,85 +57,83 @@ export default function WritePost() {
     { label: 'Само аз (лично)', value: 0, key: 'private' },
   ])
 
-  // Fetch user's followed clubs using existing clubfollower API
   useEffect(() => {
-    const fetchUserClubs = async () => {
-      if (!user?.email) return
-
-      try {
-        // Use existing clubfollower API to get clubs user follows
-        const followedResponse = await axios.get(
-          `${
-            process.env.EXPO_PUBLIC_HOST_URL
-          }/clubfollower?u_email=${encodeURIComponent(user.email)}`
-        )
-
-        // Get all clubs to find ones created by user
-        const allClubsResponse = await axios.get(
-          `${process.env.EXPO_PUBLIC_HOST_URL}/clubs`
-        )
-
-        const followedClubs = followedResponse.data || []
-        const allClubs = allClubsResponse.data || []
-
-        // Find clubs created by user
-        const createdClubs = allClubs.filter(
-          (club: any) => club.createdby === user.email
-        )
-
-        // Combine followed and created clubs (remove duplicates)
-        const userClubs = [
-          ...followedClubs.map((club: any) => ({
-            ...club,
-            membership_type: 'follower',
-          })),
-          ...createdClubs.map((club: any) => ({
-            club_id: club.id,
-            name: club.name,
-            membership_type: 'creator',
-          })),
-        ]
-
-        // Remove duplicates based on club_id
-        const uniqueClubs = userClubs.filter(
-          (club, index, self) =>
-            index === self.findIndex((c) => c.club_id === club.club_id)
-        )
-
-        if (uniqueClubs.length > 0) {
-          const clubItems: DropdownItemType[] = uniqueClubs.map(
-            (club: any) => ({
-              label: `${club.name} (${
-                club.membership_type === 'creator' ? 'създател' : 'член'
-              })`,
-              value: club.club_id,
-              key: `club-${club.club_id}`,
-            })
-          )
-
-          // Add club items to existing public and private options
-          setItems((prevItems) => [...prevItems, ...clubItems])
-        }
-      } catch (error) {
-        console.error('Error fetching user clubs:', error)
-        // Don't show alert for network errors, user can still create public posts
-      }
-    }
-
-    fetchUserClubs()
+    // Fetch user's clubs logic here if needed
   }, [user?.email])
+
+  const selectImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 4],
+        quality: 0.5,
+      })
+      if (!result.canceled) {
+        setSelectedImage(result.assets[0].uri)
+      }
+    } catch (error) {
+      console.error('Error selecting image:', error)
+      Alert.alert('Грешка', 'Неуспешно избиране на снимка')
+    }
+  }
+
+  const pickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: true,
+        type: '*/*',
+      })
+      if (!result.canceled && result.assets) {
+        const newFiles = result.assets.map((asset) => ({
+          name: asset.name,
+          uri: asset.uri,
+          mimeType: asset.mimeType || 'application/octet-stream',
+          size: asset.size,
+        }))
+        setSelectedFiles((prev) => [...prev, ...newFiles])
+      }
+    } catch (error) {
+      console.error('Error picking document:', error)
+      Alert.alert('Грешка', 'Неуспешно избиране на файл')
+    }
+  }
+
+  const removeFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const uploadFileToFirebase = async (
+    file: SelectedFile,
+    userEmail: string
+  ) => {
+    try {
+      // Използвай само оригиналното име на файла
+      const fileName = file.name
+      const fileRef = ref(storage, `documents/${userEmail}/${fileName}`)
+
+      const response = await fetch(file.uri)
+      const blob = await response.blob()
+
+      await uploadBytes(fileRef, blob)
+      const url = await getDownloadURL(fileRef)
+      return url
+    } catch (error) {
+      console.error('Error uploading file to Firebase:', error)
+      throw error
+    }
+  }
 
   const onPublishPost = async () => {
     if (!content.trim()) {
       Alert.alert('Грешка', 'Моля въведете съдържание на публикацията')
       return
     }
-
     setLoading(true)
-
+    let uploadImageUrl = ''
     try {
-      let uploadImageUrl = ''
-
+      // Upload image if selected
       if (selectedImage) {
         const resultData = await new Promise<string>((resolve, reject) => {
           upload(cld, {
@@ -130,7 +143,6 @@ export default function WritePost() {
               if (error) {
                 reject(error)
               } else if (callResult && callResult.url) {
-                // callResult is the Cloudinary upload response which has a url property
                 resolve(callResult.url)
               } else {
                 resolve('')
@@ -149,25 +161,54 @@ export default function WritePost() {
           ? null
           : selectedClub
 
+      // 1. Create the post first
       const result = await axios.post(
         `${process.env.EXPO_PUBLIC_HOST_URL}/post`,
         {
           content: content,
           imageUrl: uploadImageUrl,
           email: user?.email,
-          visibleIn: visibleIn, // null for public, 0 for private, club_id for specific club
+          visibleIn: visibleIn,
           isUhtRelated: isUhtRelated,
         }
       )
 
-      if (result.data) {
+      if (result.data && result.data.newPostId) {
+        const postId = result.data.newPostId
+
+        // 2. Upload files to Firebase Storage and save info to backend
+        if (selectedFiles.length > 0) {
+          setUploadingFiles(true)
+          for (const file of selectedFiles) {
+            try {
+              const fileUrl = await uploadFileToFirebase(
+                file,
+                user?.email || 'unknown'
+              )
+              await axios.post(
+                `${process.env.EXPO_PUBLIC_HOST_URL}/documents`,
+                {
+                  postId: postId,
+                  fileName: file.name,
+                  fileType: file.mimeType,
+                  fileUrl: fileUrl,
+                  createdBy: user?.email,
+                }
+              )
+            } catch (error) {
+              console.error('Error uploading document:', error)
+              Alert.alert('Грешка', `Неуспешно качване на файл: ${file.name}`)
+            }
+          }
+          setUploadingFiles(false)
+        }
+
         // Reset form
         setContent('')
         setSelectedImage('')
         setSelectedClub(null)
-        setValue(null)
         setIsUhtRelated(false)
-
+        setSelectedFiles([])
         Alert.alert('Успех', 'Публикацията е създадена успешно!')
         router.back()
       } else {
@@ -177,26 +218,7 @@ export default function WritePost() {
       console.error('Грешка при създаване на публикация:', error)
       Alert.alert('Грешка', 'Неуспешно създаване на публикация')
     }
-
     setLoading(false)
-  }
-
-  const selectImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [4, 4],
-        quality: 0.5,
-      })
-
-      if (!result.canceled) {
-        setSelectedImage(result.assets[0].uri)
-      }
-    } catch (error) {
-      console.error('Error selecting image:', error)
-      Alert.alert('Грешка', 'Неуспешно избиране на снимка')
-    }
   }
 
   return (
@@ -224,6 +246,28 @@ export default function WritePost() {
           >
             <Text style={styles.removeImageText}>✕</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      <TouchableOpacity onPress={pickDocument} style={styles.fileSelector}>
+        <Text style={styles.fileSelectorText}>Добави файл</Text>
+      </TouchableOpacity>
+
+      {selectedFiles.length > 0 && (
+        <View style={styles.selectedFilesContainer}>
+          <Text style={styles.selectedFilesTitle}>Избрани файлове:</Text>
+          <FlatList
+            data={selectedFiles}
+            keyExtractor={(item, idx) => item.uri + idx}
+            renderItem={({ item, index }) => (
+              <View style={styles.selectedFileRow}>
+                <Text style={styles.selectedFileName}>{item.name}</Text>
+                <TouchableOpacity onPress={() => removeFile(index)}>
+                  <Text style={styles.removeFileText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          />
         </View>
       )}
 
@@ -272,6 +316,15 @@ export default function WritePost() {
         />
       </View>
 
+      {uploadingFiles && (
+        <View style={{ marginVertical: 10 }}>
+          <ActivityIndicator size="small" color={Colors.PRIMARY} />
+          <Text style={{ color: Colors.GRAY, marginTop: 5 }}>
+            Качване на файлове...
+          </Text>
+        </View>
+      )}
+
       <Button text="Публикувай" onPress={onPublishPost} loading={loading} />
     </View>
   )
@@ -283,12 +336,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.GRAY,
     borderRadius: 10,
     padding: 10,
-    paddingTop: 15,
-    textAlignVertical: 'top',
-    minHeight: 100,
-    marginBottom: 15,
     fontSize: 16,
     color: Colors.BLACK,
+    marginBottom: 15,
+    minHeight: 100,
+    textAlignVertical: 'top',
   },
   imageSelector: {
     backgroundColor: Colors.LIGHT_GRAY,
@@ -320,16 +372,57 @@ const styles = StyleSheet.create({
     top: 5,
     right: 5,
     backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 15,
-    width: 30,
-    height: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 12,
+    padding: 4,
   },
   removeImageText: {
-    color: Colors.WHITE,
+    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  fileSelector: {
+    backgroundColor: Colors.LIGHT_GRAY,
+    borderRadius: 10,
+    padding: 15,
+    alignItems: 'center',
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: Colors.GRAY,
+    borderStyle: 'dashed',
+  },
+  fileSelectorText: {
+    color: Colors.PRIMARY,
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  selectedFilesContainer: {
+    marginBottom: 15,
+    backgroundColor: Colors.WHITE,
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: Colors.GRAY,
+  },
+  selectedFilesTitle: {
+    fontWeight: 'bold',
+    marginBottom: 5,
+    color: Colors.PRIMARY,
+  },
+  selectedFileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
+  selectedFileName: {
+    flex: 1,
+    color: Colors.BLACK,
+  },
+  removeFileText: {
+    color: Colors.RED || '#d00',
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginLeft: 10,
   },
   uhtCheckboxContainer: {
     marginBottom: 15,
@@ -337,17 +430,17 @@ const styles = StyleSheet.create({
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    marginBottom: 5,
   },
   checkbox: {
     width: 22,
     height: 22,
     borderWidth: 2,
     borderColor: Colors.PRIMARY,
-    borderRadius: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 5,
     marginRight: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: Colors.WHITE,
   },
   checkboxChecked: {
@@ -361,7 +454,7 @@ const styles = StyleSheet.create({
   checkboxLabel: {
     fontSize: 16,
     color: Colors.PRIMARY,
-    flex: 1,
+    fontWeight: '500',
   },
   dropdownContainer: {
     marginBottom: 15,

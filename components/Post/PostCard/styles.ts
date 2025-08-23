@@ -575,4 +575,23 @@ export const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 5,
   },
+  documentsContainer: {
+    padding: 10,
+    backgroundColor: '#f2f6ff',
+    borderRadius: 8,
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  documentsTitle: {
+    fontWeight: 'bold',
+    color: '#2a3b5d',
+    marginBottom: 4,
+  },
+  documentRow: {
+    paddingVertical: 4,
+  },
+  documentName: {
+    color: '#005fff',
+    textDecorationLine: 'underline',
+  },
 })
