@@ -2,64 +2,183 @@ import {
   useInfiniteQuery,
   useMutation,
   useQueryClient,
-  QueryFunctionContext,
+  useQuery,
 } from '@tanstack/react-query'
 import axios from 'axios'
+import { CACHE_KEYS, CACHE_TIMES, GC_TIMES } from '@/configs/CacheConfig'
 
 export interface Post {
   post_id: number
   context: string
   imageurl?: string
-  club?: number
   createdby: string
+  club?: string
+  is_uht_related: boolean
   createdon: string
   createdon_local: string
   name: string
   image: string
+  user_role?: string
   role: string
   like_count: number
   comment_count: number
-  is_liked: boolean
-  is_uht_related?: boolean
+  is_liked?: boolean
+}
+
+export interface PostLike {
+  postId: number
+  isLiked: boolean
+  count: number
 }
 
 export interface UsePostsOptions {
-  selectedTab: number
+  club?: string
   userEmail?: string
   followedOnly?: boolean
-  enabled?: boolean
-  postsPerPage?: number
-  prefetchNextPage?: boolean
-  searchQuery?: string
+  search?: string
   uhtOnly?: boolean
   orderField?: string
   orderDir?: string
+  limit?: number
+  enabled?: boolean
 }
 
-export interface PostsResponse {
-  posts: Post[]
-  nextOffset?: number
-}
-
-export function usePosts({
-  selectedTab,
-  userEmail,
-  followedOnly = false,
-  enabled = true,
-  postsPerPage = 10,
-  prefetchNextPage = true,
-  searchQuery = '',
-  uhtOnly = false,
-  orderField,
-  orderDir,
-}: UsePostsOptions) {
+// Hook for post likes with caching
+export function usePostLikes(
+  postIds: number[],
+  userEmail?: string,
+  enabled: boolean = true
+) {
   const queryClient = useQueryClient()
-  const queryKey = [
-    'posts',
-    selectedTab,
+
+  // Query for checking which posts user has liked
+  const likedPostsQuery = useQuery({
+    queryKey: [
+      CACHE_KEYS.POST_LIKES,
+      CACHE_KEYS.USER,
+      userEmail,
+      postIds.sort(),
+    ],
+    queryFn: async () => {
+      if (!userEmail || postIds.length === 0) return []
+
+      const response = await axios.get(
+        `${process.env.EXPO_PUBLIC_HOST_URL}/post-like`,
+        {
+          params: {
+            userEmail,
+            postIds: postIds.join(','),
+          },
+        }
+      )
+      return response.data.likedPostIds || []
+    },
+    enabled: enabled && !!userEmail && postIds.length > 0,
+    staleTime: CACHE_TIMES.POSTS,
+    gcTime: GC_TIMES.MEDIUM,
+  })
+
+  // Mutation for toggling post likes
+  const toggleLikeMutation = useMutation({
+    mutationFn: async ({
+      postId,
+      isLiked,
+    }: {
+      postId: number
+      isLiked: boolean
+    }) => {
+      if (!userEmail) throw new Error('User email required')
+
+      if (isLiked) {
+        return axios.delete(`${process.env.EXPO_PUBLIC_HOST_URL}/post-like`, {
+          data: { postId, userEmail },
+        })
+      } else {
+        return axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/post-like`, {
+          postId,
+          userEmail,
+        })
+      }
+    },
+    onMutate: async ({ postId, isLiked }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({
+        queryKey: [CACHE_KEYS.POST_LIKES, CACHE_KEYS.USER, userEmail],
+      })
+
+      // Snapshot previous value
+      const previousLikedPosts =
+        (queryClient.getQueryData([
+          CACHE_KEYS.POST_LIKES,
+          CACHE_KEYS.USER,
+          userEmail,
+          postIds.sort(),
+        ]) as number[]) || []
+
+      // Optimistically update liked posts
+      const newLikedPosts = isLiked
+        ? previousLikedPosts.filter((id) => id !== postId)
+        : [...previousLikedPosts, postId]
+
+      queryClient.setQueryData(
+        [CACHE_KEYS.POST_LIKES, CACHE_KEYS.USER, userEmail, postIds.sort()],
+        newLikedPosts
+      )
+
+      return { previousLikedPosts }
+    },
+    onError: (err, variables, context) => {
+      // Revert optimistic update
+      if (context?.previousLikedPosts) {
+        queryClient.setQueryData(
+          [CACHE_KEYS.POST_LIKES, CACHE_KEYS.USER, userEmail, postIds.sort()],
+          context.previousLikedPosts
+        )
+      }
+    },
+    onSettled: () => {
+      // Refetch to ensure consistency
+      queryClient.invalidateQueries({
+        queryKey: [CACHE_KEYS.POST_LIKES, CACHE_KEYS.USER, userEmail],
+      })
+      queryClient.invalidateQueries({
+        queryKey: [CACHE_KEYS.POSTS],
+      })
+    },
+  })
+
+  const likedPostIds = likedPostsQuery.data || []
+
+  return {
+    likedPostIds,
+    isLoading: likedPostsQuery.isLoading,
+    error: likedPostsQuery.error,
+    toggleLike: toggleLikeMutation.mutate,
+    isToggling: toggleLikeMutation.isPending,
+  }
+}
+
+// Hook for posts with caching and infinite scroll
+export function usePosts(options: UsePostsOptions = {}) {
+  const queryClient = useQueryClient()
+  const {
+    club,
     userEmail,
     followedOnly,
-    searchQuery,
+    search,
+    uhtOnly,
+    orderField = 'createdon',
+    orderDir = 'DESC',
+    limit = 20,
+    enabled = true,
+  } = options
+
+  const queryKey = [
+    CACHE_KEYS.POSTS,
+    club,
+    userEmail,
+    followedOnly,
+    search,
     uhtOnly,
     orderField,
     orderDir,
@@ -74,52 +193,106 @@ export function usePosts({
     isFetchingNextPage,
     status,
     refetch,
-  } = useInfiniteQuery<PostsResponse, Error>({
+  } = useInfiniteQuery<Post[], Error>({
     queryKey,
-    queryFn: async (context: QueryFunctionContext) => {
-      const pageParam =
-        typeof context.pageParam === 'number' ? context.pageParam : 0
-
-      const baseUrl = `${process.env.EXPO_PUBLIC_HOST_URL}/post`
+    queryFn: async ({ pageParam = 0 }) => {
       const params: any = {
-        limit: postsPerPage,
+        limit,
         offset: pageParam,
-        orderField:
-          orderField ?? (selectedTab === 0 ? 'createdon' : 'like_count'),
-        orderDir: orderDir ?? 'DESC',
+        orderField,
+        orderDir,
       }
 
-      if (userEmail) {
-        params.u_email = userEmail
-      }
-      if (followedOnly) {
-        params.followedOnly = 'true'
-      }
-      if (searchQuery && searchQuery.trim()) {
-        params.search = searchQuery.trim()
-      }
-      if (uhtOnly) {
-        params.uhtOnly = 'true'
-      }
+      if (club) params.club = club
+      if (userEmail) params.u_email = userEmail
+      if (followedOnly) params.followedOnly = 'true'
+      if (search?.trim()) params.search = search.trim()
+      if (uhtOnly) params.uhtOnly = 'true'
 
-      const response = await axios.get(baseUrl, { params })
-      const posts = Array.isArray(response.data) ? response.data : []
-
-      return {
-        posts,
-        nextOffset:
-          posts.length === postsPerPage ? pageParam + postsPerPage : undefined,
-      }
+      const response = await axios.get(
+        `${process.env.EXPO_PUBLIC_HOST_URL}/post`,
+        { params }
+      )
+      return response.data || []
     },
-    getNextPageParam: (lastPage) => lastPage.nextOffset,
+    getNextPageParam: (lastPage, allPages) => {
+      if (!lastPage || lastPage.length < limit) {
+        return undefined
+      }
+      return allPages.length * limit
+    },
     enabled,
-    staleTime: searchQuery.trim() ? 30 * 1000 : 2 * 60 * 1000,
-    gcTime: 5 * 60 * 1000,
+    staleTime: search?.trim() ? CACHE_TIMES.POSTS_SEARCH : CACHE_TIMES.POSTS,
+    gcTime: GC_TIMES.MEDIUM,
     retry: 2,
     refetchOnWindowFocus: false,
     initialPageParam: 0,
   })
 
+  // Mutation for creating posts
+  const createPostMutation = useMutation({
+    mutationFn: async (postData: {
+      content: string
+      imageUrl?: string
+      visibleIn?: number
+      email: string
+      isUhtRelated?: boolean
+    }) => {
+      return axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/post`, postData)
+    },
+    onSuccess: () => {
+      // Invalidate and refetch posts
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.POSTS] })
+    },
+  })
+
+  // Mutation for editing posts
+  const editPostMutation = useMutation({
+    mutationFn: async ({
+      postId,
+      userEmail,
+      content,
+      imageUrl,
+      isUhtRelated,
+    }: {
+      postId: number
+      userEmail: string
+      content?: string
+      imageUrl?: string
+      isUhtRelated?: boolean
+    }) => {
+      return axios.put(`${process.env.EXPO_PUBLIC_HOST_URL}/post`, {
+        postId,
+        userEmail,
+        content,
+        imageUrl,
+        isUhtRelated,
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.POSTS] })
+    },
+  })
+
+  // Mutation for deleting posts
+  const deletePostMutation = useMutation({
+    mutationFn: async ({
+      postId,
+      userEmail,
+    }: {
+      postId: number
+      userEmail: string
+    }) => {
+      return axios.delete(`${process.env.EXPO_PUBLIC_HOST_URL}/post`, {
+        data: { postId, userEmail },
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.POSTS] })
+    },
+  })
+
+  // Like mutation for this specific hook
   const likeMutation = useMutation({
     mutationFn: async ({
       postId,
@@ -141,97 +314,37 @@ export function usePosts({
         })
       }
     },
-    onMutate: async (variables) => {
-      await queryClient.cancelQueries({ queryKey })
-
-      const previousData = queryClient.getQueryData(queryKey)
-
-      queryClient.setQueryData(queryKey, (oldData: any) => {
-        if (!oldData) return oldData
-
-        return {
-          ...oldData,
-          pages: oldData.pages.map((page: PostsResponse) => ({
-            ...page,
-            posts: Array.isArray(page.posts)
-              ? page.posts.map((post: Post) =>
-                  post.post_id === variables.postId
-                    ? {
-                        ...post,
-                        is_liked: !variables.isLiked,
-                        like_count: variables.isLiked
-                          ? Math.max(0, post.like_count - 1)
-                          : post.like_count + 1,
-                      }
-                    : post
-                )
-              : [],
-          })),
-        }
-      })
-
-      return { previousData }
-    },
-    onError: (err, variables, context) => {
-      if (context?.previousData) {
-        queryClient.setQueryData(queryKey, context.previousData)
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey })
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.POSTS] })
     },
   })
 
+  // Comment mutation for this specific hook
   const commentMutation = useMutation({
     mutationFn: async ({
       postId,
       userEmail,
       comment,
-      parentId,
     }: {
       postId: number
       userEmail: string
       comment: string
-      parentId?: number
     }) => {
       return axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/comment`, {
         postId,
         userEmail,
         comment,
-        parentId: parentId || null,
+        parentId: null,
       })
     },
-    onMutate: async (variables) => {
-      await queryClient.cancelQueries({ queryKey })
-
-      queryClient.setQueryData(queryKey, (oldData: any) => {
-        if (!oldData) return oldData
-
-        return {
-          ...oldData,
-          pages: oldData.pages.map((page: PostsResponse) => ({
-            ...page,
-            posts: Array.isArray(page.posts)
-              ? page.posts.map((post: Post) =>
-                  post.post_id === variables.postId
-                    ? { ...post, comment_count: post.comment_count + 1 }
-                    : post
-                )
-              : [],
-          })),
-        }
-      })
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.POSTS] })
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.COMMENTS] })
     },
   })
 
-  const invalidatePosts = () => {
-    queryClient.invalidateQueries({ queryKey: ['posts'] })
-  }
-
-  const posts =
-    data?.pages?.flatMap((page: PostsResponse) =>
-      Array.isArray(page.posts) ? page.posts : []
-    ) ?? []
+  // Combine all pages into a single array
+  const posts = data?.pages?.flatMap((page: Post[]) => page) ?? []
 
   return {
     posts,
@@ -241,70 +354,66 @@ export function usePosts({
     hasMore: !!hasNextPage,
     fetchNextPage,
     refetch,
+    createPostMutation,
+    editPostMutation,
+    deletePostMutation,
     likeMutation,
     commentMutation,
-    invalidatePosts,
   }
 }
 
-// Hook for all posts with search capability
+// Hook for all posts (latest) with search capability
 export function useAllPosts(
   userEmail?: string,
   followedOnly: boolean = false,
   searchQuery?: string
 ) {
   return usePosts({
-    selectedTab: 0,
     userEmail,
     followedOnly,
+    search: searchQuery,
+    orderField: 'createdon',
+    orderDir: 'DESC',
     enabled: true,
-    prefetchNextPage: true,
-    searchQuery,
-    uhtOnly: false,
   })
 }
 
-// Hook for popular posts with search capability
+// Hook for popular posts (ordered by like count) with search capability
 export function usePopularPosts(
   userEmail?: string,
   followedOnly: boolean = false,
   searchQuery?: string
 ) {
   return usePosts({
-    selectedTab: 1,
     userEmail,
     followedOnly,
+    search: searchQuery,
+    orderField: 'like_count',
+    orderDir: 'DESC',
     enabled: true,
-    prefetchNextPage: true,
-    searchQuery,
-    uhtOnly: false,
   })
 }
 
-// Hook for UHT posts only (public and UHT-related), always newest first
+// Hook for UHT posts with search capability
 export function useUhtPosts(userEmail?: string, searchQuery?: string) {
   return usePosts({
-    selectedTab: 2,
     userEmail,
-    followedOnly: false,
-    enabled: true,
-    prefetchNextPage: true,
-    searchQuery,
+    search: searchQuery,
     uhtOnly: true,
-    orderField: 'createdon', // Always order by date
-    orderDir: 'DESC', // Always newest first
+    orderField: 'createdon',
+    orderDir: 'DESC',
+    enabled: true,
   })
 }
 
-// Hook for followed posts only
+// Hook for followed posts (posts from clubs user follows)
 export function useFollowedPosts(userEmail?: string, searchQuery?: string) {
   return usePosts({
-    selectedTab: 0,
     userEmail,
     followedOnly: true,
+    search: searchQuery,
+    orderField: 'createdon',
+    orderDir: 'DESC',
     enabled: !!userEmail,
-    prefetchNextPage: true,
-    searchQuery,
-    uhtOnly: false,
   })
 }

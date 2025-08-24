@@ -25,12 +25,31 @@ interface PostListProps {
   searchQuery?: string
 }
 
+// Skeleton post interface for loading states
+interface SkeletonPost extends HooksPost {
+  post_id: number
+  context: string
+  imageurl: string
+  club: string // Changed from number to string
+  createdby: string
+  createdon: string
+  createdon_local: string
+  name: string
+  image: string
+  role: string
+  like_count: number
+  comment_count: number
+  is_liked: boolean
+  is_uht_related: boolean
+  user_role: string
+}
+
 const PostItem = memo(function PostItem({
   item,
   onToggleLike,
   onAddComment,
 }: {
-  item: HooksPost
+  item: HooksPost | SkeletonPost
   onToggleLike: (postId: number, isLiked: boolean) => Promise<void>
   onAddComment: (postId: number, comment: string) => Promise<boolean>
 }) {
@@ -42,7 +61,9 @@ const PostItem = memo(function PostItem({
   // Transform hooks Post to PostCard Post with proper defaults
   const postCardItem: PostCardPost = {
     ...item,
-    is_uht_related: item.is_uht_related ?? false, // Provide default value
+    createdon_local: item.createdon_local || item.createdon,
+    role: item.role || item.user_role || 'student',
+    is_uht_related: item.is_uht_related ?? false,
   }
 
   return (
@@ -67,7 +88,7 @@ const PostList = memo(function PostList({
   onAddComment,
   searchQuery = '',
 }: PostListProps) {
-  const renderPost = ({ item }: { item: HooksPost }) => (
+  const renderPost = ({ item }: { item: HooksPost | SkeletonPost }) => (
     <PostItem
       item={item}
       onToggleLike={onToggleLike}
@@ -112,7 +133,7 @@ const PostList = memo(function PostList({
     )
   }
 
-  const keyExtractor = (item: HooksPost) => String(item.post_id)
+  const keyExtractor = (item: HooksPost | SkeletonPost) => String(item.post_id)
 
   const onEndReached = () => {
     if (onLoadMore && hasMore && !loadingMore && !loading && !showSkeleton) {
@@ -121,24 +142,28 @@ const PostList = memo(function PostList({
   }
 
   // Add skeleton posts for initial loading
-  const postsWithSkeleton = showSkeleton
+  const postsWithSkeleton: (HooksPost | SkeletonPost)[] = showSkeleton
     ? [
-        ...Array.from({ length: 3 }, (_, index) => ({
-          post_id: -(index + 1),
-          context: '',
-          imageurl: '',
-          club: 0,
-          createdby: '',
-          createdon: '',
-          createdon_local: '',
-          name: '',
-          image: '',
-          role: '',
-          like_count: 0,
-          comment_count: 0,
-          is_liked: false,
-          is_uht_related: false,
-        })),
+        ...Array.from(
+          { length: 3 },
+          (_, index): SkeletonPost => ({
+            post_id: -(index + 1),
+            context: '',
+            imageurl: '',
+            club: '',
+            createdby: '',
+            createdon: '',
+            createdon_local: '',
+            name: '',
+            image: '',
+            role: '',
+            user_role: '',
+            like_count: 0,
+            comment_count: 0,
+            is_liked: false,
+            is_uht_related: false,
+          })
+        ),
         ...posts,
       ]
     : posts

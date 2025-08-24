@@ -1,15 +1,16 @@
-import React, { useContext, useEffect, useState } from 'react'
+import React, { useContext, useState } from 'react'
 import { View } from 'react-native'
 import axios from 'axios'
 import moment from 'moment-timezone'
 import 'moment/locale/bg'
 import { AuthContext, isAdmin } from '@/context/AuthContext'
+import { usePostComments } from '@/hooks/useComments'
 import PostHeader from './PostHeader'
 import PostContent from './PostContent'
 import PostActions from './PostActions'
-import PostComments from './PostComments'
 import PostEditModal from './PostEditModal'
 import PostMenuModal from './PostMenuModal'
+import PostCommentsModal from './PostCommentsModal'
 import { styles } from './styles'
 
 moment.locale('bg')
@@ -26,8 +27,9 @@ export interface Post {
   role: string
   like_count: number
   comment_count: number
-  is_uht_related: boolean // Made required to match usage
+  is_uht_related: boolean
   is_liked?: boolean
+  user_role?: string
 }
 
 export default function PostCard({
@@ -40,24 +42,20 @@ export default function PostCard({
   const { user } = useContext(AuthContext)
   const canDelete = isAdmin(user?.role) || user?.email === post.createdby
 
-  // Инициализация от пропсове (без доп. заявки)
   const [isLiked, setIsLiked] = useState(!!post.is_liked)
   const [likeCount, setLikeCount] = useState(post.like_count ?? 0)
   const [commentCount, setCommentCount] = useState(post.comment_count ?? 0)
-
   const [commentText, setCommentText] = useState('')
-  const [commentsVisible, setCommentsVisible] = useState(false)
-  const [comments, setComments] = useState<any[]>([])
+  const [commentsModalVisible, setCommentsModalVisible] = useState(false)
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
+  const [editingReplyId, setEditingReplyId] = useState<number | null>(null)
+  const [editedCommentText, setEditedCommentText] = useState('')
+  const [editedReplyText, setEditedReplyText] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [editedContent, setEditedContent] = useState(post.context)
   const [editedImageUrl, setEditedImageUrl] = useState(post.imageurl || '')
-  const [editedUhtRelated, setEditedUhtRelated] = useState(
-    post.is_uht_related ?? false
-  )
+  const [editedUhtRelated, setEditedUhtRelated] = useState(post.is_uht_related)
   const [menuVisible, setMenuVisible] = useState(false)
-
-  // Reply states
-  const [replies, setReplies] = useState<{ [key: number]: any[] }>({})
   const [expandedComments, setExpandedComments] = useState<number[]>([])
   const [replyTexts, setReplyTexts] = useState<{ [key: number]: string }>({})
   const [selectedCommentMenu, setSelectedCommentMenu] = useState<number | null>(
@@ -66,42 +64,43 @@ export default function PostCard({
   const [selectedReplyMenu, setSelectedReplyMenu] = useState<number | null>(
     null
   )
-  const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
-  const [editingReplyId, setEditingReplyId] = useState<number | null>(null)
-  const [editedCommentText, setEditedCommentText] = useState<string>('')
-  const [editedReplyText, setEditedReplyText] = useState<string>('')
 
-  useEffect(() => {
-    setIsLiked(!!post.is_liked)
-    setLikeCount(post.like_count ?? 0)
-    setCommentCount(post.comment_count ?? 0)
-    setEditedContent(post.context)
-    setEditedImageUrl(post.imageurl || '')
-    setEditedUhtRelated(post.is_uht_related ?? false)
-  }, [post])
+  // React Query hooks for comments
+  const {
+    comments,
+    addCommentMutation,
+    editCommentMutation,
+    deleteCommentMutation,
+    invalidateComments,
+  } = usePostComments(post.post_id)
 
-  // Зареждай коментари само при отворена секция
-  useEffect(() => {
-    if (!commentsVisible) return
+  // Build replies from comments with proper nesting
+  const buildRepliesMap = (allComments: any[]) => {
+    const repliesMap: { [key: number]: any[] } = {}
 
-    const fetchComments = async () => {
-      try {
-        const res = await axios.get(
-          `${process.env.EXPO_PUBLIC_HOST_URL}/comment?postId=${post.post_id}`
-        )
-        setComments(res.data)
-        setCommentCount(Array.isArray(res.data) ? res.data.length : 0)
-      } catch (error) {
-        console.error('Error fetching comments', error)
+    // Sort comments to ensure proper hierarchy
+    const sortedComments = [...allComments].sort((a, b) => {
+      const dateA = new Date(a.created_at).getTime()
+      const dateB = new Date(b.created_at).getTime()
+      return dateA - dateB
+    })
+
+    sortedComments.forEach((comment) => {
+      if (comment.parent_id) {
+        if (!repliesMap[comment.parent_id]) {
+          repliesMap[comment.parent_id] = []
+        }
+        repliesMap[comment.parent_id].push(comment)
       }
-    }
+    })
 
-    fetchComments()
-  }, [commentsVisible, post.post_id])
+    return repliesMap
+  }
 
-  const toggleLike = async () => {
+  const replies = buildRepliesMap(comments)
+
+  const handleToggleLike = async () => {
     if (!user) return
-
     try {
       if (!isLiked) {
         await axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/post-like`, {
@@ -122,213 +121,155 @@ export default function PostCard({
     }
   }
 
-  const submitComment = async () => {
+  const handleSubmitComment = async () => {
     if (!commentText.trim() || !user) return
-
     try {
-      await axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/comment`, {
+      await addCommentMutation.mutateAsync({
         postId: post.post_id,
-        comment: commentText,
         userEmail: user.email,
+        comment: commentText,
       })
       setCommentText('')
-
-      if (commentsVisible) {
-        const res = await axios.get(
-          `${process.env.EXPO_PUBLIC_HOST_URL}/comment?postId=${post.post_id}`
-        )
-        setComments(res.data)
-        setCommentCount(Array.isArray(res.data) ? res.data.length : 0)
-      } else {
-        setCommentCount((prev) => prev + 1)
-      }
+      invalidateComments()
+      setCommentCount((prev) => prev + 1)
     } catch (error) {
       console.error('Error submitting comment', error)
     }
   }
 
-  const toggleCommentsView = () => setCommentsVisible((prev) => !prev)
-
-  // Reply functions
-  const fetchReplies = async (commentId: number) => {
-    try {
-      const response = await axios.get(
-        `${process.env.EXPO_PUBLIC_HOST_URL}/comment?postId=${post.post_id}&parentId=${commentId}`
-      )
-      setReplies((prev) => ({ ...prev, [commentId]: response.data }))
-    } catch (error) {
-      console.error('Error fetching replies', error)
-    }
+  const handleToggleReplies = (commentId: number) => {
+    setExpandedComments((prev) =>
+      prev.includes(commentId)
+        ? prev.filter((id) => id !== commentId)
+        : [...prev, commentId]
+    )
   }
 
-  const toggleReplies = (commentId: number) => {
-    if (expandedComments.includes(commentId)) {
-      setExpandedComments((prev) => prev.filter((id) => id !== commentId))
-    } else {
-      setExpandedComments((prev) => [...prev, commentId])
-      if (!replies[commentId]) {
-        fetchReplies(commentId)
-      }
-    }
-  }
-
-  const submitReply = async (parentId: number) => {
+  const handleSubmitReply = async (parentId: number) => {
     if (!user) return
     const replyText = replyTexts[parentId]
     if (!replyText || replyText.trim() === '') return
 
     try {
-      const response = await axios.post(
-        `${process.env.EXPO_PUBLIC_HOST_URL}/comment`,
-        {
-          postId: post.post_id,
-          userEmail: user.email,
-          comment: replyText,
-          parentId,
-        }
-      )
-
-      const now = new Date()
-      const nowBG = moment(now).format()
-
-      const newReply = {
-        id: response.data.commentId,
+      await addCommentMutation.mutateAsync({
+        postId: post.post_id,
+        userEmail: user.email,
         comment: replyText,
-        created_at: now.toISOString(),
-        created_at_local: nowBG,
-        name: user.name,
-        image: user.image,
-        user_email: user.email,
-        parent_id: parentId,
-      }
-
-      setReplies((prev) => ({
-        ...prev,
-        [parentId]: [...(prev[parentId] || []), newReply],
-      }))
-
+        parentId,
+      })
       setReplyTexts((prev) => ({ ...prev, [parentId]: '' }))
+      invalidateComments()
     } catch (error) {
       console.error('Error submitting reply', error)
     }
   }
 
-  const updateReplyText = (commentId: number, text: string) => {
+  const handleUpdateReplyText = (commentId: number, text: string) => {
     setReplyTexts((prev) => ({ ...prev, [commentId]: text }))
   }
 
-  const toggleCommentMenu = (commentId: number | null) => {
-    setSelectedCommentMenu((prev) => (prev === commentId ? null : commentId))
+  const handleToggleCommentMenu = (commentId: number | null) => {
+    setSelectedCommentMenu(commentId)
+    if (commentId === null) {
+      setEditingCommentId(null)
+      setEditedCommentText('')
+    }
   }
 
-  const toggleReplyMenu = (replyId: number | null) => {
-    setSelectedReplyMenu((prev) => (prev === replyId ? null : replyId))
+  const handleToggleReplyMenu = (replyId: number | null) => {
+    setSelectedReplyMenu(replyId)
+    if (replyId === null) {
+      setEditingReplyId(null)
+      setEditedReplyText('')
+    }
   }
 
-  const editComment = (commentId: number, text: string) => {
+  const handleEditComment = (commentId: number, text: string) => {
     setEditingCommentId(commentId)
+    setEditedCommentText(text)
+    setSelectedCommentMenu(null)
+  }
+
+  const handleEditReply = (replyId: number, text: string) => {
+    setEditingReplyId(replyId)
+    setEditedReplyText(text)
+    setSelectedReplyMenu(null)
+  }
+
+  const handleUpdateEditedCommentText = (text: string) => {
     setEditedCommentText(text)
   }
 
-  const editReply = (replyId: number, text: string) => {
-    setEditingReplyId(replyId)
+  const handleUpdateEditedReplyText = (text: string) => {
     setEditedReplyText(text)
   }
 
-  const saveEditedComment = async () => {
-    if (!editedCommentText.trim()) return
+  const handleSaveEditedComment = async () => {
+    if (!editedCommentText.trim() || !user || editingCommentId == null) return
     try {
-      const response = await axios.put(
-        `${process.env.EXPO_PUBLIC_HOST_URL}/comment`,
-        {
-          commentId: editingCommentId,
-          userEmail: user?.email,
-          newComment: editedCommentText,
-        }
-      )
-      setComments((prev) =>
-        prev.map((comment) =>
-          comment.id === editingCommentId
-            ? { ...comment, comment: response.data.updatedComment }
-            : comment
-        )
-      )
+      await editCommentMutation.mutateAsync({
+        commentId: editingCommentId,
+        userEmail: user.email,
+        newComment: editedCommentText,
+      })
       setEditingCommentId(null)
       setEditedCommentText('')
+      invalidateComments()
     } catch (error) {
       console.error('Error editing comment', error)
     }
   }
 
-  const saveEditedReply = async () => {
-    if (!editedReplyText.trim()) return
+  const handleSaveEditedReply = async () => {
+    if (!editedReplyText.trim() || !user || editingReplyId == null) return
     try {
-      const response = await axios.put(
-        `${process.env.EXPO_PUBLIC_HOST_URL}/comment`,
-        {
-          commentId: editingReplyId,
-          userEmail: user?.email,
-          newComment: editedReplyText,
-        }
-      )
-      setReplies((prev) => {
-        const newReplies = { ...prev }
-        Object.keys(newReplies).forEach((parentId) => {
-          newReplies[parseInt(parentId)] =
-            newReplies[parseInt(parentId)]?.map((reply) =>
-              reply.id === editingReplyId
-                ? { ...reply, comment: response.data.updatedComment }
-                : reply
-            ) || []
-        })
-        return newReplies
+      await editCommentMutation.mutateAsync({
+        commentId: editingReplyId,
+        userEmail: user.email,
+        newComment: editedReplyText,
       })
       setEditingReplyId(null)
       setEditedReplyText('')
+      invalidateComments()
     } catch (error) {
       console.error('Error editing reply', error)
     }
   }
 
-  const deleteComment = async (commentId: number) => {
+  const handleDeleteComment = async (commentId: number) => {
+    if (!user?.email) return
     try {
-      await axios.delete(`${process.env.EXPO_PUBLIC_HOST_URL}/comment`, {
-        data: {
-          commentId,
-          userEmail: user?.email,
-          postAuthorEmail: post.createdby,
-        },
+      await deleteCommentMutation.mutateAsync({
+        commentId,
+        userEmail: user.email,
+        postAuthorEmail: post.createdby,
       })
-      setComments((prev) => prev.filter((comment) => comment.id !== commentId))
-      setCommentCount((prev) => prev - 1)
+      invalidateComments()
+      setCommentCount((prev) => Math.max(0, prev - 1))
     } catch (error) {
       console.error('Error deleting comment', error)
     }
   }
 
-  const deleteReply = async (replyId: number, parentId: number) => {
+  const handleDeleteReply = async (replyId: number) => {
+    if (!user?.email) return
     try {
-      await axios.delete(`${process.env.EXPO_PUBLIC_HOST_URL}/comment`, {
-        data: {
-          commentId: replyId,
-          userEmail: user?.email,
-          postAuthorEmail: post.createdby,
-        },
+      await deleteCommentMutation.mutateAsync({
+        commentId: replyId,
+        userEmail: user.email,
+        postAuthorEmail: post.createdby,
       })
-      setReplies((prev) => ({
-        ...prev,
-        [parentId]:
-          prev[parentId]?.filter((reply) => reply.id !== replyId) || [],
-      }))
+      invalidateComments()
     } catch (error) {
       console.error('Error deleting reply', error)
     }
   }
 
-  const deletePost = async () => {
+  const handleDeletePost = async () => {
+    if (!user?.email) return
     try {
       await axios.delete(`${process.env.EXPO_PUBLIC_HOST_URL}/post`, {
-        data: { postId: post.post_id, userEmail: user?.email },
+        data: { postId: post.post_id, userEmail: user.email },
       })
       onUpdate && onUpdate()
     } catch (error) {
@@ -369,42 +310,46 @@ export default function PostCard({
         isLiked={isLiked}
         likeCount={likeCount}
         commentCount={commentCount}
-        commentsVisible={commentsVisible}
-        onToggleLike={toggleLike}
-        onToggleComments={toggleCommentsView}
+        commentsVisible={commentsModalVisible}
+        onToggleLike={handleToggleLike}
+        onToggleComments={() => setCommentsModalVisible(true)}
         commentText={commentText}
         onCommentTextChange={setCommentText}
-        onSubmitComment={submitComment}
+        onSubmitComment={handleSubmitComment}
         user={user}
       />
 
-      {commentsVisible && (
-        <PostComments
-          comments={comments}
-          replies={replies}
-          expandedComments={expandedComments}
-          replyTexts={replyTexts}
-          selectedCommentMenu={selectedCommentMenu}
-          selectedReplyMenu={selectedReplyMenu}
-          editingCommentId={editingCommentId}
-          editingReplyId={editingReplyId}
-          editedCommentText={editedCommentText}
-          editedReplyText={editedReplyText}
-          user={user}
-          post={post}
-          onToggleReplies={toggleReplies}
-          onSubmitReply={submitReply}
-          onUpdateReplyText={updateReplyText}
-          onToggleCommentMenu={toggleCommentMenu}
-          onToggleReplyMenu={toggleReplyMenu}
-          onEditComment={editComment}
-          onEditReply={editReply}
-          onSaveEditedComment={saveEditedComment}
-          onSaveEditedReply={saveEditedReply}
-          onDeleteComment={deleteComment}
-          onDeleteReply={deleteReply}
-        />
-      )}
+      <PostCommentsModal
+        visible={commentsModalVisible}
+        onClose={() => setCommentsModalVisible(false)}
+        commentsProps={{
+          post,
+          user,
+          comments: comments.filter((c) => !c.parent_id), // Only parent comments
+          replies,
+          expandedComments,
+          replyTexts,
+          selectedCommentMenu,
+          selectedReplyMenu,
+          editingCommentId,
+          editingReplyId,
+          editedCommentText,
+          editedReplyText,
+          onToggleReplies: handleToggleReplies,
+          onSubmitReply: handleSubmitReply,
+          onUpdateReplyText: handleUpdateReplyText,
+          onToggleCommentMenu: handleToggleCommentMenu,
+          onToggleReplyMenu: handleToggleReplyMenu,
+          onEditComment: handleEditComment,
+          onEditReply: handleEditReply,
+          onUpdateEditedCommentText: handleUpdateEditedCommentText,
+          onUpdateEditedReplyText: handleUpdateEditedReplyText,
+          onSaveEditedComment: handleSaveEditedComment,
+          onSaveEditedReply: handleSaveEditedReply,
+          onDeleteComment: handleDeleteComment,
+          onDeleteReply: handleDeleteReply,
+        }}
+      />
 
       <PostMenuModal
         visible={menuVisible}
@@ -415,7 +360,7 @@ export default function PostCard({
         }}
         onDelete={() => {
           setMenuVisible(false)
-          deletePost()
+          handleDeletePost()
         }}
       />
     </View>

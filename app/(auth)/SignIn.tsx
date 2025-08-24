@@ -132,7 +132,6 @@ export default function SignIn() {
                 text="Влезте в акаунта си"
                 onPress={onSignInBtnClick}
                 loading={loading}
-                style={styles.button}
               />
               <Pressable onPress={() => router.push('/(auth)/SignUp')}>
                 <Text style={styles.registerText}>
