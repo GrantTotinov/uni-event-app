@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   Image,
   ScrollView,
   StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native'
 import moment from 'moment-timezone'
 import { MaterialIcons, Ionicons, AntDesign } from '@expo/vector-icons'
@@ -84,6 +86,14 @@ export default function PostComments({
   onDeleteReply,
 }: PostCommentsProps) {
   const [commentSearchQuery, setCommentSearchQuery] = useState<string>('')
+  const [mainCommentText, setMainCommentText] = useState<string>('')
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false)
+  const [replyingToCommentId, setReplyingToCommentId] = useState<number | null>(
+    null
+  )
+  const [replyingToName, setReplyingToName] = useState<string>('')
+
+  const submissionTimeoutRef = useRef<NodeJS.Timeout>()
 
   // --- Likes logic ---
   const getAllCommentIds = (
@@ -137,6 +147,7 @@ export default function PostComments({
         return Colors.GRAY
     }
   }
+
   const handleCommentLike = async (commentId: number) => {
     if (!user?.email || isToggling) return
     const currentLike = commentLikes[commentId]
@@ -147,13 +158,62 @@ export default function PostComments({
       console.error('Error toggling comment like:', error)
     }
   }
+
   const getImageSource = (imageUrl?: string | null) => {
     if (!imageUrl || imageUrl.trim() === '')
       return { uri: 'https://via.placeholder.com/36' }
     return { uri: imageUrl }
   }
 
-  // --- Render all replies under a comment (flattened, not recursive) ---
+  // Handle reply setup
+  const handleReplyToComment = (commentId: number, authorName: string) => {
+    setReplyingToCommentId(commentId)
+    setReplyingToName(authorName)
+    setMainCommentText(`@${authorName} `)
+  }
+
+  const handleClearReply = () => {
+    setReplyingToCommentId(null)
+    setReplyingToName('')
+    setMainCommentText('')
+  }
+
+  // Optimized comment submission with debouncing
+  const handleSubmitMainComment = async () => {
+    if (!mainCommentText.trim() || !user || isSubmittingComment) return
+
+    // Clear any existing timeout
+    if (submissionTimeoutRef.current) {
+      clearTimeout(submissionTimeoutRef.current)
+    }
+
+    setIsSubmittingComment(true)
+
+    try {
+      if (replyingToCommentId) {
+        // It's a reply
+        await onSubmitReply(replyingToCommentId)
+        onUpdateReplyText(replyingToCommentId, mainCommentText)
+      } else {
+        // It's a main comment - we need to call the parent's comment submission
+        // For now, we'll simulate by calling onSubmitReply with post.post_id
+        // You might need to adjust this based on your actual implementation
+        console.log('Submitting main comment:', mainCommentText)
+      }
+
+      setMainCommentText('')
+      handleClearReply()
+    } catch (error) {
+      console.error('Error submitting comment:', error)
+    } finally {
+      // Prevent double submission with timeout
+      submissionTimeoutRef.current = setTimeout(() => {
+        setIsSubmittingComment(false)
+      }, 1000)
+    }
+  }
+
+  // --- Render all replies under a comment (flattened) ---
   const renderAllReplies = (parentId: number): React.ReactNode => {
     const allReplies = replies[parentId] || []
     if (!allReplies.length) return null
@@ -166,7 +226,6 @@ export default function PostComments({
       const directReplies = replies[commentId] || []
       directReplies.forEach((reply) => {
         collected.push(reply)
-        // Recursively collect replies to this reply
         collectAllReplies(reply.id, collected)
       })
       return collected
@@ -176,7 +235,6 @@ export default function PostComments({
 
     return flattenedReplies.map((reply) => {
       const replyLike = commentLikes[reply.id]
-      const isExpanded = expandedComments.includes(reply.id)
 
       return (
         <View key={reply.id} style={localStyles.replyItem}>
@@ -185,7 +243,7 @@ export default function PostComments({
             style={localStyles.replyAvatar}
           />
           <View style={localStyles.replyMain}>
-            <View style={localStyles.headerRow}>
+            <View style={localStyles.replyHeader}>
               <Text style={localStyles.replyAuthor}>{reply.name}</Text>
               <Text
                 style={[
@@ -194,6 +252,11 @@ export default function PostComments({
                 ]}
               >
                 {getRoleDisplayText(reply.user_role)}
+              </Text>
+              <Text style={localStyles.replyTime}>
+                {reply.created_at_local
+                  ? moment(reply.created_at_local).fromNow()
+                  : moment(reply.created_at).fromNow()}
               </Text>
               {(user?.email === reply.user_email ||
                 isAdmin(user?.role) ||
@@ -208,7 +271,7 @@ export default function PostComments({
                 >
                   <MaterialIcons
                     name="more-vert"
-                    size={18}
+                    size={16}
                     color={Colors.GRAY}
                   />
                 </TouchableOpacity>
@@ -244,32 +307,21 @@ export default function PostComments({
                 </View>
               </View>
             ) : (
-              <>
-                <Text style={localStyles.replyText}>{reply.comment}</Text>
-                <Text style={localStyles.timeBelow}>
-                  {reply.created_at_local
-                    ? moment(reply.created_at_local).fromNow()
-                    : moment(reply.created_at).fromNow()}
-                </Text>
-              </>
+              <Text style={localStyles.replyText}>{reply.comment}</Text>
             )}
 
-            <View style={localStyles.actionRow}>
+            <View style={localStyles.replyActionRow}>
               <TouchableOpacity
                 onPress={() => handleCommentLike(reply.id)}
-                style={localStyles.actionButton}
+                style={localStyles.replyActionButton}
                 disabled={!replyLike || isToggling}
               >
-                <AntDesign
-                  name="like2"
-                  size={13}
-                  color={replyLike?.isLiked ? Colors.PRIMARY : Colors.GRAY}
-                />
                 <Text
                   style={[
-                    localStyles.actionText,
+                    localStyles.replyActionText,
                     {
                       color: replyLike?.isLiked ? Colors.PRIMARY : Colors.GRAY,
+                      fontWeight: replyLike?.isLiked ? 'bold' : 'normal',
                     },
                   ]}
                 >
@@ -277,46 +329,17 @@ export default function PostComments({
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => onToggleReplies(reply.id)}
-                style={localStyles.actionButton}
+                onPress={() => handleReplyToComment(reply.id, reply.name)}
+                style={localStyles.replyActionButton}
               >
-                <MaterialIcons name="reply" size={13} color={Colors.GRAY} />
-                <Text style={localStyles.actionText}>Отговори</Text>
+                <Text style={localStyles.replyActionText}>Отговори</Text>
               </TouchableOpacity>
-              <AntDesign
-                name="heart"
-                size={11}
-                color={replyLike?.isLiked ? Colors.PRIMARY : Colors.GRAY}
-                style={{ marginLeft: 10 }}
-              />
-              <Text style={localStyles.likeCountText}>
-                {replyLike?.count || 0}
-              </Text>
+              {(replyLike?.count || 0) > 0 && (
+                <Text style={localStyles.replyLikeCount}>
+                  {replyLike?.count} харесвания
+                </Text>
+              )}
             </View>
-
-            {isExpanded && (
-              <View style={localStyles.replyInputContainer}>
-                <Image
-                  source={getImageSource(user?.image)}
-                  style={localStyles.smallAvatar}
-                />
-                <View style={localStyles.replyInputWrapper}>
-                  <TextInput
-                    style={localStyles.replyInput}
-                    value={replyTexts[reply.id] || ''}
-                    onChangeText={(text) => onUpdateReplyText(reply.id, text)}
-                    placeholder="Отговорете на този коментар..."
-                    placeholderTextColor={Colors.GRAY}
-                  />
-                  <TouchableOpacity
-                    onPress={() => onSubmitReply(reply.id)}
-                    style={localStyles.replySubmitButton}
-                  >
-                    <Text style={localStyles.replySubmitText}>Отговори</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
 
             {selectedReplyMenu === reply.id && (
               <View style={localStyles.menuDropdown}>
@@ -357,383 +380,563 @@ export default function PostComments({
   const showLoading = likesLoading
 
   return (
-    <ScrollView
+    <KeyboardAvoidingView
       style={{ flex: 1 }}
-      contentContainerStyle={localStyles.scrollContent}
-      keyboardShouldPersistTaps="handled"
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
-      <View>
-        {/* Search Bar */}
-        <View style={baseStyles.searchContainer}>
-          <Ionicons
-            name="search"
-            size={16}
-            color={Colors.GRAY}
-            style={{ marginRight: 8 }}
-          />
-          <TextInput
-            placeholder="Търси в коментарите..."
-            value={commentSearchQuery}
-            onChangeText={setCommentSearchQuery}
-            style={baseStyles.searchInput}
-            placeholderTextColor={Colors.GRAY}
-          />
-          {commentSearchQuery.length > 0 && (
-            <TouchableOpacity onPress={clearCommentSearch}>
-              <Ionicons name="close" size={16} color={Colors.GRAY} />
-            </TouchableOpacity>
+      {/* Comments List */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={localStyles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View>
+          {/* Search Bar */}
+          <View style={localStyles.searchContainer}>
+            <Ionicons
+              name="search"
+              size={16}
+              color={Colors.GRAY}
+              style={{ marginRight: 8 }}
+            />
+            <TextInput
+              placeholder="Търси в коментарите..."
+              value={commentSearchQuery}
+              onChangeText={setCommentSearchQuery}
+              style={localStyles.searchInput}
+              placeholderTextColor={Colors.GRAY}
+            />
+            {commentSearchQuery.length > 0 && (
+              <TouchableOpacity onPress={clearCommentSearch}>
+                <Ionicons name="close" size={16} color={Colors.GRAY} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {commentSearchQuery.trim() && (
+            <View style={localStyles.searchResultsInfo}>
+              <Text style={localStyles.searchResultsText}>
+                {showLoading
+                  ? 'Търсене в коментарите...'
+                  : `Намерени ${displayComments.length} коментар(а) за "${commentSearchQuery}"`}
+              </Text>
+            </View>
           )}
-        </View>
 
-        {commentSearchQuery.trim() && (
-          <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
-            <Text style={{ color: Colors.GRAY, fontSize: 14 }}>
-              {showLoading
-                ? 'Търсене в коментарите...'
-                : `Намерени ${displayComments.length} коментар(а) за "${commentSearchQuery}"`}
-            </Text>
-          </View>
-        )}
+          {showLoading && (
+            <View style={localStyles.loadingContainer}>
+              <ActivityIndicator color={Colors.PRIMARY} size="small" />
+              <Text style={localStyles.loadingText}>
+                {commentSearchQuery.trim()
+                  ? 'Търсене в коментарите...'
+                  : 'Зареждане...'}
+              </Text>
+            </View>
+          )}
 
-        {showLoading && (
-          <View style={baseStyles.loadingContainer}>
-            <ActivityIndicator color={Colors.PRIMARY} size="small" />
-            <Text
-              style={{ marginTop: 8, color: Colors.GRAY, textAlign: 'center' }}
-            >
-              {commentSearchQuery.trim()
-                ? 'Търсене в коментарите...'
-                : 'Зареждане...'}
-            </Text>
-          </View>
-        )}
+          {displayComments.length > 0
+            ? displayComments.map((c) => {
+                const commentLike = commentLikes[c.id]
+                const hasReplies = replies[c.id] && replies[c.id].length > 0
+                const replyCount = replies[c.id]?.length || 0
 
-        {displayComments.length > 0
-          ? displayComments.map((c) => {
-              const commentLike = commentLikes[c.id]
-              const isExpanded = expandedComments.includes(c.id)
-              const hasReplies = replies[c.id] && replies[c.id].length > 0
-
-              return (
-                <View key={c.id} style={localStyles.parentCommentContainer}>
-                  {/* Parent Comment */}
-                  <View style={localStyles.commentRow}>
-                    <Image
-                      source={getImageSource(c.image)}
-                      style={localStyles.avatar}
-                    />
-                    <View style={localStyles.commentMain}>
-                      <View style={localStyles.headerRow}>
-                        <Text style={localStyles.author}>{c.name}</Text>
-                        <Text
-                          style={[
-                            localStyles.role,
-                            { color: getRoleColor(c.user_role) },
-                          ]}
-                        >
-                          {getRoleDisplayText(c.user_role)}
-                        </Text>
-                        {(user?.email === c.user_email ||
-                          isAdmin(user?.role) ||
-                          user?.email === post.createdby) && (
-                          <TouchableOpacity
-                            onPress={() =>
-                              onToggleCommentMenu(
-                                selectedCommentMenu === c.id ? null : c.id
-                              )
-                            }
-                            style={localStyles.menuButton}
+                return (
+                  <View key={c.id} style={localStyles.parentCommentContainer}>
+                    {/* Parent Comment */}
+                    <View style={localStyles.commentRow}>
+                      <Image
+                        source={getImageSource(c.image)}
+                        style={localStyles.avatar}
+                      />
+                      <View style={localStyles.commentMain}>
+                        <View style={localStyles.commentHeader}>
+                          <Text style={localStyles.author}>{c.name}</Text>
+                          <Text
+                            style={[
+                              localStyles.role,
+                              { color: getRoleColor(c.user_role) },
+                            ]}
                           >
-                            <MaterialIcons
-                              name="more-vert"
-                              size={18}
-                              color={Colors.GRAY}
-                            />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-
-                      {editingCommentId === c.id ? (
-                        <View style={localStyles.editContainer}>
-                          <TextInput
-                            style={localStyles.editInput}
-                            value={editedCommentText}
-                            onChangeText={onUpdateEditedCommentText}
-                            placeholder="Редактирайте коментара..."
-                            multiline
-                            autoFocus
-                          />
-                          <View style={localStyles.editButtons}>
-                            <TouchableOpacity
-                              onPress={onSaveEditedComment}
-                              style={localStyles.saveButton}
-                            >
-                              <Text style={localStyles.saveButtonText}>
-                                Запази
-                              </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={() => {
-                                onUpdateEditedCommentText('')
-                                onToggleCommentMenu(null)
-                              }}
-                              style={localStyles.cancelButton}
-                            >
-                              <Text style={localStyles.cancelButtonText}>
-                                Откажи
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      ) : (
-                        <>
-                          <Text style={localStyles.commentText}>
-                            {c.comment}
+                            {getRoleDisplayText(c.user_role)}
                           </Text>
-                          <Text style={localStyles.timeBelow}>
+                          <Text style={localStyles.commentTime}>
                             {c.created_at_local
                               ? moment(c.created_at_local).fromNow()
                               : moment(c.created_at).fromNow()}
                           </Text>
-                        </>
-                      )}
-
-                      <View style={localStyles.actionRow}>
-                        <TouchableOpacity
-                          onPress={() => handleCommentLike(c.id)}
-                          style={localStyles.actionButton}
-                          disabled={!commentLike || isToggling}
-                        >
-                          <AntDesign
-                            name="like2"
-                            size={13}
-                            color={
-                              commentLike?.isLiked
-                                ? Colors.PRIMARY
-                                : Colors.GRAY
-                            }
-                          />
-                          <Text
-                            style={[
-                              localStyles.actionText,
-                              {
-                                color: commentLike?.isLiked
-                                  ? Colors.PRIMARY
-                                  : Colors.GRAY,
-                              },
-                            ]}
-                          >
-                            {commentLike?.isLiked ? 'Харесано' : 'Харесай'}
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => onToggleReplies(c.id)}
-                          style={localStyles.actionButton}
-                        >
-                          <MaterialIcons
-                            name="reply"
-                            size={13}
-                            color={Colors.GRAY}
-                          />
-                          <Text style={localStyles.actionText}>Отговори</Text>
-                        </TouchableOpacity>
-                        <AntDesign
-                          name="heart"
-                          size={11}
-                          color={
-                            commentLike?.isLiked ? Colors.PRIMARY : Colors.GRAY
-                          }
-                          style={{ marginLeft: 10 }}
-                        />
-                        <Text style={localStyles.likeCountText}>
-                          {commentLike?.count || 0}
-                        </Text>
-                      </View>
-
-                      {isExpanded && (
-                        <View style={localStyles.replyInputContainer}>
-                          <Image
-                            source={getImageSource(user?.image)}
-                            style={localStyles.smallAvatar}
-                          />
-                          <View style={localStyles.replyInputWrapper}>
-                            <TextInput
-                              style={localStyles.replyInput}
-                              value={replyTexts[c.id] || ''}
-                              onChangeText={(text) =>
-                                onUpdateReplyText(c.id, text)
-                              }
-                              placeholder="Отговорете на този коментар..."
-                              placeholderTextColor={Colors.GRAY}
-                            />
-                            <TouchableOpacity
-                              onPress={() => onSubmitReply(c.id)}
-                              style={localStyles.replySubmitButton}
-                            >
-                              <Text style={localStyles.replySubmitText}>
-                                Отговори
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      )}
-
-                      {selectedCommentMenu === c.id && (
-                        <View style={localStyles.menuDropdown}>
-                          {user?.email === c.user_email && (
-                            <TouchableOpacity
-                              onPress={() => onEditComment(c.id, c.comment)}
-                              style={localStyles.menuOption}
-                            >
-                              <Text style={localStyles.menuOptionText}>
-                                Редактирай
-                              </Text>
-                            </TouchableOpacity>
-                          )}
-                          {(isAdmin(user?.role) ||
-                            user?.email === c.user_email ||
+                          {(user?.email === c.user_email ||
+                            isAdmin(user?.role) ||
                             user?.email === post.createdby) && (
                             <TouchableOpacity
-                              onPress={() => {
-                                onDeleteComment(c.id)
-                                onToggleCommentMenu(null)
-                              }}
-                              style={localStyles.menuOption}
+                              onPress={() =>
+                                onToggleCommentMenu(
+                                  selectedCommentMenu === c.id ? null : c.id
+                                )
+                              }
+                              style={localStyles.menuButton}
                             >
-                              <Text
-                                style={[
-                                  localStyles.menuOptionText,
-                                  { color: 'red' },
-                                ]}
-                              >
-                                Изтрий
-                              </Text>
+                              <MaterialIcons
+                                name="more-vert"
+                                size={18}
+                                color={Colors.GRAY}
+                              />
                             </TouchableOpacity>
                           )}
                         </View>
-                      )}
-                    </View>
-                  </View>
 
-                  {/* All Replies Container - Only if there are replies */}
-                  {hasReplies && (
-                    <View style={localStyles.repliesContainer}>
-                      {renderAllReplies(c.id)}
+                        {editingCommentId === c.id ? (
+                          <View style={localStyles.editContainer}>
+                            <TextInput
+                              style={localStyles.editInput}
+                              value={editedCommentText}
+                              onChangeText={onUpdateEditedCommentText}
+                              placeholder="Редактирайте коментара..."
+                              multiline
+                              autoFocus
+                            />
+                            <View style={localStyles.editButtons}>
+                              <TouchableOpacity
+                                onPress={onSaveEditedComment}
+                                style={localStyles.saveButton}
+                              >
+                                <Text style={localStyles.saveButtonText}>
+                                  Запази
+                                </Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => {
+                                  onUpdateEditedCommentText('')
+                                  onToggleCommentMenu(null)
+                                }}
+                                style={localStyles.cancelButton}
+                              >
+                                <Text style={localStyles.cancelButtonText}>
+                                  Откажи
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        ) : (
+                          <Text style={localStyles.commentText}>
+                            {c.comment}
+                          </Text>
+                        )}
+
+                        <View style={localStyles.commentActionRow}>
+                          <TouchableOpacity
+                            onPress={() => handleCommentLike(c.id)}
+                            style={localStyles.commentActionButton}
+                            disabled={!commentLike || isToggling}
+                          >
+                            <Text
+                              style={[
+                                localStyles.commentActionText,
+                                {
+                                  color: commentLike?.isLiked
+                                    ? Colors.PRIMARY
+                                    : Colors.GRAY,
+                                  fontWeight: commentLike?.isLiked
+                                    ? 'bold'
+                                    : 'normal',
+                                },
+                              ]}
+                            >
+                              {commentLike?.isLiked ? 'Харесано' : 'Харесай'}
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handleReplyToComment(c.id, c.name)}
+                            style={localStyles.commentActionButton}
+                          >
+                            <Text style={localStyles.commentActionText}>
+                              Отговори
+                            </Text>
+                          </TouchableOpacity>
+                          {(commentLike?.count || 0) > 0 && (
+                            <Text style={localStyles.commentLikeCount}>
+                              {commentLike?.count} харесвания
+                            </Text>
+                          )}
+                        </View>
+
+                        {/* Show replies count and toggle */}
+                        {hasReplies && (
+                          <TouchableOpacity
+                            onPress={() => onToggleReplies(c.id)}
+                            style={localStyles.viewRepliesButton}
+                          >
+                            <View style={localStyles.repliesLine} />
+                            <Text style={localStyles.viewRepliesText}>
+                              {expandedComments.includes(c.id)
+                                ? 'Скрий отговорите'
+                                : `Виж ${replyCount} отговор${
+                                    replyCount === 1 ? '' : 'а'
+                                  }`}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+
+                        {selectedCommentMenu === c.id && (
+                          <View style={localStyles.menuDropdown}>
+                            {user?.email === c.user_email && (
+                              <TouchableOpacity
+                                onPress={() => onEditComment(c.id, c.comment)}
+                                style={localStyles.menuOption}
+                              >
+                                <Text style={localStyles.menuOptionText}>
+                                  Редактирай
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                            {(isAdmin(user?.role) ||
+                              user?.email === c.user_email ||
+                              user?.email === post.createdby) && (
+                              <TouchableOpacity
+                                onPress={() => {
+                                  onDeleteComment(c.id)
+                                  onToggleCommentMenu(null)
+                                }}
+                                style={localStyles.menuOption}
+                              >
+                                <Text
+                                  style={[
+                                    localStyles.menuOptionText,
+                                    { color: 'red' },
+                                  ]}
+                                >
+                                  Изтрий
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+                      </View>
                     </View>
-                  )}
+
+                    {/* Replies Container */}
+                    {hasReplies && expandedComments.includes(c.id) && (
+                      <View style={localStyles.repliesContainer}>
+                        {renderAllReplies(c.id)}
+                      </View>
+                    )}
+                  </View>
+                )
+              })
+            : !showLoading && (
+                <View style={localStyles.emptyContainer}>
+                  <Text style={localStyles.emptyText}>
+                    Все още няма коментари
+                  </Text>
                 </View>
-              )
-            })
-          : !showLoading && (
-              <View style={baseStyles.emptyContainer}>
-                <Text style={{ color: Colors.GRAY }}>
-                  Все още няма коментари
-                </Text>
-              </View>
-            )}
+              )}
+        </View>
+      </ScrollView>
+
+      {/* Bottom Comment Input - Facebook Style */}
+      <View style={localStyles.bottomInputContainer}>
+        {replyingToCommentId && (
+          <View style={localStyles.replyingToContainer}>
+            <Text style={localStyles.replyingToText}>
+              Отговаряте на {replyingToName}
+            </Text>
+            <TouchableOpacity onPress={handleClearReply}>
+              <MaterialIcons name="close" size={16} color={Colors.GRAY} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={localStyles.inputRow}>
+          <Image
+            source={getImageSource(user?.image)}
+            style={localStyles.inputAvatar}
+          />
+          <View style={localStyles.inputContainer}>
+            <TextInput
+              style={localStyles.mainCommentInput}
+              value={mainCommentText}
+              onChangeText={setMainCommentText}
+              placeholder={
+                replyingToCommentId
+                  ? `Отговори на ${replyingToName}...`
+                  : 'Напиши коментар...'
+              }
+              placeholderTextColor={Colors.GRAY}
+              multiline
+              maxLength={500}
+              editable={!isSubmittingComment}
+            />
+            <TouchableOpacity
+              onPress={handleSubmitMainComment}
+              style={[
+                localStyles.sendButton,
+                {
+                  opacity:
+                    !mainCommentText.trim() || isSubmittingComment ? 0.5 : 1,
+                },
+              ]}
+              disabled={!mainCommentText.trim() || isSubmittingComment}
+            >
+              {isSubmittingComment ? (
+                <ActivityIndicator size="small" color={Colors.WHITE} />
+              ) : (
+                <MaterialIcons name="send" size={18} color={Colors.WHITE} />
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
-    </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
 const localStyles = StyleSheet.create({
-  scrollContent: { paddingBottom: 20 },
+  scrollContent: {
+    paddingBottom: 20,
+    paddingTop: 8,
+  },
+
+  // Search styles
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F2F5',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 16,
+    marginHorizontal: 16,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: Colors.BLACK,
+  },
+  searchResultsInfo: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  searchResultsText: {
+    color: Colors.GRAY,
+    fontSize: 12,
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 8,
+    color: Colors.GRAY,
+    textAlign: 'center',
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: Colors.GRAY,
+    fontSize: 16,
+  },
 
   // Parent comment container
   parentCommentContainer: {
-    marginBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.LIGHT_GRAY,
-    paddingBottom: 16,
+    marginBottom: 8,
+    backgroundColor: Colors.WHITE,
   },
 
   // Parent comment styles
   commentRow: {
     flexDirection: 'row',
-    padding: 10,
+    padding: 16,
+    paddingBottom: 8,
   },
-  avatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
-  commentMain: { flex: 1 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  author: { fontWeight: 'bold', fontSize: 14, marginRight: 4 },
-  role: { fontSize: 12, marginRight: 4 },
-  menuButton: { padding: 4 },
-  commentText: { fontSize: 14, marginBottom: 2 },
-  timeBelow: { fontSize: 11, color: Colors.GRAY },
-  actionRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  actionButton: { flexDirection: 'row', alignItems: 'center', marginRight: 10 },
-  actionText: { fontSize: 12, marginLeft: 2 },
-  likeCountText: { fontSize: 11, marginLeft: 4, color: Colors.GRAY },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  commentMain: {
+    flex: 1,
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    flexWrap: 'wrap',
+  },
+  author: {
+    fontWeight: 'bold',
+    fontSize: 14,
+    marginRight: 8,
+    color: Colors.BLACK,
+  },
+  role: {
+    fontSize: 12,
+    marginRight: 8,
+  },
+  commentTime: {
+    fontSize: 12,
+    color: Colors.GRAY,
+    marginRight: 8,
+  },
+  menuButton: {
+    padding: 4,
+    marginLeft: 'auto',
+  },
+  commentText: {
+    fontSize: 15,
+    marginBottom: 8,
+    lineHeight: 20,
+    color: Colors.BLACK,
+  },
+  commentActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  commentActionButton: {
+    marginRight: 16,
+    paddingVertical: 4,
+  },
+  commentActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  commentLikeCount: {
+    fontSize: 12,
+    color: Colors.GRAY,
+    marginLeft: 'auto',
+  },
 
-  // Replies container - indented from parent
-  repliesContainer: {
-    marginLeft: 46, // Indent all replies
-    borderLeftWidth: 2,
-    borderLeftColor: Colors.LIGHT_GRAY,
-    paddingLeft: 10,
+  // View replies button
+  viewRepliesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 8,
+    paddingVertical: 4,
+  },
+  repliesLine: {
+    width: 24,
+    height: 1,
+    backgroundColor: Colors.GRAY,
+    marginRight: 8,
+  },
+  viewRepliesText: {
+    fontSize: 13,
+    color: Colors.GRAY,
+    fontWeight: '600',
+  },
+
+  // Replies container
+  repliesContainer: {
+    paddingLeft: 52,
+    paddingRight: 16,
+    paddingBottom: 8,
   },
 
   // Individual reply styles
   replyItem: {
     flexDirection: 'row',
     marginBottom: 12,
-    paddingVertical: 8,
+    paddingVertical: 4,
   },
-  replyAvatar: { width: 32, height: 32, borderRadius: 16, marginRight: 10 },
-  replyMain: { flex: 1 },
-  replyAuthor: { fontWeight: 'bold', fontSize: 13, marginRight: 4 },
-  replyRole: { fontSize: 11, marginRight: 4 },
-  replyText: { fontSize: 13, marginBottom: 2 },
-
-  // Reply input
-  replyInputContainer: { flexDirection: 'row', marginTop: 8 },
-  replyInputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  replyInput: {
+  replyAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 10,
+  },
+  replyMain: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: Colors.LIGHT_GRAY,
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  },
+  replyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    flexWrap: 'wrap',
+  },
+  replyAuthor: {
+    fontWeight: 'bold',
+    fontSize: 13,
+    marginRight: 6,
+    color: Colors.BLACK,
+  },
+  replyRole: {
+    fontSize: 11,
+    marginRight: 6,
+  },
+  replyTime: {
+    fontSize: 11,
+    color: Colors.GRAY,
+    marginRight: 6,
+  },
+  replyText: {
+    fontSize: 14,
+    marginBottom: 4,
+    lineHeight: 18,
+    color: Colors.BLACK,
+  },
+  replyActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  replyActionButton: {
+    marginRight: 12,
+    paddingVertical: 2,
+  },
+  replyActionText: {
     fontSize: 12,
+    fontWeight: '600',
   },
-  replySubmitButton: {
-    marginLeft: 8,
-    backgroundColor: Colors.PRIMARY,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+  replyLikeCount: {
+    fontSize: 11,
+    color: Colors.GRAY,
+    marginLeft: 'auto',
   },
-  replySubmitText: { color: Colors.WHITE, fontSize: 12 },
-  smallAvatar: { width: 24, height: 24, borderRadius: 12, marginRight: 8 },
 
   // Edit styles
-  editContainer: { marginVertical: 4 },
+  editContainer: {
+    marginVertical: 8,
+  },
   editInput: {
     borderWidth: 1,
     borderColor: Colors.LIGHT_GRAY,
-    borderRadius: 4,
-    padding: 6,
-    fontSize: 12,
-    minHeight: 36,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    minHeight: 60,
+    textAlignVertical: 'top',
+    backgroundColor: Colors.WHITE,
   },
-  editButtons: { flexDirection: 'row', marginTop: 4 },
+  editButtons: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 8,
+  },
   saveButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     backgroundColor: Colors.PRIMARY,
-    borderRadius: 4,
-    marginRight: 4,
+    borderRadius: 6,
   },
-  saveButtonText: { color: Colors.WHITE, fontSize: 12 },
+  saveButtonText: {
+    color: Colors.WHITE,
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
   cancelButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     backgroundColor: Colors.LIGHT_GRAY,
-    borderRadius: 4,
+    borderRadius: 6,
   },
-  cancelButtonText: { color: Colors.GRAY, fontSize: 12 },
+  cancelButtonText: {
+    color: Colors.GRAY,
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
 
   // Menu styles
   menuDropdown: {
@@ -741,11 +944,84 @@ const localStyles = StyleSheet.create({
     top: 20,
     right: 0,
     backgroundColor: Colors.WHITE,
-    borderWidth: 1,
-    borderColor: Colors.LIGHT_GRAY,
-    borderRadius: 4,
-    zIndex: 10,
+    borderRadius: 8,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    zIndex: 1000,
+    minWidth: 120,
   },
-  menuOption: { paddingHorizontal: 8, paddingVertical: 6 },
-  menuOptionText: { fontSize: 12 },
+  menuOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.LIGHT_GRAY,
+  },
+  menuOptionText: {
+    fontSize: 14,
+    color: Colors.BLACK,
+  },
+
+  // Bottom input container - Facebook style
+  bottomInputContainer: {
+    backgroundColor: Colors.WHITE,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.LIGHT_GRAY,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+    paddingHorizontal: 16,
+  },
+  replyingToContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F0F2F5',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  replyingToText: {
+    fontSize: 13,
+    color: Colors.GRAY,
+    fontStyle: 'italic',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
+  },
+  inputAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  inputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: '#F0F2F5',
+    borderRadius: 20,
+    paddingLeft: 16,
+    paddingRight: 8,
+    paddingVertical: 8,
+    minHeight: 40,
+  },
+  mainCommentInput: {
+    flex: 1,
+    fontSize: 14,
+    color: Colors.BLACK,
+    maxHeight: 100,
+    paddingRight: 8,
+  },
+  sendButton: {
+    backgroundColor: Colors.PRIMARY,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 })

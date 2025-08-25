@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react'
+import React, { useContext, useState, useCallback } from 'react'
 import { View } from 'react-native'
 import axios from 'axios'
 import moment from 'moment-timezone'
@@ -65,6 +65,9 @@ export default function PostCard({
     null
   )
 
+  // Submission tracking
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false)
+
   // React Query hooks for comments
   const {
     comments,
@@ -121,21 +124,47 @@ export default function PostCard({
     }
   }
 
-  const handleSubmitComment = async () => {
-    if (!commentText.trim() || !user) return
-    try {
-      await addCommentMutation.mutateAsync({
-        postId: post.post_id,
-        userEmail: user.email,
-        comment: commentText,
-      })
-      setCommentText('')
-      invalidateComments()
-      setCommentCount((prev) => prev + 1)
-    } catch (error) {
-      console.error('Error submitting comment', error)
-    }
-  }
+  // Optimized comment submission with anti-spam protection
+  const handleSubmitComment = useCallback(
+    async (commentText: string, parentId?: number) => {
+      if (!commentText.trim() || !user || isSubmittingComment) return false
+
+      setIsSubmittingComment(true)
+
+      try {
+        await addCommentMutation.mutateAsync({
+          postId: post.post_id,
+          userEmail: user.email,
+          comment: commentText.trim(),
+          parentId,
+        })
+
+        invalidateComments()
+
+        // Update comment count if it's a main comment (not a reply)
+        if (!parentId) {
+          setCommentCount((prev) => prev + 1)
+        }
+
+        return true
+      } catch (error) {
+        console.error('Error submitting comment', error)
+        return false
+      } finally {
+        // Add delay to prevent spam
+        setTimeout(() => {
+          setIsSubmittingComment(false)
+        }, 1000)
+      }
+    },
+    [
+      user,
+      addCommentMutation,
+      post.post_id,
+      invalidateComments,
+      isSubmittingComment,
+    ]
+  )
 
   const handleToggleReplies = (commentId: number) => {
     setExpandedComments((prev) =>
@@ -150,17 +179,9 @@ export default function PostCard({
     const replyText = replyTexts[parentId]
     if (!replyText || replyText.trim() === '') return
 
-    try {
-      await addCommentMutation.mutateAsync({
-        postId: post.post_id,
-        userEmail: user.email,
-        comment: replyText,
-        parentId,
-      })
+    const success = await handleSubmitComment(replyText, parentId)
+    if (success) {
       setReplyTexts((prev) => ({ ...prev, [parentId]: '' }))
-      invalidateComments()
-    } catch (error) {
-      console.error('Error submitting reply', error)
     }
   }
 
@@ -315,7 +336,7 @@ export default function PostCard({
         onToggleComments={() => setCommentsModalVisible(true)}
         commentText={commentText}
         onCommentTextChange={setCommentText}
-        onSubmitComment={handleSubmitComment}
+        onSubmitComment={() => handleSubmitComment(commentText)}
         user={user}
       />
 
@@ -348,6 +369,8 @@ export default function PostCard({
           onSaveEditedReply: handleSaveEditedReply,
           onDeleteComment: handleDeleteComment,
           onDeleteReply: handleDeleteReply,
+          onSubmitComment: handleSubmitComment,
+          isSubmittingComment,
         }}
       />
 
