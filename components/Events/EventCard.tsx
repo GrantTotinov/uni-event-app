@@ -18,7 +18,7 @@ import 'moment/locale/bg'
 
 import Colors from '@/data/Colors'
 import Button from '@/components/Shared/Button'
-import { AuthContext, isAdmin } from '@/context/AuthContext'
+import { AuthContext, isSystemAdmin } from '@/context/AuthContext'
 import { useEvents } from '@/hooks/useEvents'
 import type { Event } from '@/hooks/useEvents'
 
@@ -53,7 +53,7 @@ const EventCard = memo(function EventCard({
   )
   const [menuVisible, setMenuVisible] = useState(false)
 
-  const canManage = isAdmin(user?.role) || user?.email === event.createdby
+  const canManage = isSystemAdmin(user?.role) || user?.email === event.createdby
 
   // Sync with props when they change
   useEffect(() => {

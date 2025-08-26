@@ -1,5 +1,5 @@
 import { pool } from '@/configs/NilePostgresConfig'
-import { isAdmin } from '@/context/AuthContext'
+import { isSystemAdmin } from '@/context/AuthContext'
 
 // Създаване на събитие (вкл. details)
 export async function POST(request: Request) {
@@ -348,7 +348,7 @@ export async function DELETE(request: Request) {
 
     const userRole = userQuery.rows[0]?.role
     const eventCreator = eventQuery.rows[0]?.createdby
-    if (!isAdmin(userRole) && eventCreator !== userEmail) {
+    if (!isSystemAdmin(userRole) && eventCreator !== userEmail) {
       return Response.json(
         { error: 'Нямате права да изтриете това събитие' },
         { status: 403 }

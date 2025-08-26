@@ -1,5 +1,5 @@
 import { pool } from '@/configs/NilePostgresConfig'
-import { isAdmin } from '@/context/AuthContext'
+import { isSystemAdmin } from '@/context/AuthContext'
 
 // Създаване на публикация
 export async function POST(request: Request) {
@@ -212,7 +212,7 @@ export async function PUT(request: Request) {
     }
     const postAuthor = postQuery.rows[0].createdby
 
-    if (!isAdmin(userRole) && postAuthor !== userEmail) {
+    if (!isSystemAdmin(userRole) && postAuthor !== userEmail) {
       return Response.json(
         { error: 'Нямате права да редактирате тази публикация' },
         { status: 403 }
@@ -288,7 +288,7 @@ export async function DELETE(request: Request) {
     }
     const postAuthor = postQuery.rows[0].createdby
 
-    if (!isAdmin(userRole) && postAuthor !== userEmail) {
+    if (!isSystemAdmin(userRole) && postAuthor !== userEmail) {
       return Response.json(
         { error: 'Нямате права да изтриете тази публикация' },
         { status: 403 }

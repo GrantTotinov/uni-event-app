@@ -1,12 +1,6 @@
-import {
-  View,
-  Text,
-  Touchable,
-  TouchableOpacity,
-  ActivityIndicator,
-} from "react-native"
-import React from "react"
-import Colors from "@/data/Colors"
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native'
+import React from 'react'
+import Colors from '@/data/Colors'
 
 type ButtonProps = {
   text: string
@@ -14,6 +8,7 @@ type ButtonProps = {
   loading?: boolean
   outline?: boolean
   fullWidth?: boolean
+  disabled?: boolean
 }
 
 export default function Button({
@@ -22,10 +17,12 @@ export default function Button({
   loading = false,
   outline = false,
   fullWidth = false,
+  disabled = false,
 }: ButtonProps) {
   return (
     <TouchableOpacity
       onPress={onPress}
+      disabled={disabled || loading}
       style={{
         padding: 15,
         backgroundColor: outline ? Colors.WHITE : Colors.PRIMARY,
@@ -34,6 +31,7 @@ export default function Button({
         marginTop: 15,
         borderRadius: 10,
         flex: fullWidth ? 1 : 0,
+        opacity: disabled || loading ? 0.6 : 1,
       }}
     >
       {loading ? (
@@ -42,7 +40,7 @@ export default function Button({
         <Text
           style={{
             fontSize: 18,
-            textAlign: "center",
+            textAlign: 'center',
             color: outline ? Colors.PRIMARY : Colors.WHITE,
           }}
         >

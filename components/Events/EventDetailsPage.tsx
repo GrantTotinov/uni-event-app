@@ -14,7 +14,7 @@ import { Image } from 'expo-image'
 
 import Colors from '@/data/Colors'
 import Button from '@/components/Shared/Button'
-import { AuthContext, isAdmin } from '@/context/AuthContext'
+import { AuthContext, isSystemAdmin } from '@/context/AuthContext'
 import { useEventDetails, useEvents } from '@/hooks/useEvents'
 
 interface EventDetailsPageProps {
@@ -219,7 +219,7 @@ const EventDetailsPage = memo(function EventDetailsPage({
         </TouchableOpacity>
       </View>
 
-      {(isAdmin(user?.role) || user?.email === event.createdby) && (
+      {(isSystemAdmin(user?.role) || user?.email === event.createdby) && (
         <View style={{ marginTop: 20 }}>
           <Text style={styles.sectionTitle}>Админ опции</Text>
           <View style={{ flexDirection: 'row', gap: 10 }}>

@@ -3,7 +3,7 @@ import { View } from 'react-native'
 import axios from 'axios'
 import moment from 'moment-timezone'
 import 'moment/locale/bg'
-import { AuthContext, isAdmin } from '@/context/AuthContext'
+import { AuthContext, isSystemAdmin } from '@/context/AuthContext'
 import { usePostComments } from '@/hooks/useComments'
 import PostHeader from './PostHeader'
 import PostContent from './PostContent'
@@ -40,7 +40,7 @@ export default function PostCard({
   onUpdate?: () => void
 }) {
   const { user } = useContext(AuthContext)
-  const canDelete = isAdmin(user?.role) || user?.email === post.createdby
+  const canDelete = isSystemAdmin(user?.role) || user?.email === post.createdby
 
   const [isLiked, setIsLiked] = useState(!!post.is_liked)
   const [likeCount, setLikeCount] = useState(post.like_count ?? 0)

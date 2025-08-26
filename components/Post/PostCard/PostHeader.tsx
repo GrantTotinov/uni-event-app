@@ -1,7 +1,7 @@
 import React from 'react'
 import { View, TouchableOpacity, Text } from 'react-native'
 import UserAvatar from '../UserAvatar'
-import { isAdmin } from '@/context/AuthContext'
+import { isSystemAdmin } from '@/context/AuthContext'
 import { styles } from './styles'
 
 interface PostHeaderProps {
@@ -33,8 +33,9 @@ export default function PostHeader({
           localDate={post?.createdon_local}
           role={post?.role}
           isUhtRelated={post?.is_uht_related}
+          email={post?.createdby}
         />
-        {(isAdmin(user?.role) || user?.email === post.createdby) && (
+        {(isSystemAdmin(user?.role) || user?.email === post.createdby) && (
           <TouchableOpacity onPress={onShowMenu} style={{ padding: 8 }}>
             <Text style={{ fontSize: 22 }}>⋮</Text>
           </TouchableOpacity>

@@ -1,5 +1,5 @@
 import { pool } from '@/configs/NilePostgresConfig'
-import { isAdmin } from '@/context/AuthContext'
+import { isSystemAdmin } from '@/context/AuthContext'
 
 /**
  * GET all comments for a post, including all levels of nesting.
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
         users.name, 
         users.image, 
         users.email AS user_email, 
-        users.role, 
+        users.role AS user_role,
         comments.parent_id
       FROM comments
       INNER JOIN users ON comments.user_email = users.email
@@ -175,7 +175,7 @@ export async function DELETE(request: Request) {
     const commentAuthor = commentQuery.rows[0].user_email
 
     if (
-      !isAdmin(userRole) &&
+      !isSystemAdmin(userRole) &&
       userEmail !== commentAuthor &&
       userEmail !== postAuthorEmail
     ) {

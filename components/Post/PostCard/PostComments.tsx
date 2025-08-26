@@ -14,7 +14,7 @@ import {
 import moment from 'moment-timezone'
 import { MaterialIcons, Ionicons, AntDesign } from '@expo/vector-icons'
 import Colors from '@/data/Colors'
-import { isAdmin } from '@/context/AuthContext'
+import { isSystemAdmin } from '@/context/AuthContext'
 import { useCommentLikes } from '@/hooks/useComments'
 import { styles as baseStyles } from './styles'
 
@@ -125,8 +125,8 @@ export default function PostComments({
   const clearCommentSearch = () => setCommentSearchQuery('')
   const getRoleDisplayText = (userRole?: string | null) => {
     switch (userRole) {
-      case 'admin':
-        return 'Админ'
+      case 'systemadmin':
+        return 'Системен Админ'
       case 'teacher':
         return 'Преподавател'
       case 'user':
@@ -137,7 +137,7 @@ export default function PostComments({
   }
   const getRoleColor = (userRole?: string | null) => {
     switch (userRole) {
-      case 'admin':
+      case 'systemadmin':
         return '#dc3545'
       case 'teacher':
         return '#007bff'
@@ -259,7 +259,7 @@ export default function PostComments({
                   : moment(reply.created_at).fromNow()}
               </Text>
               {(user?.email === reply.user_email ||
-                isAdmin(user?.role) ||
+                isSystemAdmin(user?.role) ||
                 user?.email === post.createdby) && (
                 <TouchableOpacity
                   onPress={() =>
@@ -351,7 +351,7 @@ export default function PostComments({
                     <Text style={localStyles.menuOptionText}>Редактирай</Text>
                   </TouchableOpacity>
                 )}
-                {(isAdmin(user?.role) ||
+                {(isSystemAdmin(user?.role) ||
                   user?.email === reply.user_email ||
                   user?.email === post.createdby) && (
                   <TouchableOpacity
@@ -467,7 +467,7 @@ export default function PostComments({
                               : moment(c.created_at).fromNow()}
                           </Text>
                           {(user?.email === c.user_email ||
-                            isAdmin(user?.role) ||
+                            isSystemAdmin(user?.role) ||
                             user?.email === post.createdby) && (
                             <TouchableOpacity
                               onPress={() =>
@@ -590,7 +590,7 @@ export default function PostComments({
                                 </Text>
                               </TouchableOpacity>
                             )}
-                            {(isAdmin(user?.role) ||
+                            {(isSystemAdmin(user?.role) ||
                               user?.email === c.user_email ||
                               user?.email === post.createdby) && (
                               <TouchableOpacity

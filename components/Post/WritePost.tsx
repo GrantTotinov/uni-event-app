@@ -12,7 +12,7 @@ import {
 } from 'react-native'
 import Colors from '@/data/Colors'
 import Button from '@/components/Shared/Button'
-import { AuthContext, isAdmin } from '@/context/AuthContext'
+import { AuthContext, isSystemAdmin } from '@/context/AuthContext'
 import DropDownPicker from 'react-native-dropdown-picker'
 import * as ImagePicker from 'expo-image-picker'
 import * as DocumentPicker from 'expo-document-picker'
@@ -271,7 +271,7 @@ export default function WritePost() {
         </View>
       )}
 
-      {(isAdmin(user?.role) || user?.role === 'teacher') && (
+      {(isSystemAdmin(user?.role) || user?.role === 'teacher') && (
         <View style={styles.uhtCheckboxContainer}>
           <TouchableOpacity
             onPress={() => setIsUhtRelated(!isUhtRelated)}

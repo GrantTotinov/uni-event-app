@@ -1,12 +1,12 @@
-import React from "react"
-import { View, TextInput, TouchableOpacity, Text, Image } from "react-native"
-import * as ImagePicker from "expo-image-picker"
-import { upload } from "cloudinary-react-native"
-import { cld, options } from "@/configs/CloudinaryConfig"
-import axios from "axios"
-import { isAdmin } from "@/context/AuthContext"
-import Colors from "@/data/Colors"
-import { styles } from "./styles"
+import React from 'react'
+import { View, TextInput, TouchableOpacity, Text, Image } from 'react-native'
+import * as ImagePicker from 'expo-image-picker'
+import { upload } from 'cloudinary-react-native'
+import { cld, options } from '@/configs/CloudinaryConfig'
+import axios from 'axios'
+import { isSystemAdmin } from '@/context/AuthContext'
+import Colors from '@/data/Colors'
+import { styles } from './styles'
 
 interface PostEditModalProps {
   editedContent: string
@@ -35,7 +35,7 @@ export default function PostEditModal({
 }: PostEditModalProps) {
   const pickEditImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [4, 4],
       quality: 0.5,
@@ -48,7 +48,7 @@ export default function PostEditModal({
   const saveEdits = async () => {
     try {
       let finalImageUrl = editedImageUrl
-      if (editedImageUrl && !editedImageUrl.startsWith("http")) {
+      if (editedImageUrl && !editedImageUrl.startsWith('http')) {
         await upload(cld, {
           file: editedImageUrl,
           options: options,
@@ -67,7 +67,7 @@ export default function PostEditModal({
       })
       onSave()
     } catch (error) {
-      console.error("Грешка при редактиране", error)
+      console.error('Грешка при редактиране', error)
     }
   }
 
@@ -82,7 +82,7 @@ export default function PostEditModal({
         placeholderTextColor={Colors.GRAY}
       />
 
-      {(isAdmin(user?.role) || user?.role === "teacher") && (
+      {(isSystemAdmin(user?.role) || user?.role === 'teacher') && (
         <View style={styles.uhtCheckboxContainer}>
           <TouchableOpacity
             onPress={() => setEditedUhtRelated(!editedUhtRelated)}

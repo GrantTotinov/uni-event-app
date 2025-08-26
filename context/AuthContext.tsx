@@ -1,4 +1,4 @@
-import React, { createContext, useState, ReactNode } from "react"
+import React, { createContext, useState, ReactNode } from 'react'
 
 interface User {
   name: string
@@ -17,8 +17,8 @@ export const AuthContext = createContext<AuthContextType>({
   setUser: () => {},
 })
 
-export function isAdmin(role?: string): boolean {
-  return role === "admin"
+export function isSystemAdmin(role?: string): boolean {
+  return role === 'systemadmin'
 }
 
 interface AuthContextProviderProps {

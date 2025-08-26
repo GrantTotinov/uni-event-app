@@ -80,7 +80,7 @@ export function useCommentLikes(
   const likeCountsQuery = useQuery({
     queryKey: [
       CACHE_KEYS.COMMENT_LIKES,
-      CACHE_KEYS.COMMENT_LIKES_COUNT,
+      CACHE_KEYS.COMMENT_LIKES_COUNTS,
       validCommentIds.sort(),
     ],
     queryFn: async () => {
@@ -165,7 +165,7 @@ export function useCommentLikes(
         ],
       })
       await queryClient.cancelQueries({
-        queryKey: [CACHE_KEYS.COMMENT_LIKES, CACHE_KEYS.COMMENT_LIKES_COUNT],
+        queryKey: [CACHE_KEYS.COMMENT_LIKES, CACHE_KEYS.COMMENT_LIKES_COUNTS],
       })
 
       // Update cache optimistically
@@ -183,7 +183,7 @@ export function useCommentLikes(
         queryClient.setQueryData(
           [
             CACHE_KEYS.COMMENT_LIKES,
-            CACHE_KEYS.COMMENT_LIKES_COUNT,
+            CACHE_KEYS.COMMENT_LIKES_COUNTS,
             validCommentIds.sort(),
           ],
           (old: { [key: number]: number } = {}) => ({
@@ -205,7 +205,7 @@ export function useCommentLikes(
         queryClient.setQueryData(
           [
             CACHE_KEYS.COMMENT_LIKES,
-            CACHE_KEYS.COMMENT_LIKES_COUNT,
+            CACHE_KEYS.COMMENT_LIKES_COUNTS,
             validCommentIds.sort(),
           ],
           (old: { [key: number]: number } = {}) => ({
