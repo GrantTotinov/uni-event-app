@@ -76,6 +76,15 @@ const PostItem = memo(function PostItem({
   )
 })
 
+function deduplicatePosts(posts: (HooksPost | SkeletonPost)[]) {
+  const seen = new Set<number>()
+  return posts.filter((post) => {
+    if (seen.has(post.post_id)) return false
+    seen.add(post.post_id)
+    return true
+  })
+}
+
 const PostList = memo(function PostList({
   posts,
   loading,
@@ -133,16 +142,8 @@ const PostList = memo(function PostList({
     )
   }
 
-  const keyExtractor = (item: HooksPost | SkeletonPost) => String(item.post_id)
-
-  const onEndReached = () => {
-    if (onLoadMore && hasMore && !loadingMore && !loading && !showSkeleton) {
-      onLoadMore()
-    }
-  }
-
-  // Add skeleton posts for initial loading
-  const postsWithSkeleton: (HooksPost | SkeletonPost)[] = showSkeleton
+  // Fix: do not mutate a const, use a let instead
+  let postsWithSkeleton: (HooksPost | SkeletonPost)[] = showSkeleton
     ? [
         ...Array.from(
           { length: 3 },
@@ -168,7 +169,17 @@ const PostList = memo(function PostList({
       ]
     : posts
 
-  // Don't show refresh control if showing skeleton
+  postsWithSkeleton = deduplicatePosts(postsWithSkeleton)
+
+  const keyExtractor = (item: HooksPost | SkeletonPost, index: number) =>
+    `post-${item.post_id}-${index}`
+
+  const onEndReached = () => {
+    if (onLoadMore && hasMore && !loadingMore && !loading && !showSkeleton) {
+      onLoadMore()
+    }
+  }
+
   const shouldShowRefreshControl = !showSkeleton
 
   return (

@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native'
 import moment from 'moment-timezone'
-import { MaterialIcons, Ionicons, AntDesign } from '@expo/vector-icons'
+import { MaterialIcons, Ionicons } from '@expo/vector-icons'
 import Colors from '@/data/Colors'
 import { isSystemAdmin } from '@/context/AuthContext'
 import { useCommentLikes } from '@/hooks/useComments'
@@ -44,7 +44,7 @@ interface PostCommentsProps {
   editedCommentText: string
   editedReplyText: string
   onToggleReplies: (commentId: number) => void
-  onSubmitReply: (parentId: number) => void
+  onSubmitReply: (commentText: string, parentId?: number) => Promise<void>
   onUpdateReplyText: (commentId: number, text: string) => void
   onToggleCommentMenu: (commentId: number | null) => void
   onToggleReplyMenu: (replyId: number | null) => void
@@ -58,7 +58,7 @@ interface PostCommentsProps {
   onDeleteReply: (replyId: number) => void
 }
 
-export default function PostComments({
+const PostComments: React.FC<PostCommentsProps> = ({
   post,
   user,
   comments,
@@ -84,7 +84,7 @@ export default function PostComments({
   onSaveEditedReply,
   onDeleteComment,
   onDeleteReply,
-}: PostCommentsProps) {
+}) => {
   const [commentSearchQuery, setCommentSearchQuery] = useState<string>('')
   const [mainCommentText, setMainCommentText] = useState<string>('')
   const [isSubmittingComment, setIsSubmittingComment] = useState(false)
@@ -95,7 +95,7 @@ export default function PostComments({
 
   const submissionTimeoutRef = useRef<NodeJS.Timeout>()
 
-  // --- Likes logic ---
+  // Likes logic
   const getAllCommentIds = (
     commentsList: Comment[],
     repliesMap: { [key: number]: Comment[] }
@@ -121,7 +121,7 @@ export default function PostComments({
     isToggling,
   } = useCommentLikes(allCommentIds, user?.email, allCommentIds.length > 0)
 
-  // --- Helpers ---
+  // Helpers
   const clearCommentSearch = () => setCommentSearchQuery('')
   const getRoleDisplayText = (userRole?: string | null) => {
     switch (userRole) {
@@ -150,10 +150,12 @@ export default function PostComments({
 
   const handleCommentLike = async (commentId: number) => {
     if (!user?.email || isToggling) return
-    const currentLike = commentLikes[commentId]
-    if (!currentLike) return
+
     try {
-      await toggleLike({ commentId, isLiked: currentLike.isLiked })
+      // Ако няма запис за лайка, той е false (не е харесан)
+      const isCurrentlyLiked = commentLikes[commentId]?.isLiked ?? false
+
+      await toggleLike({ commentId, isLiked: isCurrentlyLiked })
     } catch (error) {
       console.error('Error toggling comment like:', error)
     }
@@ -182,7 +184,6 @@ export default function PostComments({
   const handleSubmitMainComment = async () => {
     if (!mainCommentText.trim() || !user || isSubmittingComment) return
 
-    // Clear any existing timeout
     if (submissionTimeoutRef.current) {
       clearTimeout(submissionTimeoutRef.current)
     }
@@ -192,13 +193,10 @@ export default function PostComments({
     try {
       if (replyingToCommentId) {
         // It's a reply
-        await onSubmitReply(replyingToCommentId)
-        onUpdateReplyText(replyingToCommentId, mainCommentText)
+        await onSubmitReply(mainCommentText, replyingToCommentId)
       } else {
-        // It's a main comment - we need to call the parent's comment submission
-        // For now, we'll simulate by calling onSubmitReply with post.post_id
-        // You might need to adjust this based on your actual implementation
-        console.log('Submitting main comment:', mainCommentText)
+        // It's a main comment - pass undefined for parentId
+        await onSubmitReply(mainCommentText, undefined)
       }
 
       setMainCommentText('')
@@ -206,19 +204,34 @@ export default function PostComments({
     } catch (error) {
       console.error('Error submitting comment:', error)
     } finally {
-      // Prevent double submission with timeout
       submissionTimeoutRef.current = setTimeout(() => {
         setIsSubmittingComment(false)
       }, 1000)
     }
   }
 
-  // --- Render all replies under a comment (flattened) ---
+  // Filter parent comments for display
+  const parentComments = useMemo(
+    () => comments.filter((c) => !c.parent_id),
+    [comments]
+  )
+
+  // Count all nested replies for a comment
+  const countAllReplies = (commentId: number): number => {
+    let count = 0
+    const directReplies = replies[commentId] || []
+    count += directReplies.length
+    directReplies.forEach((reply) => {
+      count += countAllReplies(reply.id)
+    })
+    return count
+  }
+
+  // Render all replies under a comment (flattened)
   const renderAllReplies = (parentId: number): React.ReactNode => {
     const allReplies = replies[parentId] || []
     if (!allReplies.length) return null
 
-    // Collect all nested replies in a flat array
     const collectAllReplies = (
       commentId: number,
       collected: Comment[] = []
@@ -235,9 +248,14 @@ export default function PostComments({
 
     return flattenedReplies.map((reply) => {
       const replyLike = commentLikes[reply.id]
+      const canDeleteReply =
+        isSystemAdmin(user?.role) ||
+        user?.email === reply.user_email ||
+        user?.email === post.createdby ||
+        user?.email === post.group_creator_email
 
       return (
-        <View key={reply.id} style={localStyles.replyItem}>
+        <View key={`reply-${reply.id}`} style={localStyles.replyItem}>
           <Image
             source={getImageSource(reply.image)}
             style={localStyles.replyAvatar}
@@ -258,9 +276,7 @@ export default function PostComments({
                   ? moment(reply.created_at_local).fromNow()
                   : moment(reply.created_at).fromNow()}
               </Text>
-              {(user?.email === reply.user_email ||
-                isSystemAdmin(user?.role) ||
-                user?.email === post.createdby) && (
+              {canDeleteReply && (
                 <TouchableOpacity
                   onPress={() =>
                     onToggleReplyMenu(
@@ -351,9 +367,7 @@ export default function PostComments({
                     <Text style={localStyles.menuOptionText}>Редактирай</Text>
                   </TouchableOpacity>
                 )}
-                {(isSystemAdmin(user?.role) ||
-                  user?.email === reply.user_email ||
-                  user?.email === post.createdby) && (
+                {canDeleteReply && (
                   <TouchableOpacity
                     onPress={() => {
                       onDeleteReply(reply.id)
@@ -376,7 +390,6 @@ export default function PostComments({
     })
   }
 
-  const displayComments = comments
   const showLoading = likesLoading
 
   return (
@@ -420,7 +433,7 @@ export default function PostComments({
               <Text style={localStyles.searchResultsText}>
                 {showLoading
                   ? 'Търсене в коментарите...'
-                  : `Намерени ${displayComments.length} коментар(а) за "${commentSearchQuery}"`}
+                  : `Намерени ${parentComments.length} коментар(а) за "${commentSearchQuery}"`}
               </Text>
             </View>
           )}
@@ -436,14 +449,23 @@ export default function PostComments({
             </View>
           )}
 
-          {displayComments.length > 0
-            ? displayComments.map((c) => {
+          {parentComments.length > 0
+            ? parentComments.map((c) => {
                 const commentLike = commentLikes[c.id]
                 const hasReplies = replies[c.id] && replies[c.id].length > 0
-                const replyCount = replies[c.id]?.length || 0
+                const replyCount = countAllReplies(c.id)
+
+                const canDeleteComment =
+                  isSystemAdmin(user?.role) ||
+                  user?.email === c.user_email ||
+                  user?.email === post.createdby ||
+                  user?.email === post.group_creator_email
 
                 return (
-                  <View key={c.id} style={localStyles.parentCommentContainer}>
+                  <View
+                    key={`comment-${c.id}`}
+                    style={localStyles.parentCommentContainer}
+                  >
                     {/* Parent Comment */}
                     <View style={localStyles.commentRow}>
                       <Image
@@ -466,9 +488,7 @@ export default function PostComments({
                               ? moment(c.created_at_local).fromNow()
                               : moment(c.created_at).fromNow()}
                           </Text>
-                          {(user?.email === c.user_email ||
-                            isSystemAdmin(user?.role) ||
-                            user?.email === post.createdby) && (
+                          {canDeleteComment && (
                             <TouchableOpacity
                               onPress={() =>
                                 onToggleCommentMenu(
@@ -590,9 +610,7 @@ export default function PostComments({
                                 </Text>
                               </TouchableOpacity>
                             )}
-                            {(isSystemAdmin(user?.role) ||
-                              user?.email === c.user_email ||
-                              user?.email === post.createdby) && (
+                            {canDeleteComment && (
                               <TouchableOpacity
                                 onPress={() => {
                                   onDeleteComment(c.id)
@@ -634,7 +652,7 @@ export default function PostComments({
         </View>
       </ScrollView>
 
-      {/* Bottom Comment Input - Facebook Style */}
+      {/* Bottom Comment Input */}
       <View style={localStyles.bottomInputContainer}>
         {replyingToCommentId && (
           <View style={localStyles.replyingToContainer}>
@@ -692,12 +710,11 @@ export default function PostComments({
 }
 
 const localStyles = StyleSheet.create({
+  // ...styles as in your file...
   scrollContent: {
     paddingBottom: 20,
     paddingTop: 8,
   },
-
-  // Search styles
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -738,14 +755,10 @@ const localStyles = StyleSheet.create({
     color: Colors.GRAY,
     fontSize: 16,
   },
-
-  // Parent comment container
   parentCommentContainer: {
     marginBottom: 8,
     backgroundColor: Colors.WHITE,
   },
-
-  // Parent comment styles
   commentRow: {
     flexDirection: 'row',
     padding: 16,
@@ -809,8 +822,6 @@ const localStyles = StyleSheet.create({
     color: Colors.GRAY,
     marginLeft: 'auto',
   },
-
-  // View replies button
   viewRepliesButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -828,15 +839,11 @@ const localStyles = StyleSheet.create({
     color: Colors.GRAY,
     fontWeight: '600',
   },
-
-  // Replies container
   repliesContainer: {
     paddingLeft: 52,
     paddingRight: 16,
     paddingBottom: 8,
   },
-
-  // Individual reply styles
   replyItem: {
     flexDirection: 'row',
     marginBottom: 12,
@@ -895,8 +902,6 @@ const localStyles = StyleSheet.create({
     color: Colors.GRAY,
     marginLeft: 'auto',
   },
-
-  // Edit styles
   editContainer: {
     marginVertical: 8,
   },
@@ -937,8 +942,6 @@ const localStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: 'bold',
   },
-
-  // Menu styles
   menuDropdown: {
     position: 'absolute',
     top: 20,
@@ -963,8 +966,6 @@ const localStyles = StyleSheet.create({
     fontSize: 14,
     color: Colors.BLACK,
   },
-
-  // Bottom input container - Facebook style
   bottomInputContainer: {
     backgroundColor: Colors.WHITE,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -1025,3 +1026,5 @@ const localStyles = StyleSheet.create({
     alignItems: 'center',
   },
 })
+
+export default PostComments

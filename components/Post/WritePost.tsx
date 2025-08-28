@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react'
+import React, { useContext, useState, useCallback } from 'react'
 import {
   View,
   Text,
@@ -16,11 +16,10 @@ import { AuthContext, isSystemAdmin } from '@/context/AuthContext'
 import DropDownPicker from 'react-native-dropdown-picker'
 import * as ImagePicker from 'expo-image-picker'
 import * as DocumentPicker from 'expo-document-picker'
-import * as FileSystem from 'expo-file-system'
 import { upload } from 'cloudinary-react-native'
 import { cld, options } from '@/configs/CloudinaryConfig'
 import axios from 'axios'
-import { useRouter } from 'expo-router'
+import { useRouter, useFocusEffect } from 'expo-router'
 import { storage } from '@/configs/FirebaseConfig'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 
@@ -56,12 +55,52 @@ export default function WritePost() {
     { label: 'Публично (за всички)', value: 'public', key: 'public' },
     { label: 'Само аз (лично)', value: 0, key: 'private' },
   ])
+  const [clubs, setClubs] = useState<DropdownItemType[]>([])
+  const [clubsLoading, setClubsLoading] = useState<boolean>(false)
 
-  useEffect(() => {
-    // Fetch user's clubs logic here if needed
-  }, [user?.email])
+  // Always fetch clubs when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true
+      const fetchClubs = async () => {
+        if (!user?.email) return
+        setClubsLoading(true)
+        try {
+          const res = await axios.get(
+            `${
+              process.env.EXPO_PUBLIC_HOST_URL
+            }/clubfollower?u_email=${encodeURIComponent(user.email)}`
+          )
+          if (isActive && Array.isArray(res.data)) {
+            const clubOptions = res.data.map((club: any) => ({
+              label: club.name,
+              value: club.club_id,
+              key: String(club.club_id),
+            }))
+            setClubs(clubOptions)
+          }
+        } catch (error) {
+          console.error('Грешка при зареждане на клубове:', error)
+        }
+        setClubsLoading(false)
+      }
+      fetchClubs()
+      return () => {
+        isActive = false
+      }
+    }, [user?.email])
+  )
 
-  const selectImage = async () => {
+  // Update dropdown items when clubs change
+  React.useEffect(() => {
+    setItems([
+      { label: 'Публично (за всички)', value: 'public', key: 'public' },
+      { label: 'Само аз (лично)', value: 0, key: 'private' },
+      ...clubs,
+    ])
+  }, [clubs])
+
+  const selectImage = useCallback(async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
@@ -76,9 +115,9 @@ export default function WritePost() {
       console.error('Error selecting image:', error)
       Alert.alert('Грешка', 'Неуспешно избиране на снимка')
     }
-  }
+  }, [])
 
-  const pickDocument = async () => {
+  const pickDocument = useCallback(async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         copyToCacheDirectory: true,
@@ -98,34 +137,31 @@ export default function WritePost() {
       console.error('Error picking document:', error)
       Alert.alert('Грешка', 'Неуспешно избиране на файл')
     }
-  }
+  }, [])
 
-  const removeFile = (index: number) => {
+  const removeFile = useCallback((index: number) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
-  }
+  }, [])
 
-  const uploadFileToFirebase = async (
-    file: SelectedFile,
-    userEmail: string
-  ) => {
-    try {
-      // Използвай само оригиналното име на файла
-      const fileName = file.name
-      const fileRef = ref(storage, `documents/${userEmail}/${fileName}`)
+  const uploadFileToFirebase = useCallback(
+    async (file: SelectedFile, userEmail: string) => {
+      try {
+        const fileName = file.name
+        const fileRef = ref(storage, `documents/${userEmail}/${fileName}`)
+        const response = await fetch(file.uri)
+        const blob = await response.blob()
+        await uploadBytes(fileRef, blob)
+        const url = await getDownloadURL(fileRef)
+        return url
+      } catch (error) {
+        console.error('Error uploading file to Firebase:', error)
+        throw error
+      }
+    },
+    []
+  )
 
-      const response = await fetch(file.uri)
-      const blob = await response.blob()
-
-      await uploadBytes(fileRef, blob)
-      const url = await getDownloadURL(fileRef)
-      return url
-    } catch (error) {
-      console.error('Error uploading file to Firebase:', error)
-      throw error
-    }
-  }
-
-  const onPublishPost = async () => {
+  const onPublishPost = useCallback(async () => {
     if (!content.trim()) {
       Alert.alert('Грешка', 'Моля въведете съдържание на публикацията')
       return
@@ -154,12 +190,7 @@ export default function WritePost() {
       }
 
       // Determine the visibleIn value to send to the server
-      const visibleIn =
-        selectedClub === 'public'
-          ? null
-          : selectedClub === null
-          ? null
-          : selectedClub
+      const visibleIn = value === 'public' || value === null ? null : value
 
       // 1. Create the post first
       const result = await axios.post(
@@ -209,6 +240,7 @@ export default function WritePost() {
         setSelectedClub(null)
         setIsUhtRelated(false)
         setSelectedFiles([])
+        setValue(null)
         Alert.alert('Успех', 'Публикацията е създадена успешно!')
         router.back()
       } else {
@@ -219,7 +251,16 @@ export default function WritePost() {
       Alert.alert('Грешка', 'Неуспешно създаване на публикация')
     }
     setLoading(false)
-  }
+  }, [
+    content,
+    selectedImage,
+    user?.email,
+    isUhtRelated,
+    selectedFiles,
+    value,
+    uploadFileToFirebase,
+    router,
+  ])
 
   return (
     <View style={{ marginTop: 25 }}>
@@ -298,18 +339,26 @@ export default function WritePost() {
           setOpen={setOpen}
           setValue={setValue}
           setItems={setItems}
-          onChangeValue={(value) =>
-            setSelectedClub(value as number | string | null)
+          onChangeValue={(val) =>
+            setSelectedClub(val as number | string | null)
           }
           placeholder="Избери видимост (по подразбиране: Публично)"
           style={styles.dropdown}
-          dropDownContainerStyle={styles.dropdownList}
+          dropDownContainerStyle={[
+            styles.dropdownList,
+            { maxHeight: 400 }, // увеличи височината за повече видими опции
+          ]}
           listItemLabelStyle={{ fontSize: 16 }}
           selectedItemLabelStyle={{ fontWeight: 'bold' }}
           placeholderStyle={{ color: Colors.GRAY }}
-          listMode="SCROLLVIEW"
+          listMode="SCROLLVIEW" // падащо меню с възможност за скрол
+          loading={clubsLoading}
+          ActivityIndicatorComponent={(props) => (
+            <ActivityIndicator {...props} />
+          )}
           scrollViewProps={{
             nestedScrollEnabled: true,
+            persistentScrollbar: true,
           }}
           searchable={false}
           closeAfterSelecting={true}

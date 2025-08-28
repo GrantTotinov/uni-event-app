@@ -174,13 +174,12 @@ export default function PostCard({
     )
   }
 
-  const handleSubmitReply = async (parentId: number) => {
+  const handleSubmitReply = async (commentText: string, parentId?: number) => {
     if (!user) return
-    const replyText = replyTexts[parentId]
-    if (!replyText || replyText.trim() === '') return
 
-    const success = await handleSubmitComment(replyText, parentId)
-    if (success) {
+    const success = await handleSubmitComment(commentText, parentId)
+    if (success && parentId) {
+      // Clear reply text only if it was a reply (had parentId)
       setReplyTexts((prev) => ({ ...prev, [parentId]: '' }))
     }
   }
@@ -338,6 +337,7 @@ export default function PostCard({
         onCommentTextChange={setCommentText}
         onSubmitComment={() => handleSubmitComment(commentText)}
         user={user}
+        postImageUrl={post.imageurl}
       />
 
       <PostCommentsModal
@@ -346,7 +346,7 @@ export default function PostCard({
         commentsProps={{
           post,
           user,
-          comments: comments.filter((c) => !c.parent_id), // Only parent comments
+          comments,
           replies,
           expandedComments,
           replyTexts,
@@ -357,7 +357,7 @@ export default function PostCard({
           editedCommentText,
           editedReplyText,
           onToggleReplies: handleToggleReplies,
-          onSubmitReply: handleSubmitReply,
+          onSubmitReply: handleSubmitReply, // <-- използвай само този
           onUpdateReplyText: handleUpdateReplyText,
           onToggleCommentMenu: handleToggleCommentMenu,
           onToggleReplyMenu: handleToggleReplyMenu,
@@ -369,7 +369,7 @@ export default function PostCard({
           onSaveEditedReply: handleSaveEditedReply,
           onDeleteComment: handleDeleteComment,
           onDeleteReply: handleDeleteReply,
-          onSubmitComment: handleSubmitComment,
+          // Премахни onSubmitComment от тук
           isSubmittingComment,
         }}
       />

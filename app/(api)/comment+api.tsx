@@ -146,38 +146,64 @@ export async function DELETE(request: Request) {
   }
 
   try {
+    // Get user role
     const userQuery = await pool.query(
       'SELECT role FROM users WHERE email = $1',
       [userEmail]
     )
-
     if (userQuery.rows.length === 0) {
       return Response.json(
         { error: 'Потребителят не съществува' },
         { status: 404 }
       )
     }
-
     const userRole = userQuery.rows[0].role
 
+    // Get comment info (including post_id)
     const commentQuery = await pool.query(
-      'SELECT user_email FROM comments WHERE id = $1',
+      'SELECT user_email, post_id FROM comments WHERE id = $1',
       [commentId]
     )
-
     if (commentQuery.rows.length === 0) {
       return Response.json(
         { error: 'Коментарът не съществува' },
         { status: 404 }
       )
     }
-
     const commentAuthor = commentQuery.rows[0].user_email
+    const postId = commentQuery.rows[0].post_id
+
+    // Get post info (including club)
+    const postQuery = await pool.query(
+      'SELECT createdby, club FROM post WHERE id = $1',
+      [postId]
+    )
+    if (postQuery.rows.length === 0) {
+      return Response.json({ error: 'Постът не съществува' }, { status: 404 })
+    }
+    const postAuthor = postQuery.rows[0].createdby
+    const clubId = postQuery.rows[0].club
+
+    // Check if user is group creator
+    let isGroupCreator = false
+    if (clubId) {
+      const clubQuery = await pool.query(
+        'SELECT createdby FROM clubs WHERE id = $1',
+        [clubId]
+      )
+      if (
+        clubQuery.rows.length > 0 &&
+        clubQuery.rows[0].createdby === userEmail
+      ) {
+        isGroupCreator = true
+      }
+    }
 
     if (
       !isSystemAdmin(userRole) &&
       userEmail !== commentAuthor &&
-      userEmail !== postAuthorEmail
+      userEmail !== postAuthor &&
+      !isGroupCreator
     ) {
       return Response.json(
         { error: 'Нямате права да изтриете този коментар' },

@@ -50,12 +50,13 @@ export async function GET(request: Request) {
 
   try {
     let baseQuery = `
-      SELECT DISTINCT
+            SELECT
         post.id AS post_id,
         post.context,
         post.imageurl,
         post.createdby,
         post.club,
+        clubs.createdby AS group_creator_email,
         post.is_uht_related,
         post.createdon,
         post.createdon AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS createdon_local,
@@ -67,6 +68,7 @@ export async function GET(request: Request) {
         CASE WHEN ul.post_id IS NULL THEN false ELSE true END AS is_liked
       FROM post
       INNER JOIN users ON post.createdby = users.email
+      LEFT JOIN clubs ON post.club = clubs.id
       LEFT JOIN (
         SELECT post_id, COUNT(*)::integer AS count 
         FROM likes 
@@ -75,11 +77,13 @@ export async function GET(request: Request) {
       LEFT JOIN (
         SELECT post_id, COUNT(*)::integer AS count 
         FROM comments
-        WHERE parent_id IS NULL
         GROUP BY post_id
       ) cc ON post.id = cc.post_id
-      LEFT JOIN likes ul 
-        ON post.id = ul.post_id AND ul.user_email = $1
+      LEFT JOIN (
+        SELECT post_id
+        FROM likes
+        WHERE user_email = $1
+      ) ul ON post.id = ul.post_id
     `
 
     const params: any[] = [uEmail] // може да е null – OK за LEFT JOIN
@@ -264,6 +268,21 @@ export async function DELETE(request: Request) {
       )
     }
 
+    // Get post info (including club)
+    const postQuery = await pool.query(
+      'SELECT createdby, club FROM post WHERE id = $1',
+      [postId]
+    )
+    if (postQuery.rows.length === 0) {
+      return Response.json(
+        { error: 'Публикацията не съществува' },
+        { status: 404 }
+      )
+    }
+    const postAuthor = postQuery.rows[0].createdby
+    const clubId = postQuery.rows[0].club
+
+    // Check user role
     const userQuery = await pool.query(
       'SELECT role FROM users WHERE email = $1',
       [userEmail]
@@ -276,19 +295,26 @@ export async function DELETE(request: Request) {
     }
     const userRole = userQuery.rows[0].role
 
-    const postQuery = await pool.query(
-      'SELECT createdby FROM post WHERE id = $1',
-      [postId]
-    )
-    if (postQuery.rows.length === 0) {
-      return Response.json(
-        { error: 'Публикацията не съществува' },
-        { status: 404 }
+    // Check if user is group creator
+    let isGroupCreator = false
+    if (clubId) {
+      const clubQuery = await pool.query(
+        'SELECT createdby FROM clubs WHERE id = $1',
+        [clubId]
       )
+      if (
+        clubQuery.rows.length > 0 &&
+        clubQuery.rows[0].createdby === userEmail
+      ) {
+        isGroupCreator = true
+      }
     }
-    const postAuthor = postQuery.rows[0].createdby
 
-    if (!isSystemAdmin(userRole) && postAuthor !== userEmail) {
+    if (
+      !isSystemAdmin(userRole) &&
+      postAuthor !== userEmail &&
+      !isGroupCreator
+    ) {
       return Response.json(
         { error: 'Нямате права да изтриете тази публикация' },
         { status: 403 }

@@ -17,6 +17,11 @@ export default function PostHeader({
   canDelete,
   onShowMenu,
 }: PostHeaderProps) {
+  const canShowMenu =
+    isSystemAdmin(user?.role) ||
+    user?.email === post.createdby ||
+    user?.email === post.group_creator_email
+
   return (
     <View style={styles.headerContainer}>
       <View
@@ -35,7 +40,7 @@ export default function PostHeader({
           isUhtRelated={post?.is_uht_related}
           email={post?.createdby}
         />
-        {(isSystemAdmin(user?.role) || user?.email === post.createdby) && (
+        {canShowMenu && (
           <TouchableOpacity onPress={onShowMenu} style={{ padding: 8 }}>
             <Text style={{ fontSize: 22 }}>⋮</Text>
           </TouchableOpacity>
