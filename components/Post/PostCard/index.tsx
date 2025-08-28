@@ -30,6 +30,8 @@ export interface Post {
   is_uht_related: boolean
   is_liked?: boolean
   user_role?: string
+  club?: number | string | null
+  club_name?: string // добави това
 }
 
 export default function PostCard({

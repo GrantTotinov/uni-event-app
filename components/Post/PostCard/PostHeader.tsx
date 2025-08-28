@@ -24,6 +24,19 @@ export default function PostHeader({
 
   return (
     <View style={styles.headerContainer}>
+      {post.club_name && (
+        <Text
+          style={{
+            fontSize: 13,
+            color: '#007bff',
+            fontWeight: 'bold',
+            marginBottom: 2,
+            marginLeft: 2,
+          }}
+        >
+          {post.club_name}
+        </Text>
+      )}
       <View
         style={{
           flexDirection: 'row',

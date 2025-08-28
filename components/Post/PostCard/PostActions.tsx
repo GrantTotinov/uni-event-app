@@ -58,7 +58,6 @@ export default function PostActions({
             dialogTitle: 'Сподели публикация',
             UTI: 'public.jpeg',
             mimeType: 'image/jpeg',
-            message: shareText,
           })
         } else {
           await Sharing.shareAsync(downloadResult.uri)

@@ -407,11 +407,17 @@ export function useUhtPosts(userEmail?: string, searchQuery?: string) {
 }
 
 // Hook for followed posts (posts from clubs user follows)
-export function useFollowedPosts(userEmail?: string, searchQuery?: string) {
+// Hook for followed posts (posts from clubs user follows)
+export function useFollowedPosts(
+  userEmail?: string,
+  searchQuery?: string,
+  clubId?: number | null
+) {
   return usePosts({
     userEmail,
     followedOnly: true,
     search: searchQuery,
+    club: clubId ? String(clubId) : undefined,
     orderField: 'createdon',
     orderDir: 'DESC',
     enabled: !!userEmail,

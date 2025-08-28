@@ -39,7 +39,7 @@ export async function GET(request: Request) {
   const uEmail = url.searchParams.get('u_email')
   const followedOnly = url.searchParams.get('followedOnly')
   const search = url.searchParams.get('search')
-  const uhtOnly = url.searchParams.get('uhtOnly') // UHT filter parameter
+  const uhtOnly = url.searchParams.get('uhtOnly')
   const orderField = sanitizeOrder(url.searchParams.get('orderField'))
   const orderDir = sanitizeDir(url.searchParams.get('orderDir'))
   const limit = Math.max(
@@ -50,12 +50,13 @@ export async function GET(request: Request) {
 
   try {
     let baseQuery = `
-            SELECT
+      SELECT
         post.id AS post_id,
         post.context,
         post.imageurl,
         post.createdby,
         post.club,
+        clubs.name AS club_name,
         clubs.createdby AS group_creator_email,
         post.is_uht_related,
         post.createdon,
@@ -120,10 +121,21 @@ export async function GET(request: Request) {
 
     // Ако се търсят само постове от последвани клубове
     if (followedOnly === 'true' && uEmail) {
-      params.push(uEmail)
-      conditions.push(
-        `post.club IN (SELECT club_id FROM clubfollowers WHERE u_email = $${params.length})`
-      )
+      if (club) {
+        // Filter by specific club that user follows
+        params.push(club, uEmail)
+        conditions.push(`post.club = $${params.length - 1} AND EXISTS (
+          SELECT 1 FROM clubfollowers cf 
+          WHERE cf.club_id = post.club AND cf.u_email = $${params.length}
+        )`)
+      } else {
+        // All clubs user follows
+        params.push(uEmail)
+        conditions.push(`EXISTS (
+          SELECT 1 FROM clubfollowers cf 
+          WHERE cf.club_id = post.club AND cf.u_email = $${params.length}
+        )`)
+      }
     }
 
     // Ако има search параметър, добавяме търсене в съдържанието на поста И в коментарите

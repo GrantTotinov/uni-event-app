@@ -13,6 +13,9 @@ export const CACHE_KEYS = {
   // Users
   USERS: 'users',
   USER: 'user',
+
+  // Clubs - добави това
+  CLUBS: 'clubs',
 } as const
 
 export const CACHE_TIMES = {
@@ -30,11 +33,16 @@ export const CACHE_TIMES = {
 
   // User data cache for 10 minutes
   USER_DATA: 10 * 60 * 1000,
+
+  // Clubs cache for 5 minutes - добави това
+  CLUBS: 5 * 60 * 1000,
 } as const
 
 export const GC_TIMES = {
-  // Garbage collection times (how long to keep unused data)
-  SHORT: 5 * 60 * 1000, // 5 minutes
-  MEDIUM: 10 * 60 * 1000, // 10 minutes
-  LONG: 30 * 60 * 1000, // 30 minutes
+  // Short: 5 minutes
+  SHORT: 5 * 60 * 1000,
+  // Medium: 30 minutes
+  MEDIUM: 30 * 60 * 1000,
+  // Long: 1 hour
+  LONG: 60 * 60 * 1000,
 } as const
