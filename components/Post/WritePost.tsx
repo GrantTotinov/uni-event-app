@@ -16,7 +16,8 @@ import { AuthContext, isSystemAdmin } from '@/context/AuthContext'
 import DropDownPicker from 'react-native-dropdown-picker'
 import * as ImagePicker from 'expo-image-picker'
 import * as DocumentPicker from 'expo-document-picker'
-import { upload } from 'cloudinary-react-native'
+//import { upload } from 'cloudinary-react-native'
+import { uploadToCloudinary } from '@/utils/CloudinaryUpload'
 import { cld, options } from '@/configs/CloudinaryConfig'
 import axios from 'axios'
 import { useRouter, useFocusEffect } from 'expo-router'
@@ -171,22 +172,14 @@ export default function WritePost() {
     try {
       // Upload image if selected
       if (selectedImage) {
-        const resultData = await new Promise<string>((resolve, reject) => {
-          upload(cld, {
-            file: selectedImage,
-            options: options,
-            callback: (error: any, callResult: any) => {
-              if (error) {
-                reject(error)
-              } else if (callResult && callResult.url) {
-                resolve(callResult.url)
-              } else {
-                resolve('')
-              }
-            },
-          })
-        })
-        uploadImageUrl = resultData
+        try {
+          uploadImageUrl = await uploadToCloudinary(selectedImage)
+        } catch (err) {
+          console.error('Cloudinary upload error:', err)
+          Alert.alert('Грешка', 'Неуспешно качване на снимка')
+          setLoading(false)
+          return
+        }
       }
 
       // Determine the visibleIn value to send to the server

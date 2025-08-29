@@ -1,6 +1,10 @@
 import React from 'react'
-import ChatPage from '../chat/index'
+import { View, Text } from 'react-native'
 
 export default function Chat() {
-  return <ChatPage />
+  return (
+    <View>
+      <Text>Chat Screen</Text>
+    </View>
+  )
 }

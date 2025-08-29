@@ -13,7 +13,6 @@ export default function Header() {
   // Handler for navigating to the chat page
   const handleChatPress = () => {
     try {
-      router.push('/chat')
     } catch (error) {
       console.error('Navigation error:', error)
     }

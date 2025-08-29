@@ -14,7 +14,7 @@ import Button from '@/components/Shared/Button'
 import * as ImagePicker from 'expo-image-picker'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '@/configs/FirebaseConfig'
-import { upload } from 'cloudinary-react-native'
+//import { upload } from 'cloudinary-react-native'
 import { cld, options } from '@/configs/CloudinaryConfig'
 import axios from 'axios'
 import { name } from '@cloudinary/url-gen/actions/namedTransformation'
@@ -29,54 +29,65 @@ export default function SignUp() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const { user, setUser } = useContext(AuthContext)
-  const onBtnPress = () => {
+  const onBtnPress = async () => {
     if (!email || !password || !fullName || !profileImage) {
       ToastAndroid.show('Моля попълнете всички полета', ToastAndroid.BOTTOM)
       return
     }
 
-    createUserWithEmailAndPassword(auth, email, password)
-      .then(async (userCredentials) => {
-        console.log(userCredentials)
-        // Upload Profile Image
-        await upload(cld, {
-          file: profileImage,
-          options: options,
-          callback: async (error: any, response: any) => {
-            if (error) {
-              console.log(error)
-            }
-            if (response) {
-              console.log(response?.url)
-              try {
-                const result = await axios.post(
-                  process.env.EXPO_PUBLIC_HOST_URL + '/user',
-                  {
-                    name: fullName,
-                    email: email,
-                    image: response?.url ?? '',
-                  }
-                )
-                console.log(result)
-                setUser({
-                  name: fullName,
-                  email: email,
-                  image: response?.url ?? '',
-                })
-                router.push('/landing')
-                setLoading(false)
-              } catch (e) {
-                console.log(e)
-                setLoading(false)
-              }
-            }
-          },
-        })
+    try {
+      const userCredentials = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      )
+
+      // Качване на снимка в Cloudinary
+      const formData = new FormData()
+      formData.append('file', {
+        uri: profileImage,
+        type: 'image/jpeg',
+        name: 'profile.jpg',
+      } as any)
+      formData.append(
+        'upload_preset',
+        process.env.EXPO_PUBLIC_CLOUDINARY_PRESET!
+      )
+
+      const cloudinaryRes = await fetch(
+        `https://api.cloudinary.com/v1_1/${process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      )
+
+      const data = await cloudinaryRes.json()
+      console.log('Cloudinary upload response:', data)
+
+      // Записване в бекенда
+      const result = await axios.post(
+        process.env.EXPO_PUBLIC_HOST_URL + '/user',
+        {
+          name: fullName,
+          email: email,
+          image: data.secure_url ?? '',
+        }
+      )
+
+      setUser({
+        name: fullName,
+        email: email,
+        image: data.secure_url ?? '',
       })
-      .catch((error) => {
-        const errorMsg = error.message
-        ToastAndroid.show(errorMsg, ToastAndroid.BOTTOM)
-      })
+
+      router.push('/landing')
+      setLoading(false)
+    } catch (error: any) {
+      console.log(error)
+      ToastAndroid.show(error.message, ToastAndroid.BOTTOM)
+      setLoading(false)
+    }
   }
 
   const pickImage = async () => {
