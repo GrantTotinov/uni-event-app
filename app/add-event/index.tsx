@@ -9,21 +9,22 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from "react-native"
-import * as ImagePicker from "expo-image-picker"
-import React, { useContext, useEffect, useLayoutEffect, useState } from "react"
-import RNDateTimePicker from "@react-native-community/datetimepicker"
-import moment from "moment"
-import "moment/locale/bg"
-import axios from "axios"
-import { upload } from "cloudinary-react-native"
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router"
+} from 'react-native'
+import * as ImagePicker from 'expo-image-picker'
+import React, { useContext, useEffect, useLayoutEffect, useState } from 'react'
+import RNDateTimePicker from '@react-native-community/datetimepicker'
+import moment from 'moment'
+import 'moment/locale/bg'
+import axios from 'axios'
+//import { upload } from "cloudinary-react-native"
+import { uploadToCloudinary } from '@/utils/CloudinaryUpload'
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
 
-import Colors from "@/data/Colors"
-import TextInputField from "@/components/Shared/TextInputField"
-import Button from "@/components/Shared/Button"
-import { AuthContext } from "@/context/AuthContext"
-import { cld, options } from "@/configs/CloudinaryConfig"
+import Colors from '@/data/Colors'
+import TextInputField from '@/components/Shared/TextInputField'
+import Button from '@/components/Shared/Button'
+import { AuthContext } from '@/context/AuthContext'
+import { cld, options } from '@/configs/CloudinaryConfig'
 
 type RouteParams = {
   edit?: string
@@ -38,7 +39,7 @@ type RouteParams = {
 }
 
 export default function AddEvent() {
-  moment.locale("bg")
+  moment.locale('bg')
   const navigation = useNavigation()
   const { user } = useContext(AuthContext)
   const router = useRouter()
@@ -56,25 +57,25 @@ export default function AddEvent() {
     details: paramDetails,
   } = params
 
-  const isEdit = edit === "1"
+  const isEdit = edit === '1'
 
   const [image, setImage] = useState<string>()
   const [eventName, setEventName] = useState<string>()
   const [location, setLocation] = useState<string>()
   const [link, setLink] = useState<string>()
-  const [details, setDetails] = useState<string>("")
-  const [time, setTime] = useState("Избери час")
-  const [date, setDate] = useState("Избери дата")
+  const [details, setDetails] = useState<string>('')
+  const [time, setTime] = useState('Избери час')
+  const [date, setDate] = useState('Избери дата')
   const [selectedTime, setSelectedTime] = useState<Date>(new Date())
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [openTimePicker, setOpenTimePicker] = useState(false)
   const [openDatePicker, setOpenDatePicker] = useState(false)
-  const [dayInBulgarian, setDayInBulgarian] = useState<string>("")
+  const [dayInBulgarian, setDayInBulgarian] = useState<string>('')
 
   // Header title
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerTitle: isEdit ? "Редактирай събитие" : "Създай Ново Събитие",
+      headerTitle: isEdit ? 'Редактирай събитие' : 'Създай Ново Събитие',
     })
   }, [navigation, isEdit])
 
@@ -92,13 +93,13 @@ export default function AddEvent() {
     if (paramEventTime && paramEventTime !== time) {
       setTime(paramEventTime)
       const t = new Date()
-      const [h, m] = paramEventTime.split(":")
-      t.setHours(parseInt(h || "0"), parseInt(m || "0"))
+      const [h, m] = paramEventTime.split(':')
+      t.setHours(parseInt(h || '0'), parseInt(m || '0'))
       setSelectedTime(t)
     }
 
     if (paramEventDate && paramEventDate !== date) {
-      const parts = paramEventDate.split(",")
+      const parts = paramEventDate.split(',')
       if (parts.length > 1) {
         const dateString = parts[1]
         setDate(paramEventDate)
@@ -109,7 +110,7 @@ export default function AddEvent() {
         setDate(paramEventDate)
         const parsed = new Date(paramEventDate)
         setSelectedDate(parsed)
-        setDayInBulgarian(moment(parsed).format("dddd"))
+        setDayInBulgarian(moment(parsed).format('dddd'))
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -126,7 +127,7 @@ export default function AddEvent() {
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"] as any,
+      mediaTypes: ['images'] as any,
       allowsEditing: true,
       aspect: [4, 4],
       quality: 0.5,
@@ -140,7 +141,7 @@ export default function AddEvent() {
     setOpenTimePicker(false)
     if (selected) {
       setSelectedTime(selected)
-      setTime(moment(selected).format("HH:mm"))
+      setTime(moment(selected).format('HH:mm'))
     }
   }
 
@@ -148,32 +149,26 @@ export default function AddEvent() {
     setOpenDatePicker(false)
     if (selected) {
       setSelectedDate(selected)
-      const dayBg = moment(selected).format("dddd")
+      const dayBg = moment(selected).format('dddd')
       setDayInBulgarian(dayBg)
-      setDate(`${dayBg},${moment(selected).format("YYYY-MM-DD")}`)
+      setDate(`${dayBg},${moment(selected).format('YYYY-MM-DD')}`)
     }
   }
 
   const onSubmitBtnPress = async () => {
     if (!eventName || !image || !location || !date || !time) {
-      Alert.alert("Моля въведете всички полета")
+      Alert.alert('Моля въведете всички полета')
       return
     }
 
     if (isEdit) {
       let finalBannerUrl = image
       try {
-        if (!image.startsWith("http")) {
-          await upload(cld, {
-            file: image,
-            options: options,
-            callback: async (_error, resp) => {
-              if (resp) finalBannerUrl = resp.url
-            },
-          })
+        if (!image.startsWith('http')) {
+          finalBannerUrl = await uploadToCloudinary(image)
         }
 
-        await axios.put(process.env.EXPO_PUBLIC_HOST_URL + "/events", {
+        await axios.put(process.env.EXPO_PUBLIC_HOST_URL + '/events', {
           eventId: id,
           userEmail: user?.email,
           eventName,
@@ -181,65 +176,58 @@ export default function AddEvent() {
           location,
           link,
           details,
-          eventDate: date.includes(",")
+          eventDate: date.includes(',')
             ? date
-            : `${dayInBulgarian},${moment(selectedDate).format("YYYY-MM-DD")}`,
+            : `${dayInBulgarian},${moment(selectedDate).format('YYYY-MM-DD')}`,
           eventTime:
-            time === "Избери час" ? moment(selectedTime).format("HH:mm") : time,
+            time === 'Избери час' ? moment(selectedTime).format('HH:mm') : time,
         })
 
-        Alert.alert("Успешно", "Събитието е обновено.", [
-          { text: "OK", onPress: () => router.replace("/(tabs)/Event") },
+        Alert.alert('Успешно', 'Събитието е обновено.', [
+          { text: 'OK', onPress: () => router.replace('/(tabs)/Event') },
         ])
       } catch (e) {
         console.error(e)
-        Alert.alert("Грешка", "Неуспешна редакция.")
+        Alert.alert('Грешка', 'Неуспешна редакция.')
       }
       return
     }
 
     // Create
-    upload(cld, {
-      file: image,
-      options: options,
-      callback: async (_error, resp) => {
-        if (resp) {
-          try {
-            await axios.post(process.env.EXPO_PUBLIC_HOST_URL + "/events", {
-              eventName,
-              bannerUrl: resp.url,
-              location,
-              link,
-              details,
-              eventDate: `${dayInBulgarian},${moment(selectedDate).format(
-                "YYYY-MM-DD"
-              )}`,
-              eventTime: moment(selectedTime).format("HH:mm"),
-              email: user?.email,
-            })
-            Alert.alert("Чудесно!", "Ново събитие беше добавено!", [
-              { text: "OK", onPress: () => router.replace("/(tabs)/Event") },
-            ])
-          } catch (err) {
-            console.error(err)
-            Alert.alert("Грешка", "Неуспешно добавяне на събитие.")
-          }
-        }
-      },
-    })
+    try {
+      const bannerUrl = await uploadToCloudinary(image)
+      await axios.post(process.env.EXPO_PUBLIC_HOST_URL + '/events', {
+        eventName,
+        bannerUrl,
+        location,
+        link,
+        details,
+        eventDate: `${dayInBulgarian},${moment(selectedDate).format(
+          'YYYY-MM-DD'
+        )}`,
+        eventTime: moment(selectedTime).format('HH:mm'),
+        email: user?.email,
+      })
+      Alert.alert('Чудесно!', 'Ново събитие беше добавено!', [
+        { text: 'OK', onPress: () => router.replace('/(tabs)/Event') },
+      ])
+    } catch (err) {
+      console.error(err)
+      Alert.alert('Грешка', 'Неуспешно добавяне на събитие.')
+    }
   }
 
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: Colors.WHITE }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
         contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={{ fontSize: 25, fontWeight: "bold" }}>
-          {isEdit ? "Редактирай събитие" : "Добави Събитие"}
+        <Text style={{ fontSize: 25, fontWeight: 'bold' }}>
+          {isEdit ? 'Редактирай събитие' : 'Добави Събитие'}
         </Text>
 
         <TouchableOpacity onPress={pickImage}>
@@ -247,7 +235,7 @@ export default function AddEvent() {
             <Image source={{ uri: image }} style={styles.image} />
           ) : (
             <Image
-              source={require("./../../assets/images/image.png")}
+              source={require('./../../assets/images/image.png')}
               style={styles.image}
             />
           )}
@@ -270,7 +258,7 @@ export default function AddEvent() {
         />
 
         <View style={{ marginTop: 8, marginBottom: 10 }}>
-          <Text style={{ fontWeight: "600", marginBottom: 4 }}>
+          <Text style={{ fontWeight: '600', marginBottom: 4 }}>
             Детайли за събитието
           </Text>
           <TextInput
@@ -312,7 +300,7 @@ export default function AddEvent() {
         )}
 
         <Button
-          text={isEdit ? "Запази промените" : "Създай"}
+          text={isEdit ? 'Запази промените' : 'Създай'}
           onPress={onSubmitBtnPress}
         />
       </ScrollView>
@@ -334,7 +322,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     minHeight: 100,
-    textAlignVertical: "top",
-    color: "#000",
+    textAlignVertical: 'top',
+    color: '#000',
   },
 })

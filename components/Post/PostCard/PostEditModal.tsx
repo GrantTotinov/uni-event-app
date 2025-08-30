@@ -1,8 +1,7 @@
 import React from 'react'
 import { View, TextInput, TouchableOpacity, Text, Image } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
-import { upload } from 'cloudinary-react-native'
-import { cld, options } from '@/configs/CloudinaryConfig'
+import { uploadToCloudinary } from '@/utils/CloudinaryUpload'
 import axios from 'axios'
 import { isSystemAdmin } from '@/context/AuthContext'
 import Colors from '@/data/Colors'
@@ -49,13 +48,7 @@ export default function PostEditModal({
     try {
       let finalImageUrl = editedImageUrl
       if (editedImageUrl && !editedImageUrl.startsWith('http')) {
-        await upload(cld, {
-          file: editedImageUrl,
-          options: options,
-          callback: (_error, resp) => {
-            if (resp) finalImageUrl = resp.url
-          },
-        })
+        finalImageUrl = await uploadToCloudinary(editedImageUrl)
       }
 
       await axios.put(`${process.env.EXPO_PUBLIC_HOST_URL}/post`, {

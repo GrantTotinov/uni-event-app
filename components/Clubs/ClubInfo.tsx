@@ -6,15 +6,14 @@ import {
   StyleSheet,
   TouchableOpacity,
   ToastAndroid,
-} from "react-native"
-import React, { useContext, useState } from "react"
-import * as ImagePicker from "expo-image-picker"
-import Colors from "@/data/Colors"
-import Button from "@/components/Shared/Button"
-import { upload } from "cloudinary-react-native"
-import { cld, options } from "@/configs/CloudinaryConfig"
-import axios from "axios"
-import { useRouter } from "expo-router"
+} from 'react-native'
+import React, { useContext, useState } from 'react'
+import * as ImagePicker from 'expo-image-picker'
+import Colors from '@/data/Colors'
+import Button from '@/components/Shared/Button'
+import { uploadToCloudinary } from '@/utils/CloudinaryUpload'
+import axios from 'axios'
+import { useRouter } from 'expo-router'
 
 export default function ClubInfo() {
   const [name, setName] = useState<string | null>()
@@ -24,34 +23,27 @@ export default function ClubInfo() {
   const [selectedImage, setSelectedImage] = useState<string | undefined>()
   const onAddClubBtnClick = async () => {
     if (!name) {
-      ToastAndroid.show("Моля попълнете полетата", ToastAndroid.BOTTOM)
+      ToastAndroid.show('Моля попълнете полетата', ToastAndroid.BOTTOM)
       return
     }
     if (!about) {
-      ToastAndroid.show("Моля попълнете полетата", ToastAndroid.BOTTOM)
+      ToastAndroid.show('Моля попълнете полетата', ToastAndroid.BOTTOM)
       return
     }
     setLoading(true)
     // Upload Image
-    let uploadImageUrl = ""
+    let uploadImageUrl = ''
     if (selectedImage) {
-      const resultData: any = await new Promise(async (resolve, reject) => {
-        await upload(cld, {
-          file: selectedImage,
-          options: options,
-          callback: (error: any, response: any) => {
-            if (error) {
-              reject(error)
-            } else {
-              resolve(response)
-            }
-          },
-        })
-      })
-      uploadImageUrl = resultData && resultData?.url
+      try {
+        uploadImageUrl = await uploadToCloudinary(selectedImage)
+      } catch (error) {
+        ToastAndroid.show('Грешка при качване на снимка', ToastAndroid.BOTTOM)
+        setLoading(false)
+        return
+      }
     }
     const result = await axios.post(
-      process.env.EXPO_PUBLIC_HOST_URL + "/clubs",
+      process.env.EXPO_PUBLIC_HOST_URL + '/clubs',
       {
         clubName: name,
         imageUrl: uploadImageUrl,
@@ -60,12 +52,12 @@ export default function ClubInfo() {
     )
     console.log(result.data)
     setLoading(false)
-    router.replace("/(tabs)/Club")
+    router.replace('/(tabs)/Club')
   }
   const pickImage = async () => {
     // No permissions request is necessary for launching the image library
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [4, 4],
       quality: 0.5,
@@ -86,7 +78,7 @@ export default function ClubInfo() {
           <Image source={{ uri: selectedImage }} style={styles.image} />
         ) : (
           <Image
-            source={require("./../../assets/images/image.png")}
+            source={require('./../../assets/images/image.png')}
             style={styles.image}
           />
         )}
@@ -126,7 +118,7 @@ const styles = StyleSheet.create({
     height: 140,
     marginTop: 10,
     borderRadius: 15,
-    textAlignVertical: "top",
+    textAlignVertical: 'top',
     elevation: 7,
   },
   image: {
