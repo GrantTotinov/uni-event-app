@@ -34,21 +34,34 @@ export default function SignIn() {
   // Fetch user data with retry logic
   const fetchUserData = async (
     userEmail: string,
+    firebaseUid: string,
     retries = 3
   ): Promise<any> => {
     try {
       const result = await axios.get(
-        process.env.EXPO_PUBLIC_HOST_URL + '/user?email=' + userEmail
+        `${process.env.EXPO_PUBLIC_HOST_URL}/user?email=${userEmail}`
       )
+
       if (result.data && Object.keys(result.data).length > 0) {
-        return result.data
+        // Verify that the UID from database matches Firebase UID for security
+        if (result.data.uid && result.data.uid !== firebaseUid) {
+          throw new Error('UID несъответствие - моля свържете се с поддръжката')
+        }
+
+        // Ensure UID is included in user data
+        const userData = {
+          ...result.data,
+          uid: result.data.uid || firebaseUid, // Always use Firebase UID as source of truth
+        }
+
+        return userData
       } else {
         throw new Error('Няма данни')
       }
     } catch (error) {
       if (retries > 0) {
         await new Promise((resolve) => setTimeout(resolve, 1000))
-        return fetchUserData(userEmail, retries - 1)
+        return fetchUserData(userEmail, firebaseUid, retries - 1)
       } else {
         throw error
       }
@@ -64,19 +77,23 @@ export default function SignIn() {
     signInWithEmailAndPassword(auth, email, password)
       .then(async (resp) => {
         const userEmail = resp.user.email
-        if (!userEmail) {
+        const firebaseUid = resp.user.uid
+
+        if (!userEmail || !firebaseUid) {
           setLoading(false)
           ToastAndroid.show(
-            'Грешка: липсващ имейл от акаунта',
+            'Грешка: липсващи данни от акаунта',
             ToastAndroid.BOTTOM
           )
           return
         }
+
         try {
-          const userData = await fetchUserData(userEmail)
+          const userData = await fetchUserData(userEmail, firebaseUid)
           setUser(userData)
           router.replace('/(tabs)/Home')
         } catch (error) {
+          console.error('User data fetch error:', error)
           ToastAndroid.show(
             'Профилът все още не е наличен. Опитайте пак след малко.',
             ToastAndroid.BOTTOM
@@ -84,8 +101,9 @@ export default function SignIn() {
         }
         setLoading(false)
       })
-      .catch(() => {
+      .catch((error) => {
         setLoading(false)
+        console.error('Sign in error:', error)
         ToastAndroid.show('Грешен имейл или парола', ToastAndroid.BOTTOM)
       })
   }

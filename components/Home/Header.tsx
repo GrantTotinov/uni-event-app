@@ -1,26 +1,28 @@
 import React, { useContext } from 'react'
 import { View, Text, Image, TouchableOpacity } from 'react-native'
-import { useRouter } from 'expo-router'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import Colors from '@/data/Colors'
 import { AuthContext } from '@/context/AuthContext'
 import { MaterialIcons } from '@expo/vector-icons'
+import { useRouter, Href } from 'expo-router'
 
 export default function Header() {
   const { user } = useContext(AuthContext)
   const router = useRouter()
 
+  const safeText = (value: any) => {
+    if (value === null || value === undefined) return ''
+    if (typeof value !== 'string') return String(value)
+    return value
+  }
+
   // Handler for navigating to the chat page
   const handleChatPress = () => {
-    try {
-    } catch (error) {
-      console.error('Navigation error:', error)
-    }
+    router.push('/chat' as Href)
   }
 
   // Handler for notifications (може да добавите логика по-късно)
   const handleNotificationsPress = () => {
-    // TODO: Add navigation or modal for notifications
     console.log('Notifications pressed')
   }
 
@@ -83,7 +85,9 @@ export default function Header() {
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Image
-              source={{ uri: user?.image }}
+              source={{
+                uri: safeText(user?.image) || 'https://placehold.co/50x50',
+              }}
               style={{
                 height: 50,
                 width: 50,
@@ -97,7 +101,7 @@ export default function Header() {
                 color: Colors.GRAY,
               }}
             >
-              {user?.name}
+              {safeText(user?.name)}
             </Text>
           </View>
         </View>

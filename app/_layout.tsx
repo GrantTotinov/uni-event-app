@@ -57,6 +57,14 @@ export default function RootLayout() {
                       options={{ headerShown: false }}
                     />
 
+                    <Stack.Screen
+                      name="chat/index"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="chat/[id]"
+                      options={{ headerShown: false }}
+                    />
                     {/* Event Screens */}
                     <Stack.Screen
                       name="add-event/index"
