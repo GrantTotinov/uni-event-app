@@ -1,23 +1,35 @@
+// app/explore-clubs/index.tsx
+import React, {
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+} from 'react'
 import {
   View,
-  Text,
   FlatList,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
-  ImageBackground,
   StatusBar,
   SafeAreaView,
-} from "react-native"
-import React, { useContext, useEffect, useState } from "react"
-import axios from "axios"
-import ClubCard from "@/components/Clubs/ClubCard"
-import Button from "@/components/Shared/Button"
-import Colors from "@/data/Colors"
-import { useRouter } from "expo-router"
-import { AuthContext } from "@/context/AuthContext"
-import Ionicons from "@expo/vector-icons/Ionicons"
-import { LinearGradient } from "expo-linear-gradient"
+} from 'react-native'
+import {
+  Surface,
+  Text,
+  Searchbar,
+  Card,
+  Button,
+  useTheme,
+  IconButton,
+  ActivityIndicator,
+  Chip,
+} from 'react-native-paper'
+import axios from 'axios'
+import ClubCard from '@/components/Clubs/ClubCard'
+import { useRouter } from 'expo-router'
+import { AuthContext } from '@/context/AuthContext'
+import { useAppTheme } from '@/context/ThemeContext'
+import { LinearGradient } from 'expo-linear-gradient'
 
 export type CLUB = {
   id: number
@@ -32,149 +44,229 @@ export type CLUB = {
 export default function ExploreClubs() {
   const router = useRouter()
   const { user } = useContext(AuthContext)
+  const { isDarkMode } = useAppTheme()
+  const theme = useTheme()
   const [followedClub, setFollowedClub] = useState<any>()
-  const [clubList, setClubList] = useState<CLUB[] | []>([])
-  const [searchQuery, setSearchQuery] = useState("")
+  const [clubList, setClubList] = useState<CLUB[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  // Memoized filtered clubs for performance
+  const filteredClubs = useMemo(() => {
+    if (!searchQuery) return clubList
+    return clubList.filter((club) =>
+      club.name.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  }, [clubList, searchQuery])
+
+  const GetAllClubs = useCallback(async () => {
+    try {
+      setLoading(true)
+      const result = await axios.get(
+        `${process.env.EXPO_PUBLIC_HOST_URL}/clubs`
+      )
+      setClubList(result.data)
+      await GetUserFollowedClubs()
+    } catch (error) {
+      console.error('Error fetching clubs:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const GetUserFollowedClubs = useCallback(async () => {
+    if (!user?.email) return
+
+    try {
+      const result = await axios.get(
+        `${
+          process.env.EXPO_PUBLIC_HOST_URL
+        }/clubfollower?u_email=${encodeURIComponent(user.email)}`
+      )
+      setFollowedClub(result?.data)
+    } catch (error) {
+      console.error('Error fetching followed clubs:', error)
+    }
+  }, [user?.email])
+
+  const isFollowed = useCallback(
+    (clubId: number) => {
+      return followedClub?.some((item: any) => item.club_id === clubId) ?? false
+    },
+    [followedClub]
+  )
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await GetAllClubs()
+    setRefreshing(false)
+  }, [GetAllClubs])
+
+  const handleCreateClub = useCallback(() => {
+    router.push('/add-club')
+  }, [router])
+
+  const handleBack = useCallback(() => {
+    router.back()
+  }, [router])
+
+  // Memoized render function for performance
+  const renderClubItem = useCallback(
+    ({ item }: { item: CLUB }) => (
+      <ClubCard
+        {...item}
+        isFollowed={isFollowed(item.id)}
+        refreshData={GetAllClubs}
+      />
+    ),
+    [isFollowed, GetAllClubs]
+  )
+
+  const keyExtractor = useCallback((item: CLUB) => `club-${item.id}`, [])
+
+  const ListEmptyComponent = useCallback(
+    () => (
+      <Surface style={styles.emptyContainer}>
+        <Text variant="titleLarge" style={styles.emptyTitle}>
+          {searchQuery.length > 0
+            ? 'Няма намерени групи'
+            : 'Няма налични групи'}
+        </Text>
+        <Text variant="bodyMedium" style={styles.emptySubtitle}>
+          {searchQuery.length > 0
+            ? 'Опитайте с различни ключови думи'
+            : 'Бъдете първи, които създават група'}
+        </Text>
+        {searchQuery.length > 0 && (
+          <Button
+            mode="outlined"
+            onPress={() => setSearchQuery('')}
+            style={styles.clearButton}
+          >
+            Изчисти търсенето
+          </Button>
+        )}
+      </Surface>
+    ),
+    [searchQuery]
+  )
 
   useEffect(() => {
     GetAllClubs()
-  }, [])
-
-  const GetAllClubs = async () => {
-    const result = await axios.get(process.env.EXPO_PUBLIC_HOST_URL + "/clubs")
-    console.log(result.data)
-    setClubList(result.data)
-    GetUserFollowedClubs()
-  }
-
-  const GetUserFollowedClubs = async () => {
-    const result = await axios.get(
-      process.env.EXPO_PUBLIC_HOST_URL + "/clubfollower?u_email=" + user?.email
-    )
-    console.log(result?.data)
-    setFollowedClub(result?.data)
-  }
-
-  const isFollowed = (clubId: number) => {
-    return followedClub?.some((item: any) => item.club_id === clubId)
-  }
-
-  // Филтриране на клубовете според търсенето
-  const filteredClubs = searchQuery
-    ? clubList.filter((club) =>
-        club.name.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : clubList
+  }, [GetAllClubs])
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
+      <StatusBar
+        backgroundColor={theme.colors.primary}
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+      />
 
-      {/* Заглавие на страницата с подобрен градиент и поле */}
+      {/* Header with Gradient */}
       <LinearGradient
-        colors={[Colors.PRIMARY, Colors.SECONDARY]}
+        colors={[theme.colors.primary, theme.colors.primaryContainer]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.header}
       >
-        <View style={styles.backButtonContainer}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
+        <View style={styles.headerContent}>
+          <IconButton
+            icon="arrow-left"
+            iconColor={theme.colors.onPrimary}
+            onPress={handleBack}
+          />
+          <Text
+            variant="headlineMedium"
+            style={[styles.headerTitle, { color: theme.colors.onPrimary }]}
           >
-            <Ionicons name="arrow-back" size={24} color={Colors.WHITE} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Открий Клубове</Text>
+            Открий групи
+          </Text>
         </View>
-        <Text style={styles.headerSubtitle}>
+        <Text
+          variant="bodyLarge"
+          style={[styles.headerSubtitle, { color: theme.colors.onPrimary }]}
+        >
           Намери и се присъедини към групи по интереси
         </Text>
       </LinearGradient>
 
-      {/* Търсачка с подобрен дизайн */}
+      {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Ionicons
-            name="search"
-            size={22}
-            color={Colors.PRIMARY}
-            style={{ marginRight: 8 }}
-          />
-          <TextInput
-            placeholder="Търси клубове..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            style={styles.searchInput}
-            placeholderTextColor={Colors.GRAY}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity
-              onPress={() => setSearchQuery("")}
-              style={styles.clearButton}
-            >
-              <Ionicons name="close-circle" size={22} color={Colors.PRIMARY} />
-            </TouchableOpacity>
-          )}
-        </View>
+        <Searchbar
+          placeholder="Търси групи..."
+          onChangeText={setSearchQuery}
+          value={searchQuery}
+          style={styles.searchbar}
+          elevation={3}
+        />
       </View>
 
-      {/* Секция за създаване на нов клуб с подобрен дизайн */}
-      <TouchableOpacity
+      {/* Create New Club Card */}
+      <Card
         style={styles.createClubCard}
-        onPress={() => router.push("/add-club")}
+        mode="elevated"
+        onPress={handleCreateClub}
       >
-        <View style={styles.createClubContent}>
-          <View>
-            <Text style={styles.createClubTitle}>
-              Създайте нов Клуб / Група
+        <Card.Content style={styles.createClubContent}>
+          <View style={styles.createClubTextContainer}>
+            <Text variant="titleMedium" style={styles.createClubTitle}>
+              Създайте нова група
             </Text>
-            <Text style={styles.createClubSubtitle}>
+            <Text variant="bodyMedium" style={styles.createClubSubtitle}>
               Споделете своите интереси с други студенти
             </Text>
           </View>
-          <View style={styles.addButtonContainer}>
-            <Ionicons name="add-circle" size={28} color={Colors.PRIMARY} />
-          </View>
-        </View>
-      </TouchableOpacity>
-
-      {/* Списък с клубове */}
-      <FlatList
-        contentContainerStyle={styles.clubList}
-        numColumns={2}
-        data={filteredClubs}
-        renderItem={({ item: CLUB, index }) => (
-          <ClubCard
-            {...CLUB}
-            isFollowed={isFollowed(CLUB.id)}
-            refreshData={GetAllClubs}
+          <IconButton
+            icon="plus-circle"
+            iconColor={theme.colors.primary}
+            size={32}
           />
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons
-              name={
-                searchQuery.length > 0 ? "search-outline" : "people-outline"
-              }
-              size={60}
-              color={Colors.LIGHT_GRAY}
-            />
-            <Text style={styles.emptyText}>
-              {searchQuery.length > 0
-                ? "Няма намерени клубове, отговарящи на търсенето"
-                : "Няма налични клубове"}
-            </Text>
-            {searchQuery.length > 0 && (
-              <TouchableOpacity
-                style={styles.resetButton}
-                onPress={() => setSearchQuery("")}
-              >
-                <Text style={styles.resetButtonText}>Изчисти търсенето</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        }
-      />
+        </Card.Content>
+      </Card>
+
+      {/* Statistics Chips */}
+      <View style={styles.statsContainer}>
+        <Chip icon="account-group" style={styles.statChip}>
+          {filteredClubs.length} групи
+        </Chip>
+        <Chip icon="magnify" style={styles.statChip}>
+          {searchQuery ? 'Филтрирано' : 'Всички'}
+        </Chip>
+      </View>
+
+      {/* Clubs List */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" />
+          <Text variant="bodyMedium" style={styles.loadingText}>
+            Зареждане на групи...
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredClubs}
+          renderItem={renderClubItem}
+          keyExtractor={keyExtractor}
+          numColumns={1} // Changed from 2 to 1
+          contentContainerStyle={styles.clubsList}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={ListEmptyComponent}
+          onRefresh={handleRefresh}
+          refreshing={refreshing}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          initialNumToRender={8} // Increased since items are smaller
+          getItemLayout={(data, index) => ({
+            length: 120, // Reduced height for horizontal layout
+            offset: 120 * index,
+            index,
+          })}
+        />
+      )}
     </SafeAreaView>
   )
 }
@@ -182,15 +274,6 @@ export default function ExploreClubs() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f7fa",
-  },
-  backButtonContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  backButton: {
-    padding: 5,
   },
   header: {
     paddingTop: 50,
@@ -198,116 +281,91 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 6,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   headerTitle: {
-    fontSize: 26,
-    fontWeight: "bold",
-    color: Colors.WHITE,
-    marginLeft: 10,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
   headerSubtitle: {
-    fontSize: 16,
-    color: Colors.WHITE,
     opacity: 0.9,
-    marginTop: 5,
-    marginLeft: 34,
+    marginLeft: 60,
   },
   searchContainer: {
     paddingHorizontal: 20,
-    marginTop: -22,
+    marginTop: -25,
+    marginBottom: 20,
     zIndex: 10,
   },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.WHITE,
-    borderRadius: 25,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    marginBottom: 20,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: Colors.BLACK,
-    paddingVertical: 5,
-  },
-  clearButton: {
-    padding: 3,
+  searchbar: {
+    elevation: 3,
   },
   createClubCard: {
     marginHorizontal: 20,
-    marginBottom: 20,
-    borderRadius: 15,
-    backgroundColor: "#e8f4f2", // Светъл фон
-    borderWidth: 1,
-    borderColor: "#d0e6e3", // По-тъмна граница
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    marginBottom: 16,
   },
   createClubContent: {
-    padding: 18,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  createClubTextContainer: {
+    flex: 1,
   },
   createClubTitle: {
-    fontSize: 17,
-    fontWeight: "bold",
-    color: Colors.PRIMARY, // Основен цвят за заглавието
-    marginBottom: 6,
+    fontWeight: 'bold',
+    marginBottom: 4,
   },
   createClubSubtitle: {
-    fontSize: 14,
-    color: Colors.GRAY, // Сив текст за подзаглавието
+    opacity: 0.7,
   },
-  addButtonContainer: {
-    backgroundColor: Colors.WHITE,
-    borderRadius: 50,
-    padding: 5,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+  statsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    gap: 12,
   },
-  clubList: {
-    paddingHorizontal: 10,
-    paddingBottom: 120,
+  statChip: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    opacity: 0.7,
+  },
+  clubsList: {
+    // Merged properties - removed duplication
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingBottom: 20,
   },
   emptyContainer: {
     padding: 40,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: 20,
+    borderRadius: 16,
   },
-  emptyText: {
-    fontSize: 16,
-    color: Colors.GRAY,
-    marginTop: 15,
-    textAlign: "center",
+  emptyTitle: {
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  resetButton: {
-    marginTop: 15,
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 20,
-    backgroundColor: Colors.PRIMARY + "20",
+  emptySubtitle: {
+    textAlign: 'center',
+    marginBottom: 20,
+    opacity: 0.7,
   },
-  resetButtonText: {
-    color: Colors.PRIMARY,
-    fontWeight: "500",
+  clearButton: {
+    marginTop: 12,
   },
 })

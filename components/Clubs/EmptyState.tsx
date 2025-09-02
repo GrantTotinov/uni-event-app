@@ -1,38 +1,98 @@
-import { View, Text, Image } from "react-native"
-import Button from "../Shared/Button"
-import Colors from "@/data/Colors"
-import { useRouter } from "expo-router"
+// components/Clubs/EmptyState.tsx
+import React, { useCallback } from 'react'
+import { View, StyleSheet } from 'react-native'
+import { Text, Button, useTheme, Surface, Icon } from 'react-native-paper'
+import { useRouter } from 'expo-router'
 
-export default function EmptyState() {
+export default React.memo(function EmptyState() {
   const router = useRouter()
+  const theme = useTheme()
+
+  const handleExploreClubs = useCallback(() => {
+    router.push('/explore-clubs')
+  }, [router])
+
   return (
-    <View
-      style={{
-        display: "flex",
-        alignItems: "center",
-        marginTop: 50,
-      }}
+    <Surface
+      style={[styles.container, { backgroundColor: theme.colors.surface }]}
     >
-      <Image
-        source={require("./../../assets/images/no-club.png")}
-        style={{
-          width: 170,
-          height: 170,
-        }}
-      />
-      <Text
-        style={{
-          fontSize: 22,
-          textAlign: "center",
-          color: Colors.GRAY,
-        }}
-      >
-        Все още не участвате в никакви Клубове/Групи
-      </Text>
-      <Button
-        text="Открии Клубове/Групи"
-        onPress={() => router.push("/explore-clubs")}
-      />
-    </View>
+      <View style={styles.content}>
+        {/* Empty State Icon */}
+        <Icon
+          source="account-group-outline"
+          size={120}
+          color={theme.colors.outline}
+        />
+
+        {/* Empty State Text */}
+        <Text
+          variant="headlineSmall"
+          style={[styles.title, { color: theme.colors.onSurface }]}
+        >
+          Все още не участвате в групи
+        </Text>
+
+        <Text
+          variant="bodyLarge"
+          style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}
+        >
+          Открийте интересни студентски групи и се присъединете към общността
+        </Text>
+
+        {/* Action Button */}
+        <Button
+          mode="contained"
+          onPress={handleExploreClubs}
+          style={styles.button}
+          icon="magnify"
+        >
+          Открий групи
+        </Button>
+
+        {/* Secondary Action */}
+        <Button
+          mode="outlined"
+          onPress={() => router.push('/add-club')}
+          style={styles.secondaryButton}
+          icon="plus"
+        >
+          Създай нова група
+        </Button>
+      </View>
+    </Surface>
   )
-}
+})
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 40,
+    margin: 20,
+    borderRadius: 16,
+  },
+  content: {
+    alignItems: 'center',
+    maxWidth: 300,
+  },
+  title: {
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  subtitle: {
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 32,
+  },
+  button: {
+    marginBottom: 12,
+    minWidth: 200,
+  },
+  secondaryButton: {
+    minWidth: 200,
+  },
+})

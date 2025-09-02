@@ -1,36 +1,46 @@
 // app/(tabs)/Club.tsx
-import React, { useContext, useState } from 'react'
+import React, { useContext, useState, useCallback, useMemo } from 'react'
+import { View, ScrollView, StatusBar, StyleSheet } from 'react-native'
 import {
-  View,
+  Surface,
   Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-} from 'react-native'
+  Button,
+  Chip,
+  useTheme,
+  Searchbar,
+  FAB,
+  Card,
+  ActivityIndicator,
+} from 'react-native-paper'
 import { useRouter } from 'expo-router'
 import { AuthContext } from '@/context/AuthContext'
-import Button from '@/components/Shared/Button'
+import { useAppTheme } from '@/context/ThemeContext'
 import EmptyState from '@/components/Clubs/EmptyState'
 import PostList from '@/components/Post/PostList'
 import { useFollowedPosts } from '@/hooks/usePosts'
 import { useFollowedClubs } from '@/hooks/useClubs'
-import Colors from '@/data/Colors'
 import Ionicons from '@expo/vector-icons/Ionicons'
 
 export default function Club() {
   const { user } = useContext(AuthContext)
+  const { isDarkMode } = useAppTheme()
+  const theme = useTheme()
   const router = useRouter()
   const [selectedClubId, setSelectedClubId] = useState<number | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
-  // Fetch followed clubs
+  // Memoized data fetching
   const { data: followedClubs = [], isLoading: clubsLoading } =
     useFollowedClubs(user?.email)
 
-  // Filter out invalid clubs with undefined/null ids
-  const validClubs = React.useMemo(
-    () => followedClubs.filter((club) => club?.id != null),
-    [followedClubs]
-  )
+  // Filter out invalid clubs with undefined/null ids and apply search
+  const validClubs = useMemo(() => {
+    const filtered = followedClubs.filter((club) => club?.id != null)
+    if (!searchQuery) return filtered
+    return filtered.filter((club) =>
+      club.name.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  }, [followedClubs, searchQuery])
 
   // Use React Query hook for followed posts - filtered by selected club
   const {
@@ -44,62 +54,100 @@ export default function Club() {
     commentMutation,
   } = useFollowedPosts(user?.email, undefined, selectedClubId)
 
-  // Handle like toggle with optimistic updates
-  const handleToggleLike = async (postId: number, isLiked: boolean) => {
-    if (!user?.email) return
+  // Memoized handlers for performance
+  const handleToggleLike = useCallback(
+    async (postId: number, isLiked: boolean) => {
+      if (!user?.email) return
 
-    try {
-      await likeMutation.mutateAsync({
-        postId,
-        userEmail: user.email,
-        isLiked,
-      })
-    } catch (error) {
-      console.error('Error toggling like:', error)
-    }
-  }
+      try {
+        await likeMutation.mutateAsync({
+          postId,
+          userEmail: user.email,
+          isLiked,
+        })
+      } catch (error) {
+        console.error('Error toggling like:', error)
+      }
+    },
+    [user?.email, likeMutation]
+  )
 
-  // Handle comment submission with optimistic updates
-  const handleAddComment = async (
-    postId: number,
-    comment: string
-  ): Promise<boolean> => {
-    if (!user?.email || !comment.trim()) return false
+  const handleAddComment = useCallback(
+    async (postId: number, comment: string): Promise<boolean> => {
+      if (!user?.email || !comment.trim()) return false
 
-    try {
-      await commentMutation.mutateAsync({
-        postId,
-        userEmail: user.email,
-        comment,
-      })
-      return true
-    } catch (error) {
-      console.error('Error adding comment:', error)
-      return false
-    }
-  }
+      try {
+        await commentMutation.mutateAsync({
+          postId,
+          userEmail: user.email,
+          comment,
+        })
+        return true
+      } catch (error) {
+        console.error('Error adding comment:', error)
+        return false
+      }
+    },
+    [user?.email, commentMutation]
+  )
 
-  const handleLoadMore = () => {
+  const handleLoadMore = useCallback(() => {
     if (hasMore && !isLoadingMore && !isLoading) {
       fetchNextPage()
     }
-  }
+  }, [hasMore, isLoadingMore, isLoading, fetchNextPage])
+
+  const handleClubSelect = useCallback(
+    (clubId: number | null) => {
+      setSelectedClubId(clubId)
+      refetch()
+    },
+    [refetch]
+  )
+
+  const handleExploreClubs = useCallback(() => {
+    router.push('/explore-clubs')
+  }, [router])
 
   const showSkeleton = isLoading && followedPosts.length === 0
 
-  const handleClubSelect = (clubId: number | null) => {
-    setSelectedClubId(clubId)
-    // Refresh posts when club changes
-    refetch()
-  }
-
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.LIGHT_GRAY }}>
+    <Surface
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
+      <StatusBar
+        backgroundColor={theme.colors.surface}
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+      />
+
       {/* Header */}
-      <View style={styles.header}>
+      <Surface
+        style={[styles.header, { backgroundColor: theme.colors.surface }]}
+        elevation={2}
+      >
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Студентски групи</Text>
-          <Button text="ТЪРСИ" onPress={() => router.push('/explore-clubs')} />
+          <Text variant="headlineMedium" style={styles.headerTitle}>
+            Студентски групи
+          </Text>
+          <Button
+            mode="contained"
+            onPress={handleExploreClubs}
+            icon="magnify"
+            compact
+          >
+            ТЪРСИ
+          </Button>
+        </View>
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <Searchbar
+            placeholder="Търси в групите..."
+            onChangeText={setSearchQuery}
+            value={searchQuery}
+            style={styles.searchbar}
+            elevation={1}
+          />
         </View>
 
         {/* Horizontal Club Filter */}
@@ -108,61 +156,50 @@ export default function Club() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.clubFilterContent}
+              contentContainerStyle={styles.chipContainer}
             >
-              {/* All Clubs Option */}
-              <TouchableOpacity
-                key="all-clubs"
-                style={[
-                  styles.clubFilterItem,
-                  selectedClubId === null && styles.clubFilterItemActive,
-                ]}
+              {/* All Clubs Chip */}
+              <Chip
+                icon="apps"
+                selected={selectedClubId === null}
                 onPress={() => handleClubSelect(null)}
+                style={styles.chip}
+                showSelectedOverlay
               >
-                <Ionicons
-                  name="apps-outline"
-                  size={20}
-                  color={
-                    selectedClubId === null ? Colors.WHITE : Colors.PRIMARY
-                  }
-                />
-                <Text
-                  style={[
-                    styles.clubFilterText,
-                    selectedClubId === null && styles.clubFilterTextActive,
-                  ]}
-                >
-                  Всички
-                </Text>
-              </TouchableOpacity>
+                Всички
+              </Chip>
 
-              {/* Individual Clubs - Filter valid clubs only */}
+              {/* Individual Club Chips */}
               {validClubs.map((club, index) => (
-                <TouchableOpacity
-                  key={`club-${club.id}-${index}`} // Use both id and index for uniqueness
-                  style={[
-                    styles.clubFilterItem,
-                    selectedClubId === club.id && styles.clubFilterItemActive,
-                  ]}
+                <Chip
+                  key={`club-${club.id}-${index}`}
+                  selected={selectedClubId === club.id}
                   onPress={() => handleClubSelect(club.id)}
+                  style={styles.chip}
+                  showSelectedOverlay
                 >
-                  <Text
-                    style={[
-                      styles.clubFilterText,
-                      selectedClubId === club.id && styles.clubFilterTextActive,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {club.name || 'Неименован клуб'}
-                  </Text>
-                </TouchableOpacity>
+                  {club.name || 'Неименован клуб'}
+                </Chip>
               ))}
             </ScrollView>
           </View>
         )}
 
-        {followedPosts?.length === 0 && !isLoading && <EmptyState />}
-      </View>
+        {/* Loading indicator for clubs */}
+        {clubsLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" />
+            <Text variant="bodySmall" style={styles.loadingText}>
+              Зареждане на групи...
+            </Text>
+          </View>
+        )}
+
+        {/* Empty state for no followed clubs */}
+        {!clubsLoading && followedPosts?.length === 0 && !isLoading && (
+          <EmptyState />
+        )}
+      </Surface>
 
       {/* Posts List */}
       <PostList
@@ -176,64 +213,74 @@ export default function Club() {
         onToggleLike={handleToggleLike}
         onAddComment={handleAddComment}
       />
-    </View>
+
+      {/* Floating Action Button for creating new club */}
+      <FAB
+        icon="plus"
+        style={[
+          styles.fab,
+          {
+            backgroundColor: theme.colors.primary,
+          },
+        ]}
+        onPress={handleExploreClubs}
+        label="Нова група"
+      />
+    </Surface>
   )
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   header: {
-    backgroundColor: Colors.WHITE,
     paddingTop: 50,
-    paddingBottom: 10,
+    paddingBottom: 16,
     borderBottomLeftRadius: 25,
     borderBottomRightRadius: 25,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
   },
   headerContent: {
     paddingHorizontal: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 16,
   },
   headerTitle: {
-    fontSize: 25,
     fontWeight: 'bold',
-    color: Colors.BLACK,
+  },
+  searchContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  searchbar: {
+    elevation: 1,
   },
   clubFilterContainer: {
-    paddingBottom: 15,
+    paddingBottom: 8,
   },
-  clubFilterContent: {
+  chipContainer: {
     paddingHorizontal: 20,
-    gap: 10,
+    gap: 8,
   },
-  clubFilterItem: {
+  chip: {
+    marginRight: 8,
+  },
+  loadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.LIGHT_GRAY,
-    borderWidth: 1,
-    borderColor: Colors.PRIMARY,
-    gap: 6,
-    minWidth: 80,
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 8,
   },
-  clubFilterItemActive: {
-    backgroundColor: Colors.PRIMARY,
-    borderColor: Colors.PRIMARY,
+  loadingText: {
+    opacity: 0.7,
   },
-  clubFilterText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.PRIMARY,
-  },
-  clubFilterTextActive: {
-    color: Colors.WHITE,
+  fab: {
+    position: 'absolute',
+    margin: 16,
+    right: 0,
+    bottom: 0,
   },
 })

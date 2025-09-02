@@ -1,21 +1,25 @@
-import React, { useContext } from 'react'
+// app/user-page/UserProfilePage.tsx
+import React, { useContext, useCallback } from 'react'
 import {
   View,
   Text,
   Image,
-  TouchableOpacity,
   ScrollView,
   StyleSheet,
+  Alert,
+  TouchableOpacity,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
 import { AuthContext } from '@/context/AuthContext'
 import {
   useUserFollowers,
   useFollowStatus,
   useFollowUser,
 } from '@/hooks/useUserFollowers'
-import Button from '@/components/Shared/Button'
 import Colors from '@/data/Colors'
+import Button from '@/components/Shared/Button'
+import Ionicons from '@expo/vector-icons/Ionicons'
+import { useRouter } from 'expo-router'
+import { createDirectChat } from '@/utils/chatUtils'
 
 interface UserProfilePageProps {
   userEmail: string
@@ -24,7 +28,7 @@ interface UserProfilePageProps {
   userRole?: string
 }
 
-const getRoleDisplayText = (userRole?: string): string => {
+const getRoleDisplayText = (userRole: string | null | undefined): string => {
   switch (userRole) {
     case 'systemadmin':
       return 'Системен Админ'
@@ -32,17 +36,21 @@ const getRoleDisplayText = (userRole?: string): string => {
       return 'Преподавател'
     case 'user':
     case 'student':
+      return 'Студент'
     default:
       return 'Студент'
   }
 }
 
-const getRoleColor = (userRole?: string): string => {
+const getRoleColor = (userRole: string | null | undefined): string => {
   switch (userRole) {
     case 'systemadmin':
       return '#dc3545'
     case 'teacher':
       return '#007bff'
+    case 'user':
+    case 'student':
+      return Colors.GRAY
     default:
       return Colors.GRAY
   }
@@ -55,6 +63,7 @@ export default function UserProfilePage({
   userRole,
 }: UserProfilePageProps) {
   const { user: currentUser } = useContext(AuthContext)
+  const router = useRouter()
   const isOwnProfile = currentUser?.email === userEmail
 
   const { data: followStats, isLoading: statsLoading } =
@@ -65,7 +74,7 @@ export default function UserProfilePage({
   )
   const followMutation = useFollowUser()
 
-  const handleFollowToggle = async () => {
+  const handleFollowToggle = useCallback(async () => {
     if (!currentUser?.email || !followStatus) return
 
     try {
@@ -76,8 +85,43 @@ export default function UserProfilePage({
       })
     } catch (error) {
       console.error('Error toggling follow:', error)
+      Alert.alert('Грешка', 'Неуспешна операция при последване')
     }
-  }
+  }, [currentUser?.email, followStatus, followMutation, userEmail])
+
+  const handleSendMessage = useCallback(async () => {
+    if (!currentUser?.email || !currentUser?.name) {
+      Alert.alert('Грешка', 'Трябва да сте влезли в системата')
+      return
+    }
+
+    if (currentUser.email === userEmail) {
+      Alert.alert('Грешка', 'Не можете да изпратите съобщение на себе си')
+      return
+    }
+
+    try {
+      const chatId = await createDirectChat({
+        currentUser: {
+          email: currentUser.email,
+          name: currentUser.name,
+          image: currentUser.image,
+          uid: currentUser.uid,
+        },
+        targetUser: {
+          email: userEmail,
+          name: userName,
+          image: userImage,
+        },
+      })
+
+      // Navigate to the chat room
+      router.push(`/chat/${chatId}`)
+    } catch (error) {
+      console.error('Error creating/finding chat:', error)
+      Alert.alert('Грешка', 'Неуспешно създаване на чат')
+    }
+  }, [currentUser, userEmail, userName, userImage, router])
 
   return (
     <ScrollView style={styles.container}>
@@ -106,22 +150,40 @@ export default function UserProfilePage({
         </View>
       </View>
 
-      {/* Follow Button */}
+      {/* Action Buttons */}
       {!isOwnProfile && currentUser?.email && (
         <View style={styles.actionContainer}>
-          <Button
-            text={
-              statusLoading
-                ? 'Зареждане...'
-                : followStatus?.isFollowing
-                ? 'Отпоследвай'
-                : 'Последвай'
-            }
-            onPress={handleFollowToggle}
-            loading={followMutation.isPending}
-            outline={followStatus?.isFollowing}
-            disabled={statusLoading}
-          />
+          <View style={styles.buttonRow}>
+            <View style={styles.buttonFlex}>
+              <Button
+                text={
+                  statusLoading
+                    ? 'Зареждане...'
+                    : followStatus?.isFollowing
+                    ? 'Отпоследвай'
+                    : 'Последвай'
+                }
+                onPress={handleFollowToggle}
+                loading={followMutation.isPending}
+                outline={followStatus?.isFollowing}
+                disabled={statusLoading}
+              />
+            </View>
+            <View style={styles.buttonFlex}>
+              <TouchableOpacity
+                onPress={handleSendMessage}
+                style={styles.messageButton}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="chatbubble-outline"
+                  size={20}
+                  color={Colors.PRIMARY}
+                />
+                <Text style={styles.messageButtonText}>Съобщение</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       )}
 
@@ -186,6 +248,30 @@ const styles = StyleSheet.create({
   },
   actionContainer: {
     padding: 20,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  buttonFlex: {
+    flex: 1,
+  },
+  messageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.WHITE,
+    borderWidth: 1.5,
+    borderColor: Colors.PRIMARY,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 8,
+  },
+  messageButtonText: {
+    color: Colors.PRIMARY,
+    fontSize: 16,
+    fontWeight: '600',
   },
   contentContainer: {
     padding: 20,

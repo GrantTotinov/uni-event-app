@@ -1,3 +1,4 @@
+// app/chat/index.tsx
 import React, {
   useContext,
   useEffect,
@@ -24,102 +25,273 @@ import {
   onSnapshot,
   orderBy,
   limit,
+  getDocs,
 } from 'firebase/firestore'
 import { db } from '@/configs/FirebaseConfig'
 import Colors from '@/data/Colors'
 import { useRouter, Href } from 'expo-router'
 
+interface MessageData {
+  id: string
+  text?: string
+  user?: {
+    name?: string
+    _id?: string
+    avatar?: string
+  }
+  createdAt?: any
+  system?: boolean
+}
+
 interface ChatRoom {
   id: string
   name?: string
   participants?: string[]
+  participantEmails?: string[]
   lastMessageTime?: any
   lastMessage?: string
   avatar?: string
   lastMessageUser?: string
   unreadCount?: number
+  isDirect?: boolean
 }
 
 export default function ChatList() {
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const { user, getUserUid } = useContext(AuthContext)
   const router = useRouter()
 
-  // Memoized user UID to prevent unnecessary re-renders
-  const uid = useMemo(() => getUserUid(), [getUserUid])
+  // Memoized user identifiers to prevent unnecessary re-renders
+  const userIdentifiers = useMemo(() => {
+    const uid = getUserUid()
+    const email = user?.email
+    return { uid, email }
+  }, [getUserUid, user?.email])
 
   useEffect(() => {
-    if (!uid) {
+    if (!userIdentifiers.uid && !userIdentifiers.email) {
       setLoading(false)
       return
     }
 
-    const q = query(
-      collection(db, 'chatRooms'),
-      where('participants', 'array-contains', uid),
-      orderBy('lastMessageTime', 'desc')
-    )
+    console.log('Setting up chat listener for user:', userIdentifiers)
+    setError(null)
 
-    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-      const rooms: ChatRoom[] = []
+    // Simplified query approach to avoid permission issues
+    const setupChatListener = async () => {
+      try {
+        const allChatRooms = new Map<string, ChatRoom>()
+        const unsubscribeFunctions: (() => void)[] = []
 
-      for (const chatDoc of querySnapshot.docs) {
-        const chatData = chatDoc.data()
+        // Primary query by UID
+        if (userIdentifiers.uid) {
+          const primaryQuery = query(
+            collection(db, 'chatRooms'),
+            where('participants', 'array-contains', userIdentifiers.uid)
+          )
 
-        const lastMessageQuery = query(
-          collection(db, 'chatRooms', chatDoc.id, 'messages'),
-          orderBy('createdAt', 'desc'),
-          limit(1)
-        )
-
-        const lastMessageSnapshot = (await new Promise((resolve) => {
-          const unsub = onSnapshot(
-            lastMessageQuery,
-            (snapshot) => {
-              resolve(snapshot)
-              unsub()
+          const unsubscribe1 = onSnapshot(
+            primaryQuery,
+            async (querySnapshot) => {
+              console.log(
+                'UID query result:',
+                querySnapshot.docs.length,
+                'docs'
+              )
+              await processQuerySnapshot(querySnapshot, allChatRooms)
             },
-            () => {
-              resolve(null)
-              unsub()
+            (error) => {
+              console.error('Error in UID chat listener:', error)
+              setError('Грешка при зареждане на чатове (UID)')
             }
           )
-        })) as any
-
-        let lastMessage = ''
-        let lastMessageUser = ''
-
-        if (lastMessageSnapshot && !lastMessageSnapshot.empty) {
-          const lastMsg = lastMessageSnapshot.docs[0].data()
-          // Ensure these are always strings
-          lastMessage = String(lastMsg.text || '')
-          lastMessageUser = String(lastMsg.user?.name || '')
+          unsubscribeFunctions.push(unsubscribe1)
         }
 
-        rooms.push({
-          id: chatDoc.id,
-          name: String(chatData.name || 'Чат'),
-          participants: chatData.participants || [],
-          lastMessageTime: chatData.lastMessageTime?.toDate?.() || null,
-          avatar: String(chatData.avatar || ''),
-          lastMessage,
-          lastMessageUser,
-          unreadCount: 0,
-        })
+        // Secondary query by email if different from UID
+        if (
+          userIdentifiers.email &&
+          userIdentifiers.email !== userIdentifiers.uid
+        ) {
+          const emailQuery = query(
+            collection(db, 'chatRooms'),
+            where('participants', 'array-contains', userIdentifiers.email)
+          )
+
+          const unsubscribe2 = onSnapshot(
+            emailQuery,
+            async (querySnapshot) => {
+              console.log(
+                'Email query result:',
+                querySnapshot.docs.length,
+                'docs'
+              )
+              await processQuerySnapshot(querySnapshot, allChatRooms)
+            },
+            (error) => {
+              console.error('Error in email chat listener:', error)
+              // Don't set error for secondary query unless primary also fails
+            }
+          )
+          unsubscribeFunctions.push(unsubscribe2)
+
+          // Tertiary query by participantEmails
+          const participantEmailsQuery = query(
+            collection(db, 'chatRooms'),
+            where('participantEmails', 'array-contains', userIdentifiers.email)
+          )
+
+          const unsubscribe3 = onSnapshot(
+            participantEmailsQuery,
+            async (querySnapshot) => {
+              console.log(
+                'ParticipantEmails query result:',
+                querySnapshot.docs.length,
+                'docs'
+              )
+              await processQuerySnapshot(querySnapshot, allChatRooms)
+            },
+            (error) => {
+              console.error('Error in participantEmails chat listener:', error)
+              // Don't set error for tertiary query
+            }
+          )
+          unsubscribeFunctions.push(unsubscribe3)
+        }
+
+        const processQuerySnapshot = async (
+          querySnapshot: any,
+          chatRoomsMap: Map<string, ChatRoom>
+        ) => {
+          console.log(
+            'Processing query snapshot with',
+            querySnapshot.docs.length,
+            'docs'
+          )
+
+          for (const chatDoc of querySnapshot.docs) {
+            const chatData = chatDoc.data()
+            console.log('Processing chat:', chatDoc.id, chatData)
+
+            // Skip if already processed
+            if (chatRoomsMap.has(chatDoc.id)) continue
+
+            try {
+              // Get last message without orderBy to avoid permission issues
+              const lastMessageQuery = query(
+                collection(db, 'chatRooms', chatDoc.id, 'messages'),
+                limit(50) // Get recent messages and sort manually
+              )
+
+              const lastMessageSnapshot = await getDocs(lastMessageQuery)
+
+              let lastMessage = ''
+              let lastMessageUser = ''
+
+              if (!lastMessageSnapshot.empty) {
+                // Manually sort by createdAt and get the last message
+                const sortedMessages = lastMessageSnapshot.docs
+                  .map(
+                    (doc) =>
+                      ({
+                        id: doc.id,
+                        ...doc.data(),
+                      } as MessageData)
+                  )
+                  .sort((a: MessageData, b: MessageData) => {
+                    const aTime = a.createdAt?.seconds || 0
+                    const bTime = b.createdAt?.seconds || 0
+                    return bTime - aTime
+                  })
+
+                if (sortedMessages.length > 0) {
+                  const lastMsg = sortedMessages[0]
+                  // Fixed: Properly access text and user properties
+                  lastMessage = String(lastMsg.text || '')
+                  lastMessageUser = String(lastMsg.user?.name || '')
+                }
+              }
+
+              const chatRoom: ChatRoom = {
+                id: chatDoc.id,
+                name: String(chatData.name || 'Чат'),
+                participants: chatData.participants || [],
+                participantEmails: chatData.participantEmails || [],
+                lastMessageTime: chatData.lastMessageTime?.toDate?.() || null,
+                avatar: String(chatData.avatar || ''),
+                lastMessage,
+                lastMessageUser,
+                unreadCount: 0,
+                isDirect: chatData.isDirect || false,
+              }
+
+              chatRoomsMap.set(chatDoc.id, chatRoom)
+            } catch (messageError) {
+              console.error(
+                'Error getting messages for chat:',
+                chatDoc.id,
+                messageError
+              )
+              // Still add the chat room without last message info
+              const chatRoom: ChatRoom = {
+                id: chatDoc.id,
+                name: String(chatData.name || 'Чат'),
+                participants: chatData.participants || [],
+                participantEmails: chatData.participantEmails || [],
+                lastMessageTime: chatData.lastMessageTime?.toDate?.() || null,
+                avatar: String(chatData.avatar || ''),
+                lastMessage: '',
+                lastMessageUser: '',
+                unreadCount: 0,
+                isDirect: chatData.isDirect || false,
+              }
+              chatRoomsMap.set(chatDoc.id, chatRoom)
+            }
+          }
+
+          // Update state with all unique chat rooms
+          const uniqueChatRooms = Array.from(chatRoomsMap.values()).sort(
+            (a, b) => {
+              if (!a.lastMessageTime && !b.lastMessageTime) return 0
+              if (!a.lastMessageTime) return 1
+              if (!b.lastMessageTime) return -1
+              return b.lastMessageTime.getTime() - a.lastMessageTime.getTime()
+            }
+          )
+
+          console.log('Setting chat rooms:', uniqueChatRooms.length)
+          setChatRooms(uniqueChatRooms)
+          setLoading(false)
+          setError(null)
+        }
+
+        return () => {
+          unsubscribeFunctions.forEach((unsub) => unsub())
+        }
+      } catch (setupError) {
+        console.error('Error setting up chat listeners:', setupError)
+        setError('Грешка при настройване на чат листенърите')
+        setLoading(false)
       }
+    }
 
-      setChatRooms(rooms)
-      setLoading(false)
-    })
-
-    return () => unsubscribe()
-  }, [uid])
+    const cleanup = setupChatListener()
+    return () => {
+      cleanup.then((cleanupFn) => cleanupFn?.())
+    }
+  }, [userIdentifiers.uid, userIdentifiers.email])
 
   // Memoized utility functions for performance
   const formatTime = useCallback((timestamp: any) => {
     if (!timestamp) return ''
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+    const date =
+      timestamp instanceof Date
+        ? timestamp
+        : timestamp.toDate
+        ? timestamp.toDate()
+        : new Date(timestamp)
     const now = new Date()
     const diffInDays = Math.floor(
       (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
@@ -221,19 +393,22 @@ export default function ChatList() {
   const ListEmptyComponent = useCallback(
     () => (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyTitle}>Все още нямате чатове</Text>
+        <Text style={styles.emptyTitle}>
+          {error ? 'Грешка при зареждане' : 'Все още нямате чатове'}
+        </Text>
         <Text style={styles.emptySubtitle}>
-          Започнете разговор с приятелите си
+          {error ? error : 'Започнете разговор с приятелите си'}
         </Text>
       </View>
     ),
-    []
+    [error]
   )
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.PRIMARY} />
+        <Text style={styles.loadingText}>Зареждане на чатове...</Text>
       </View>
     )
   }
@@ -280,6 +455,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F0F2F5',
   },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: Colors.GRAY,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -299,7 +479,7 @@ const styles = StyleSheet.create({
   headerButton: { padding: 8 },
   headerButtonText: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold' },
   chatList: { flex: 1 },
-  chatItem: { backgroundColor: '#FFFFFF', height: 80 }, // Fixed height for getItemLayout
+  chatItem: { backgroundColor: '#FFFFFF', height: 80 },
   chatContent: {
     flexDirection: 'row',
     paddingHorizontal: 16,

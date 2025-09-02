@@ -1,135 +1,283 @@
+// components/Clubs/ClubInfo.tsx
+import React, { useState, useCallback } from 'react'
+import { View, StyleSheet, ScrollView, Alert } from 'react-native'
 import {
-  View,
-  Image,
+  Surface,
   Text,
   TextInput,
-  StyleSheet,
-  TouchableOpacity,
-  ToastAndroid,
-} from 'react-native'
-import React, { useContext, useState } from 'react'
+  Button,
+  Card,
+  Avatar,
+  useTheme,
+  HelperText,
+} from 'react-native-paper'
 import * as ImagePicker from 'expo-image-picker'
-import Colors from '@/data/Colors'
-import Button from '@/components/Shared/Button'
 import { uploadToCloudinary } from '@/utils/CloudinaryUpload'
 import axios from 'axios'
 import { useRouter } from 'expo-router'
 
 export default function ClubInfo() {
-  const [name, setName] = useState<string | null>()
-  const [about, setAbout] = useState<string | null>()
+  const [name, setName] = useState('')
+  const [about, setAbout] = useState('')
   const [loading, setLoading] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<string>('')
+  const [nameError, setNameError] = useState('')
+  const [aboutError, setAboutError] = useState('')
+
   const router = useRouter()
-  const [selectedImage, setSelectedImage] = useState<string | undefined>()
-  const onAddClubBtnClick = async () => {
-    if (!name) {
-      ToastAndroid.show('Моля попълнете полетата', ToastAndroid.BOTTOM)
+  const theme = useTheme()
+
+  const validateForm = useCallback(() => {
+    let isValid = true
+
+    if (!name.trim()) {
+      setNameError('Името на групата е задължително')
+      isValid = false
+    } else if (name.trim().length < 3) {
+      setNameError('Името трябва да е поне 3 символа')
+      isValid = false
+    } else {
+      setNameError('')
+    }
+
+    if (!about.trim()) {
+      setAboutError('Описанието е задължително')
+      isValid = false
+    } else if (about.trim().length < 10) {
+      setAboutError('Описанието трябва да е поне 10 символа')
+      isValid = false
+    } else {
+      setAboutError('')
+    }
+
+    return isValid
+  }, [name, about])
+
+  const onAddClubBtnClick = useCallback(async () => {
+    if (!validateForm()) {
       return
     }
-    if (!about) {
-      ToastAndroid.show('Моля попълнете полетата', ToastAndroid.BOTTOM)
-      return
-    }
+
     setLoading(true)
-    // Upload Image
-    let uploadImageUrl = ''
-    if (selectedImage) {
-      try {
-        uploadImageUrl = await uploadToCloudinary(selectedImage)
-      } catch (error) {
-        ToastAndroid.show('Грешка при качване на снимка', ToastAndroid.BOTTOM)
-        setLoading(false)
-        return
+    try {
+      // Upload Image
+      let uploadImageUrl = ''
+      if (selectedImage) {
+        try {
+          uploadImageUrl = await uploadToCloudinary(selectedImage)
+        } catch (error) {
+          Alert.alert('Грешка', 'Неуспешно качване на снимката')
+          setLoading(false)
+          return
+        }
       }
-    }
-    const result = await axios.post(
-      process.env.EXPO_PUBLIC_HOST_URL + '/clubs',
-      {
-        clubName: name,
-        imageUrl: uploadImageUrl,
-        about: about,
-      }
-    )
-    console.log(result.data)
-    setLoading(false)
-    router.replace('/(tabs)/Club')
-  }
-  const pickImage = async () => {
-    // No permissions request is necessary for launching the image library
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [4, 4],
-      quality: 0.5,
-    })
 
-    if (!result.canceled) {
-      setSelectedImage(result.assets[0].uri)
+      const result = await axios.post(
+        `${process.env.EXPO_PUBLIC_HOST_URL}/clubs`,
+        {
+          clubName: name.trim(),
+          imageUrl: uploadImageUrl,
+          about: about.trim(),
+        }
+      )
+
+      console.log(result.data)
+      Alert.alert('Успех', 'Групата беше създадена успешно!', [
+        { text: 'OK', onPress: () => router.replace('/(tabs)/Club') },
+      ])
+    } catch (error) {
+      console.error('Error creating club:', error)
+      Alert.alert('Грешка', 'Неуспешно създаване на групата')
+    } finally {
+      setLoading(false)
     }
-  }
+  }, [name, about, selectedImage, validateForm, router])
+
+  const pickImage = useCallback(async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      })
+
+      if (!result.canceled) {
+        setSelectedImage(result.assets[0].uri)
+      }
+    } catch (error) {
+      Alert.alert('Грешка', 'Неуспешно избиране на снимка')
+    }
+  }, [])
+
   return (
-    <View
-      style={{
-        padding: 20,
-      }}
+    <Surface
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <TouchableOpacity onPress={pickImage}>
-        {selectedImage ? (
-          <Image source={{ uri: selectedImage }} style={styles.image} />
-        ) : (
-          <Image
-            source={require('./../../assets/images/image.png')}
-            style={styles.image}
-          />
-        )}
-      </TouchableOpacity>
-      <Text style={styles.text}>Име на клуба / групата</Text>
-      <TextInput
-        placeholder="Напиши име на клуба / групата"
-        style={styles.textInput}
-        multiline={true}
-        numberOfLines={2}
-        maxLength={1000}
-        onChangeText={(value) => setName(value)}
-      />
-      <Text style={styles.text}>Описание на клуба / групата</Text>
-      <TextInput
-        placeholder="Напиши кратко описание на клуба / групата"
-        style={styles.textInput}
-        multiline={true}
-        numberOfLines={2}
-        maxLength={1000}
-        onChangeText={(value) => setAbout(value)}
-      />
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Header */}
+        <Text variant="headlineMedium" style={styles.title}>
+          Създай нова група
+        </Text>
+        <Text
+          variant="bodyLarge"
+          style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}
+        >
+          Споделете своите интереси със студентската общност
+        </Text>
 
-      <Button
-        text=" + Създай"
-        onPress={() => onAddClubBtnClick()}
-        loading={loading}
-      />
-    </View>
+        {/* Image Selection Card */}
+        <Card style={styles.imageCard} mode="elevated" onPress={pickImage}>
+          <Card.Content style={styles.imageCardContent}>
+            {selectedImage ? (
+              <Avatar.Image size={120} source={{ uri: selectedImage }} />
+            ) : (
+              <Avatar.Icon size={120} icon="camera-plus" />
+            )}
+            <Text variant="bodyMedium" style={styles.imageHint}>
+              {selectedImage
+                ? 'Натиснете за промяна'
+                : 'Добавете лого на групата'}
+            </Text>
+          </Card.Content>
+        </Card>
+
+        {/* Form Card */}
+        <Card style={styles.formCard} mode="elevated">
+          <Card.Content style={styles.formContent}>
+            {/* Club Name Input */}
+            <View style={styles.inputContainer}>
+              <TextInput
+                label="Име на групата"
+                value={name}
+                onChangeText={setName}
+                mode="outlined"
+                error={!!nameError}
+                maxLength={100}
+                style={styles.textInput}
+              />
+              <HelperText type="error" visible={!!nameError}>
+                {nameError}
+              </HelperText>
+            </View>
+
+            {/* Club Description Input */}
+            <View style={styles.inputContainer}>
+              <TextInput
+                label="Описание на групата"
+                value={about}
+                onChangeText={setAbout}
+                mode="outlined"
+                multiline
+                numberOfLines={4}
+                error={!!aboutError}
+                maxLength={500}
+                style={styles.textInput}
+              />
+              <HelperText type="error" visible={!!aboutError}>
+                {aboutError}
+              </HelperText>
+              <HelperText type="info">{about.length}/500 символа</HelperText>
+            </View>
+
+            {/* Create Button */}
+            <Button
+              mode="contained"
+              onPress={onAddClubBtnClick}
+              loading={loading}
+              disabled={loading}
+              style={styles.createButton}
+              icon="plus"
+            >
+              Създай група
+            </Button>
+          </Card.Content>
+        </Card>
+
+        {/* Guidelines Card */}
+        <Card style={styles.guidelinesCard} mode="outlined">
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.guidelinesTitle}>
+              📋 Насоки за създаване
+            </Text>
+            <Text variant="bodyMedium" style={styles.guidelineText}>
+              • Изберете ясно и описно име
+            </Text>
+            <Text variant="bodyMedium" style={styles.guidelineText}>
+              • Добавете подробно описание на дейностите
+            </Text>
+            <Text variant="bodyMedium" style={styles.guidelineText}>
+              • Качете привлекателно лого или снимка
+            </Text>
+            <Text variant="bodyMedium" style={styles.guidelineText}>
+              • Спазвайте правилата на университета
+            </Text>
+          </Card.Content>
+        </Card>
+      </ScrollView>
+    </Surface>
   )
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  title: {
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  subtitle: {
+    textAlign: 'center',
+    marginBottom: 32,
+    opacity: 0.8,
+  },
+  imageCard: {
+    marginBottom: 24,
+  },
+  imageCardContent: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 16,
+  },
+  imageHint: {
+    opacity: 0.7,
+    textAlign: 'center',
+  },
+  formCard: {
+    marginBottom: 24,
+  },
+  formContent: {
+    paddingVertical: 16,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
   textInput: {
-    padding: 15,
-    backgroundColor: Colors.WHITE,
-    height: 140,
-    marginTop: 10,
-    borderRadius: 15,
-    textAlignVertical: 'top',
-    elevation: 7,
+    backgroundColor: 'transparent',
   },
-  image: {
-    width: 100,
-    height: 100,
-    borderRadius: 15,
-    marginTop: 15,
-    marginLeft: -10,
+  createButton: {
+    marginTop: 16,
+    paddingVertical: 8,
   },
-  text: {
-    color: Colors.GRAY,
-    margin: 5,
+  guidelinesCard: {
+    marginBottom: 20,
+  },
+  guidelinesTitle: {
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  guidelineText: {
+    marginBottom: 4,
+    opacity: 0.8,
   },
 })
