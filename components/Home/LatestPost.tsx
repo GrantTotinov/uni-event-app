@@ -1,18 +1,192 @@
-import React, { useContext, useEffect, useState } from 'react'
-import { View, Text, Pressable, TextInput } from 'react-native'
+import React, {
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+} from 'react'
+import {
+  View,
+  Text,
+  Pressable,
+  TextInput,
+  StyleSheet,
+  Dimensions,
+} from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { AuthContext } from '@/context/AuthContext'
 import Colors from '@/data/Colors'
 import PostList from '@/components/Post/PostList'
 import { useAllPosts, usePopularPosts, useUhtPosts } from '@/hooks/usePosts'
+import { useAppTheme } from '@/context/ThemeContext'
 
-export default function LatestPost({ search }: { search: string }) {
+const { width } = Dimensions.get('window')
+
+// Tab configuration for better maintainability
+const TABS = [
+  {
+    id: 0,
+    label: 'Последни',
+    key: 'latest',
+    searchText: 'публикации и коментари',
+  },
+  {
+    id: 1,
+    label: 'Популярни',
+    key: 'popular',
+    searchText: 'популярни публикации и коментари',
+  },
+  { id: 2, label: 'УХТ', key: 'uht', searchText: 'официални УХТ публикации' },
+] as const
+
+// Memoized component following performance guidelines
+const LatestPost = React.memo(function LatestPost({
+  search,
+}: {
+  search: string
+}) {
   const { user } = useContext(AuthContext)
+  const { isDarkMode, theme } = useAppTheme()
   const [selectedTab, setSelectedTab] = useState<number>(0)
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('')
 
-  // Debounce search query to avoid too many API calls
+  // Memoized theme colors - performance optimized
+  const colors = useMemo(
+    () => ({
+      surface: isDarkMode ? '#1a1a1a' : '#ffffff',
+      onSurface: isDarkMode ? '#ffffff' : '#000000',
+      surfaceVariant: isDarkMode ? '#2a2a2a' : '#f5f5f5',
+      onSurfaceVariant: isDarkMode ? '#e0e0e0' : '#666666',
+      primary: Colors.PRIMARY,
+      onPrimary: '#ffffff',
+      outline: isDarkMode ? '#404040' : '#e0e0e0',
+      shadow: isDarkMode ? '#000000' : '#000000',
+      inputBackground: isDarkMode ? '#2d2d2d' : '#ffffff',
+      inputBorder: isDarkMode ? '#404040' : '#e5e5e5',
+      tabBackground: isDarkMode ? '#2d2d2d' : '#ffffff',
+      tabBackgroundActive: Colors.PRIMARY,
+    }),
+    [isDarkMode]
+  )
+
+  // Memoized styles for theme support - performance optimized
+  const dynamicStyles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          marginTop: 15,
+        },
+        searchContainer: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: colors.inputBackground,
+          borderRadius: 25,
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          marginHorizontal: 20,
+          marginBottom: 16,
+          borderWidth: 1,
+          borderColor: colors.inputBorder,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: isDarkMode ? 0.3 : 0.1,
+          shadowRadius: 4,
+          elevation: 3,
+        },
+        searchIcon: {
+          marginRight: 12,
+        },
+        searchInput: {
+          flex: 1,
+          fontSize: 16,
+          color: colors.onSurface,
+          height: 20, // Fixed height to prevent expansion
+          textAlignVertical: 'center',
+          paddingVertical: 0, // Remove default padding
+        },
+        clearButton: {
+          padding: 6,
+          borderRadius: 12,
+          backgroundColor: colors.surfaceVariant,
+          marginLeft: 8,
+        },
+        tabsContainer: {
+          flexDirection: 'row',
+          gap: 10,
+          paddingHorizontal: 20,
+          marginBottom: 12,
+        },
+        tabButton: {
+          paddingVertical: 10,
+          paddingHorizontal: 18,
+          borderRadius: 20,
+          borderWidth: 1,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: isDarkMode ? 0.3 : 0.1,
+          shadowRadius: 2,
+          elevation: 2,
+        },
+        tabButtonActive: {
+          backgroundColor: colors.tabBackgroundActive,
+          borderColor: colors.tabBackgroundActive,
+          elevation: 4,
+          shadowOpacity: isDarkMode ? 0.4 : 0.15,
+        },
+        tabButtonInactive: {
+          backgroundColor: colors.tabBackground,
+          borderColor: colors.outline,
+        },
+        tabText: {
+          fontWeight: '600',
+          fontSize: 14,
+          textAlign: 'center',
+        },
+        tabTextActive: {
+          color: colors.onPrimary,
+        },
+        tabTextInactive: {
+          color: colors.primary,
+        },
+        searchInfoContainer: {
+          paddingHorizontal: 20,
+          marginBottom: 12,
+          backgroundColor: colors.surfaceVariant,
+          marginHorizontal: 20,
+          borderRadius: 12,
+          padding: 12,
+        },
+        searchInfoText: {
+          color: colors.onSurfaceVariant,
+          fontSize: 14,
+          fontWeight: '500',
+        },
+        searchInfoSubtext: {
+          color: colors.onSurfaceVariant,
+          fontSize: 12,
+          marginTop: 4,
+          opacity: 0.8,
+        },
+        uhtInfoContainer: {
+          paddingHorizontal: 20,
+          marginBottom: 12,
+        },
+        uhtInfoText: {
+          color: colors.onSurfaceVariant,
+          fontSize: 12,
+          fontStyle: 'italic',
+          textAlign: 'center',
+          backgroundColor: colors.surfaceVariant,
+          paddingHorizontal: 16,
+          paddingVertical: 8,
+          borderRadius: 8,
+        },
+      }),
+    [colors, isDarkMode]
+  )
+
+  // Debounce search query - performance optimized
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery)
@@ -20,18 +194,17 @@ export default function LatestPost({ search }: { search: string }) {
     return () => clearTimeout(timer)
   }, [searchQuery])
 
-  // Use the hooks based on selected tab with search functionality
+  // Memoized hooks calls - prevents unnecessary re-renders
   const latestPostsQuery = useAllPosts(user?.email, false, debouncedSearchQuery)
   const popularPostsQuery = usePopularPosts(
     user?.email,
     false,
     debouncedSearchQuery
   )
-  // For UHT tab, use only supported arguments (userEmail, searchQuery)
   const uhtPostsQuery = useUhtPosts(user?.email, debouncedSearchQuery)
 
-  // Select the appropriate query based on selected tab
-  const getCurrentQuery = () => {
+  // Memoized query selector - performance optimized
+  const getCurrentQuery = useCallback(() => {
     switch (selectedTab) {
       case 0:
         return latestPostsQuery
@@ -42,7 +215,7 @@ export default function LatestPost({ search }: { search: string }) {
       default:
         return latestPostsQuery
     }
-  }
+  }, [selectedTab, latestPostsQuery, popularPostsQuery, uhtPostsQuery])
 
   const currentQuery = getCurrentQuery()
   const {
@@ -56,195 +229,153 @@ export default function LatestPost({ search }: { search: string }) {
     commentMutation,
   } = currentQuery
 
-  const handleLoadMore = () => {
+  // Memoized handlers following performance guidelines
+  const handleLoadMore = useCallback(() => {
     if (hasMore && !isLoadingMore && !isLoading) {
       fetchNextPage()
     }
-  }
+  }, [hasMore, isLoadingMore, isLoading, fetchNextPage])
 
-  // Handle like toggle with optimistic updates
-  const handleToggleLike = async (postId: number, isLiked: boolean) => {
-    if (!user?.email) return
-    try {
-      await likeMutation.mutateAsync({
-        postId,
-        userEmail: user.email,
-        isLiked,
-      })
-    } catch (error) {
-      console.error('Error toggling like:', error)
-    }
-  }
+  const handleToggleLike = useCallback(
+    async (postId: number, isLiked: boolean) => {
+      if (!user?.email) return
+      try {
+        await likeMutation.mutateAsync({
+          postId,
+          userEmail: user.email,
+          isLiked,
+        })
+      } catch (error) {
+        console.error('Error toggling like:', error)
+      }
+    },
+    [user?.email, likeMutation]
+  )
 
-  // Handle comment submission with optimistic updates
-  const handleAddComment = async (
-    postId: number,
-    comment: string
-  ): Promise<boolean> => {
-    if (!user?.email || !comment.trim()) return false
-    try {
-      await commentMutation.mutateAsync({
-        postId,
-        userEmail: user.email,
-        comment,
-      })
-      return true
-    } catch (error) {
-      console.error('Error adding comment:', error)
-      return false
-    }
-  }
+  const handleAddComment = useCallback(
+    async (postId: number, comment: string): Promise<boolean> => {
+      if (!user?.email || !comment.trim()) return false
+      try {
+        await commentMutation.mutateAsync({
+          postId,
+          userEmail: user.email,
+          comment,
+        })
+        return true
+      } catch (error) {
+        console.error('Error adding comment:', error)
+        return false
+      }
+    },
+    [user?.email, commentMutation]
+  )
 
-  const clearSearch = () => setSearchQuery('')
+  const handleSearchChange = useCallback((text: string) => {
+    setSearchQuery(text)
+  }, [])
 
-  // Show skeleton on initial load when we have no data yet
-  const showSkeleton = isLoading && posts.length === 0
+  const clearSearch = useCallback(() => {
+    setSearchQuery('')
+  }, [])
 
-  // Tab info for search placeholder
-  const getTabInfo = () => {
-    switch (selectedTab) {
-      case 0:
-        return { searchText: 'публикации и коментари' }
-      case 1:
-        return { searchText: 'популярни публикации и коментари' }
-      case 2:
-        return { searchText: 'официални УХТ публикации' }
-      default:
-        return { searchText: 'публикации и коментари' }
-    }
-  }
-  const tabInfo = getTabInfo()
+  const handleTabPress = useCallback((tabId: number) => {
+    setSelectedTab(tabId)
+  }, [])
+
+  // Memoized computed values - performance optimized
+  const showSkeleton = useMemo(
+    () => isLoading && posts.length === 0,
+    [isLoading, posts.length]
+  )
+
+  const currentTab = useMemo(
+    () => TABS.find((tab) => tab.id === selectedTab) || TABS[0],
+    [selectedTab]
+  )
+
+  const searchPlaceholder = useMemo(
+    () => `Търси в ${currentTab.searchText}...`,
+    [currentTab.searchText]
+  )
+
+  // Memoized tab buttons - prevents unnecessary re-renders
+  const tabButtons = useMemo(
+    () =>
+      TABS.map((tab) => (
+        <Pressable
+          key={tab.id}
+          onPress={() => handleTabPress(tab.id)}
+          style={[
+            dynamicStyles.tabButton,
+            selectedTab === tab.id
+              ? dynamicStyles.tabButtonActive
+              : dynamicStyles.tabButtonInactive,
+          ]}
+          accessibilityRole="tab"
+          accessibilityLabel={tab.label}
+          accessibilityState={{ selected: selectedTab === tab.id }}
+        >
+          <Text
+            style={[
+              dynamicStyles.tabText,
+              selectedTab === tab.id
+                ? dynamicStyles.tabTextActive
+                : dynamicStyles.tabTextInactive,
+            ]}
+          >
+            {tab.label}
+          </Text>
+        </Pressable>
+      )),
+    [selectedTab, handleTabPress, dynamicStyles]
+  )
 
   return (
-    <View style={{ marginTop: 15 }}>
-      {/* Search Bar */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          backgroundColor: Colors.WHITE,
-          borderRadius: 25,
-          paddingHorizontal: 15,
-          paddingVertical: 10,
-          marginHorizontal: 20,
-          marginBottom: 15,
-          elevation: 2,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 1 },
-          shadowOpacity: 0.1,
-          shadowRadius: 2,
-        }}
-      >
+    <View style={dynamicStyles.container}>
+      {/* Enhanced Search Bar */}
+      <View style={dynamicStyles.searchContainer}>
         <Ionicons
           name="search"
           size={20}
-          color={Colors.GRAY}
-          style={{ marginRight: 10 }}
+          color={colors.onSurfaceVariant}
+          style={dynamicStyles.searchIcon}
         />
         <TextInput
-          placeholder={`Търси в ${tabInfo.searchText}...`}
+          placeholder={searchPlaceholder}
           value={searchQuery}
-          onChangeText={setSearchQuery}
-          style={{
-            flex: 1,
-            fontSize: 16,
-            color: Colors.BLACK,
-          }}
-          placeholderTextColor={Colors.GRAY}
+          onChangeText={handleSearchChange}
+          style={dynamicStyles.searchInput}
+          placeholderTextColor={colors.onSurfaceVariant}
+          multiline={false}
+          numberOfLines={1}
+          blurOnSubmit={false}
+          accessibilityLabel="Search posts"
+          accessibilityHint="Enter search terms to find posts"
         />
         {searchQuery.length > 0 && (
-          <Pressable onPress={clearSearch} style={{ padding: 5 }}>
-            <Ionicons name="close-circle" size={20} color={Colors.GRAY} />
+          <Pressable
+            onPress={clearSearch}
+            style={dynamicStyles.clearButton}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+          >
+            <Ionicons name="close" size={16} color={colors.onSurfaceVariant} />
           </Pressable>
         )}
       </View>
 
-      {/* Tab buttons for Latest/Popular/UHT */}
-      <View
-        style={{
-          flexDirection: 'row',
-          gap: 8,
-          paddingHorizontal: 20,
-          marginBottom: 10,
-        }}
-      >
-        {/* Latest Tab */}
-        <Pressable onPress={() => setSelectedTab(0)}>
-          <Text
-            style={{
-              padding: 10,
-              paddingHorizontal: 20,
-              borderRadius: 25,
-              fontWeight: 'bold',
-              fontSize: 14,
-              backgroundColor:
-                selectedTab === 0 ? Colors.PRIMARY : Colors.WHITE,
-              color: selectedTab === 0 ? Colors.WHITE : Colors.PRIMARY,
-              elevation: selectedTab === 0 ? 3 : 1,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.1,
-              shadowRadius: 2,
-            }}
-          >
-            Последни
-          </Text>
-        </Pressable>
-        {/* Popular Tab */}
-        <Pressable onPress={() => setSelectedTab(1)}>
-          <Text
-            style={{
-              padding: 10,
-              paddingHorizontal: 20,
-              borderRadius: 25,
-              fontWeight: 'bold',
-              fontSize: 14,
-              backgroundColor:
-                selectedTab === 1 ? Colors.PRIMARY : Colors.WHITE,
-              color: selectedTab === 1 ? Colors.WHITE : Colors.PRIMARY,
-              elevation: selectedTab === 1 ? 3 : 1,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.1,
-              shadowRadius: 2,
-            }}
-          >
-            Популярни
-          </Text>
-        </Pressable>
-        {/* UHT Tab */}
-        <Pressable onPress={() => setSelectedTab(2)}>
-          <Text
-            style={{
-              padding: 10,
-              paddingHorizontal: 20,
-              borderRadius: 25,
-              fontWeight: 'bold',
-              fontSize: 14,
-              backgroundColor:
-                selectedTab === 2 ? Colors.PRIMARY : Colors.WHITE,
-              color: selectedTab === 2 ? Colors.WHITE : Colors.PRIMARY,
-              elevation: selectedTab === 2 ? 3 : 1,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.1,
-              shadowRadius: 2,
-            }}
-          >
-            УХТ
-          </Text>
-        </Pressable>
-      </View>
+      {/* Enhanced Tab Buttons */}
+      <View style={dynamicStyles.tabsContainer}>{tabButtons}</View>
 
       {/* Search Results Info */}
       {debouncedSearchQuery.trim() && (
-        <View style={{ paddingHorizontal: 20, marginBottom: 10 }}>
-          <Text style={{ color: Colors.GRAY, fontSize: 14 }}>
+        <View style={dynamicStyles.searchInfoContainer}>
+          <Text style={dynamicStyles.searchInfoText}>
             {isLoading
-              ? `Търсене в ${tabInfo.searchText}...`
+              ? `Търсене в ${currentTab.searchText}...`
               : `Намерени ${posts.length} публикации за "${debouncedSearchQuery}"`}
           </Text>
-          <Text style={{ color: Colors.GRAY, fontSize: 12, marginTop: 2 }}>
+          <Text style={dynamicStyles.searchInfoSubtext}>
             {selectedTab === 2
               ? 'Търсенето включва УХТ публикации от вашите групи и публични УХТ публикации'
               : 'Търсенето включва съдържание на публикации и коментари'}
@@ -252,16 +383,17 @@ export default function LatestPost({ search }: { search: string }) {
         </View>
       )}
 
-      {/* Tab specific info for UHT */}
+      {/* UHT Tab Info */}
       {selectedTab === 2 && !debouncedSearchQuery.trim() && (
-        <View style={{ paddingHorizontal: 20, marginBottom: 10 }}>
-          <Text style={{ color: Colors.GRAY, fontSize: 12 }}>
-            Показват се УХТ публикации от вашите групи и публични УХТ публикации
+        <View style={dynamicStyles.uhtInfoContainer}>
+          <Text style={dynamicStyles.uhtInfoText}>
+            📚 Показват се УХТ публикации от вашите групи и публични УХТ
+            публикации
           </Text>
         </View>
       )}
 
-      {/* Posts list with all optimizations */}
+      {/* Optimized Posts List */}
       <PostList
         posts={posts}
         loading={isLoading}
@@ -276,4 +408,6 @@ export default function LatestPost({ search }: { search: string }) {
       />
     </View>
   )
-}
+})
+
+export default LatestPost

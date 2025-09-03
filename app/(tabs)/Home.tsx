@@ -2,7 +2,6 @@ import { View, Text, FlatList } from 'react-native'
 import React, { useState, useCallback } from 'react'
 import Colors from '@/data/Colors'
 import Header from '@/components/Home/Header'
-import Category from '@/components/Home/Category'
 import LatestPost from '@/components/Home/LatestPost'
 import { useFocusEffect } from 'expo-router'
 
@@ -24,7 +23,7 @@ export default function Home() {
       data={[]} // Replace with actual data if needed
       renderItem={null}
       ListHeaderComponent={
-        <View style={{ paddingTop: 40 }}>
+        <View>
           <Header />
           <LatestPost search={search} />
         </View>
