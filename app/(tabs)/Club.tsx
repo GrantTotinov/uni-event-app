@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingTop: 50,
+    paddingTop: 10,
     paddingBottom: 16,
     borderBottomLeftRadius: 25,
     borderBottomRightRadius: 25,

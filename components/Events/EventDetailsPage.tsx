@@ -1,21 +1,42 @@
-import React, { useContext, useState, memo } from 'react'
+import React, { useContext, useState, memo, useMemo } from 'react'
 import {
   View,
-  Text,
   ScrollView,
-  TouchableOpacity,
   Alert,
-  ActivityIndicator,
   StyleSheet,
+  Dimensions,
+  StatusBar,
 } from 'react-native'
-import { Entypo, Ionicons } from '@expo/vector-icons'
+import {
+  Surface,
+  Text,
+  Button,
+  useTheme,
+  ActivityIndicator,
+  Card,
+  Chip,
+  IconButton,
+  Divider,
+  FAB,
+} from 'react-native-paper'
+import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { Image } from 'expo-image'
+import { LinearGradient } from 'expo-linear-gradient'
+import Animated, {
+  FadeIn,
+  SlideInDown,
+  useSharedValue,
+  useAnimatedStyle,
+  interpolate,
+  useAnimatedScrollHandler,
+} from 'react-native-reanimated'
 
-import Colors from '@/data/Colors'
-import Button from '@/components/Shared/Button'
 import { AuthContext, isSystemAdmin } from '@/context/AuthContext'
 import { useEventDetails, useEvents } from '@/hooks/useEvents'
+import { useAppTheme } from '@/context/ThemeContext'
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window')
 
 interface EventDetailsPageProps {
   eventId?: string
@@ -25,7 +46,12 @@ const EventDetailsPage = memo(function EventDetailsPage({
   eventId,
 }: EventDetailsPageProps) {
   const { user } = useContext(AuthContext)
+  const { isDarkMode } = useAppTheme()
+  const theme = useTheme()
   const router = useRouter()
+
+  // Animated scroll value for parallax effects
+  const scrollY = useSharedValue(0)
 
   // Use the event details hook
   const {
@@ -45,6 +71,42 @@ const EventDetailsPage = memo(function EventDetailsPage({
 
   // Extract event from query data
   const event = eventData?.pages?.[0]
+
+  // Memoized theme colors
+  const colors = useMemo(
+    () => ({
+      surface: theme.colors.surface,
+      onSurface: theme.colors.onSurface,
+      primary: theme.colors.primary,
+      onPrimary: theme.colors.onPrimary,
+      secondary: theme.colors.secondary,
+      onSecondary: theme.colors.onSecondary,
+      surfaceVariant: theme.colors.surfaceVariant,
+      onSurfaceVariant: theme.colors.onSurfaceVariant,
+      outline: theme.colors.outline,
+      primaryContainer: theme.colors.primaryContainer,
+      onPrimaryContainer: theme.colors.onPrimaryContainer,
+      secondaryContainer: theme.colors.secondaryContainer,
+      onSecondaryContainer: theme.colors.onSecondaryContainer,
+      errorContainer: theme.colors.errorContainer,
+      onErrorContainer: theme.colors.onErrorContainer,
+      error: theme.colors.error,
+      background: theme.colors.background,
+    }),
+    [theme.colors]
+  )
+
+  // Animated styles for header
+  const headerAnimatedStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(scrollY.value, [0, 200], [0, 1])
+    return {
+      opacity,
+    }
+  })
+
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y
+  })
 
   const toggleRegister = async () => {
     if (!event || !user?.email) {
@@ -67,7 +129,6 @@ const EventDetailsPage = memo(function EventDetailsPage({
         })
         Alert.alert('Готово', 'Отписахте се.')
       }
-      // Refresh the event details to get updated counts
       refetch()
     } catch (e) {
       console.error('Registration toggle error:', e)
@@ -90,7 +151,6 @@ const EventDetailsPage = memo(function EventDetailsPage({
         userEmail: user.email,
         isInterested: !!event.isInterested,
       })
-      // Refresh the event details to get updated counts
       refetch()
     } catch (e) {
       console.error('Interest toggle error:', e)
@@ -102,233 +162,565 @@ const EventDetailsPage = memo(function EventDetailsPage({
 
   if (isLoading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={Colors.PRIMARY} />
-      </View>
+      <Surface
+        style={[
+          styles.loadingContainer,
+          { backgroundColor: colors.background },
+        ]}
+      >
+        <ActivityIndicator
+          size="large"
+          animating={true}
+          theme={{ colors: { primary: colors.primary } }}
+        />
+        <Text
+          variant="bodyLarge"
+          style={{ color: colors.onSurface, marginTop: 16 }}
+        >
+          Зареждане...
+        </Text>
+      </Surface>
     )
   }
 
   if (error || !event) {
     return (
-      <View style={styles.center}>
-        <Text style={{ color: Colors.GRAY }}>
-          {error ? 'Грешка при зареждане.' : 'Събитието не е намерено.'}
-        </Text>
-        <Button text="Назад" onPress={() => router.back()} outline />
-      </View>
+      <Surface
+        style={[styles.errorContainer, { backgroundColor: colors.background }]}
+      >
+        <Card mode="outlined" style={styles.errorCard}>
+          <Card.Content style={styles.errorContent}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={48}
+              color={colors.onSurfaceVariant}
+            />
+            <Text
+              variant="headlineSmall"
+              style={{ color: colors.onSurface, textAlign: 'center' }}
+            >
+              {error ? 'Грешка при зареждане' : 'Събитието не е намерено'}
+            </Text>
+            <Button
+              mode="contained"
+              onPress={() => router.back()}
+              style={styles.errorButton}
+            >
+              Назад
+            </Button>
+          </Card.Content>
+        </Card>
+      </Surface>
     )
   }
 
+  const canManage = isSystemAdmin(user?.role) || user?.email === event.createdby
+
   return (
-    <ScrollView
-      contentContainerStyle={{ padding: 20, paddingBottom: 60 }}
-      style={{ backgroundColor: Colors.WHITE }}
-    >
-      <Image
-        source={{ uri: event.bannerurl }}
-        style={styles.banner}
-        contentFit="cover"
-        transition={200}
-        cachePolicy="memory-disk"
-        placeholder={require('@/assets/images/image.png')}
-        placeholderContentFit="cover"
+    <Surface style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar
+        backgroundColor="transparent"
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        translucent
       />
 
-      <Text style={styles.title}>{event.name}</Text>
-      <Text style={styles.createdBy}>Създадено от: {event.username}</Text>
-
-      <View style={styles.row}>
-        <Entypo name="location" size={22} color={Colors.GRAY} />
-        <Text style={styles.meta}>{event.location}</Text>
-      </View>
-      <View style={styles.row}>
-        <Ionicons name="calendar-number" size={22} color={Colors.GRAY} />
-        <Text style={styles.meta}>
-          {event.event_date} от {event.event_time}
-        </Text>
-      </View>
-
-      <View style={styles.row}>
-        <Ionicons name="people" size={22} color={Colors.PRIMARY} />
-        <Text style={styles.countPrimary}>
-          {event.registeredCount ?? 0}{' '}
-          {(event.registeredCount ?? 0) === 1 ? 'регистриран' : 'регистрирани'}
-        </Text>
-      </View>
-
-      <View style={styles.row}>
-        <Ionicons name="heart" size={22} color="#e74c3c" />
-        <Text style={styles.countInterested}>
-          {event.interestedCount ?? 0}{' '}
-          {(event.interestedCount ?? 0) === 1
-            ? 'заинтересован'
-            : 'заинтересовани'}
-        </Text>
-      </View>
-
-      {event.details ? (
-        <View style={{ marginTop: 15 }}>
-          <Text style={styles.sectionTitle}>Детайли</Text>
-          <Text style={styles.details}>{event.details}</Text>
-        </View>
-      ) : null}
-
-      {event.link ? (
-        <TouchableOpacity
-          style={{ marginTop: 10 }}
-          onPress={() => {
-            Alert.alert('Линк', event.link || '')
-          }}
+      {/* Animated Header */}
+      <Animated.View
+        style={[
+          styles.animatedHeader,
+          { backgroundColor: colors.surface },
+          headerAnimatedStyle,
+        ]}
+      >
+        <Text
+          variant="titleLarge"
+          numberOfLines={1}
+          style={{ color: colors.onSurface }}
         >
-          <Text style={styles.linkText}>Виж допълнителен линк</Text>
-        </TouchableOpacity>
-      ) : null}
+          {event.name}
+        </Text>
+      </Animated.View>
 
-      <View style={styles.actions}>
-        <Button
-          text={event.isRegistered ? 'Отпиши се' : 'Регистрирай се'}
-          onPress={toggleRegister}
-          loading={registering}
-          outline={!!event.isRegistered}
-          fullWidth
-        />
-        <TouchableOpacity
+      {/* Back Button */}
+      <View style={styles.backButtonContainer}>
+        <Surface style={styles.backButton} elevation={2}>
+          <IconButton
+            icon="arrow-left"
+            size={24}
+            onPress={() => router.back()}
+            iconColor={colors.onSurface}
+          />
+        </Surface>
+      </View>
+
+      <Animated.ScrollView
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Hero Image Section */}
+        <Animated.View
+          entering={FadeIn.duration(600)}
+          style={styles.heroContainer}
+        >
+          <Image
+            source={{ uri: event.bannerurl }}
+            style={styles.heroImage}
+            contentFit="cover"
+            transition={300}
+            cachePolicy="memory-disk"
+            placeholder={require('@/assets/images/image.png')}
+            placeholderContentFit="cover"
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.3)']}
+            style={styles.imageGradient}
+          />
+        </Animated.View>
+
+        {/* Content Section */}
+        <Animated.View
+          entering={SlideInDown.delay(300)}
+          style={styles.contentContainer}
+        >
+          {/* Event Title and Creator */}
+          <View style={styles.titleSection}>
+            <Text
+              variant="headlineMedium"
+              style={[styles.eventTitle, { color: colors.onSurface }]}
+            >
+              {event.name}
+            </Text>
+            <Text
+              variant="bodyMedium"
+              style={[styles.createdBy, { color: colors.onSurfaceVariant }]}
+            >
+              Създадено от {event.username}
+            </Text>
+          </View>
+
+          {/* Event Info Cards */}
+          <View style={styles.infoSection}>
+            {/* Date & Time Card */}
+            <Card
+              mode="outlined"
+              style={[styles.infoCard, { borderColor: colors.outline }]}
+            >
+              <Card.Content style={styles.infoCardContent}>
+                <Ionicons
+                  name="calendar-outline"
+                  size={24}
+                  color={colors.primary}
+                />
+                <View style={styles.infoTextContainer}>
+                  <Text
+                    variant="labelMedium"
+                    style={{ color: colors.onSurfaceVariant }}
+                  >
+                    Дата и час
+                  </Text>
+                  <Text
+                    variant="bodyLarge"
+                    style={{ color: colors.onSurface, fontWeight: '600' }}
+                  >
+                    {event.event_date} в {event.event_time}
+                  </Text>
+                </View>
+              </Card.Content>
+            </Card>
+
+            {/* Location Card */}
+            <Card
+              mode="outlined"
+              style={[styles.infoCard, { borderColor: colors.outline }]}
+            >
+              <Card.Content style={styles.infoCardContent}>
+                <Ionicons
+                  name="location-outline"
+                  size={24}
+                  color={colors.secondary}
+                />
+                <View style={styles.infoTextContainer}>
+                  <Text
+                    variant="labelMedium"
+                    style={{ color: colors.onSurfaceVariant }}
+                  >
+                    Локация
+                  </Text>
+                  <Text
+                    variant="bodyLarge"
+                    style={{ color: colors.onSurface, fontWeight: '600' }}
+                  >
+                    {event.location}
+                  </Text>
+                </View>
+              </Card.Content>
+            </Card>
+          </View>
+
+          {/* Statistics */}
+          <View style={styles.statsSection}>
+            <Surface
+              style={[
+                styles.statCard,
+                { backgroundColor: colors.primaryContainer },
+              ]}
+              elevation={1}
+            >
+              <Ionicons
+                name="people"
+                size={20}
+                color={colors.onPrimaryContainer}
+              />
+              <Text
+                variant="bodyMedium"
+                style={{ color: colors.onPrimaryContainer, fontWeight: '600' }}
+              >
+                {event.registeredCount ?? 0} регистрирани
+              </Text>
+            </Surface>
+
+            <Surface
+              style={[
+                styles.statCard,
+                { backgroundColor: colors.secondaryContainer },
+              ]}
+              elevation={1}
+            >
+              <Ionicons
+                name="heart"
+                size={20}
+                color={colors.onSecondaryContainer}
+              />
+              <Text
+                variant="bodyMedium"
+                style={{
+                  color: colors.onSecondaryContainer,
+                  fontWeight: '600',
+                }}
+              >
+                {event.interestedCount ?? 0} заинтересовани
+              </Text>
+            </Surface>
+          </View>
+
+          {/* Event Details */}
+          {event.details && (
+            <Card
+              mode="outlined"
+              style={[styles.detailsCard, { borderColor: colors.outline }]}
+            >
+              <Card.Content>
+                <Text
+                  variant="titleMedium"
+                  style={[styles.sectionTitle, { color: colors.onSurface }]}
+                >
+                  Детайли
+                </Text>
+                <Divider style={{ marginVertical: 12 }} />
+                <Text
+                  variant="bodyLarge"
+                  style={[styles.detailsText, { color: colors.onSurface }]}
+                >
+                  {event.details}
+                </Text>
+              </Card.Content>
+            </Card>
+          )}
+
+          {/* Additional Link */}
+          {event.link && (
+            <Card
+              mode="outlined"
+              style={[styles.linkCard, { borderColor: colors.outline }]}
+            >
+              <Card.Content>
+                <Button
+                  mode="text"
+                  icon="open-in-new"
+                  onPress={() => Alert.alert('Линк', event.link || '')}
+                  contentStyle={styles.linkButtonContent}
+                >
+                  Виж допълнителна информация
+                </Button>
+              </Card.Content>
+            </Card>
+          )}
+
+          {/* Admin Options */}
+          {canManage && (
+            <Card
+              mode="outlined"
+              style={[styles.adminCard, { borderColor: colors.outline }]}
+            >
+              <Card.Content>
+                <Text
+                  variant="titleMedium"
+                  style={[styles.sectionTitle, { color: colors.onSurface }]}
+                >
+                  Админ опции
+                </Text>
+                <Divider style={{ marginVertical: 12 }} />
+                <Button
+                  mode="outlined"
+                  icon="pencil"
+                  onPress={() =>
+                    router.push({
+                      pathname: '/add-event',
+                      params: {
+                        edit: '1',
+                        id: String(event.id),
+                        name: event.name,
+                        bannerurl: event.bannerurl,
+                        location: event.location,
+                        link: event.link ?? '',
+                        event_date: event.event_date,
+                        event_time: event.event_time,
+                        details: event.details ?? '',
+                      },
+                    })
+                  }
+                  style={styles.adminButton}
+                >
+                  Редактирай събитие
+                </Button>
+              </Card.Content>
+            </Card>
+          )}
+
+          {/* Bottom Spacing */}
+          <View style={styles.bottomSpacing} />
+        </Animated.View>
+      </Animated.ScrollView>
+
+      {/* Floating Action Buttons */}
+      <View style={styles.fabContainer}>
+        {/* Interest FAB */}
+        <FAB
+          icon={event.isInterested ? 'heart' : 'heart-outline'}
+          mode="surface"
+          size="medium"
           onPress={toggleInterest}
+          loading={interestedLoading}
           style={[
-            styles.interestBtn,
-            event.isInterested && {
-              backgroundColor: '#ffe6e6',
-              borderColor: '#e74c3c',
+            styles.interestFab,
+            {
+              backgroundColor: event.isInterested
+                ? colors.secondaryContainer
+                : colors.surface,
             },
           ]}
-          disabled={interestedLoading}
-        >
-          <Ionicons
-            name={event.isInterested ? 'heart' : 'heart-outline'}
-            size={20}
-            color={event.isInterested ? '#e74c3c' : Colors.PRIMARY}
-          />
-          <Text
-            style={[
-              styles.interestText,
-              { color: event.isInterested ? '#e74c3c' : Colors.PRIMARY },
-            ]}
-          >
-            {event.isInterested ? 'Имам интерес' : 'Интерес'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+          theme={{
+            colors: {
+              primaryContainer: event.isInterested
+                ? colors.secondaryContainer
+                : colors.surface,
+              onPrimaryContainer: event.isInterested
+                ? colors.onSecondaryContainer
+                : colors.onSurface,
+            },
+          }}
+        />
 
-      {(isSystemAdmin(user?.role) || user?.email === event.createdby) && (
-        <View style={{ marginTop: 20 }}>
-          <Text style={styles.sectionTitle}>Админ опции</Text>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <Button
-              text="Редактирай"
-              outline
-              onPress={() =>
-                router.push({
-                  pathname: '/add-event',
-                  params: {
-                    edit: '1',
-                    id: String(event.id),
-                    name: event.name,
-                    bannerurl: event.bannerurl,
-                    location: event.location,
-                    link: event.link ?? '',
-                    event_date: event.event_date,
-                    event_time: event.event_time,
-                    details: event.details ?? '',
-                  },
-                })
-              }
-            />
-          </View>
-        </View>
-      )}
-    </ScrollView>
+        {/* Register FAB */}
+        <FAB
+          icon={event.isRegistered ? 'account-minus' : 'account-plus'}
+          mode={event.isRegistered ? 'surface' : 'elevated'}
+          size="large"
+          onPress={toggleRegister}
+          loading={registering}
+          label={event.isRegistered ? 'Отпиши се' : 'Регистрирай се'}
+          style={[
+            styles.registerFab,
+            {
+              backgroundColor: event.isRegistered
+                ? colors.errorContainer
+                : colors.primary,
+            },
+          ]}
+          theme={{
+            colors: {
+              primaryContainer: event.isRegistered
+                ? colors.errorContainer
+                : colors.primary,
+              onPrimaryContainer: event.isRegistered
+                ? colors.onErrorContainer
+                : colors.onPrimary,
+            },
+          }}
+        />
+      </View>
+    </Surface>
   )
 })
 
 const styles = StyleSheet.create({
-  center: {
+  container: {
+    flex: 1,
+  },
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  banner: {
-    width: '100%',
-    height: 200,
-    borderRadius: 15,
-    marginBottom: 15,
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 5,
-    color: Colors.BLACK,
+  errorCard: {
+    maxWidth: 320,
+    width: '100%',
+  },
+  errorContent: {
+    alignItems: 'center',
+    padding: 20,
+    gap: 16,
+  },
+  errorButton: {
+    marginTop: 8,
+  },
+  animatedHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+    paddingTop: StatusBar.currentHeight || 24,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  backButtonContainer: {
+    position: 'absolute',
+    top: (StatusBar.currentHeight || 24) + 16,
+    left: 16,
+    zIndex: 1001,
+  },
+  backButton: {
+    borderRadius: 28,
+    width: 56,
+    height: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrollContent: {
+    paddingBottom: 100,
+  },
+  heroContainer: {
+    position: 'relative',
+    height: screenHeight * 0.5,
+    marginBottom: 20,
+  },
+  heroImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f0f0f0',
+  },
+  imageGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 100,
+  },
+  contentContainer: {
+    paddingHorizontal: 20,
+    gap: 20,
+  },
+  titleSection: {
+    marginBottom: 8,
+  },
+  eventTitle: {
+    fontWeight: '700',
+    marginBottom: 8,
+    lineHeight: 32,
   },
   createdBy: {
-    fontSize: 16,
-    color: Colors.GRAY,
-    marginBottom: 15,
+    fontStyle: 'italic',
   },
-  row: {
+  infoSection: {
+    gap: 12,
+  },
+  infoCard: {
+    borderRadius: 16,
+  },
+  infoCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-    gap: 8,
+    padding: 16,
+    gap: 16,
   },
-  meta: {
-    fontSize: 16,
-    color: Colors.GRAY,
+  infoTextContainer: {
     flex: 1,
+    gap: 4,
   },
-  countPrimary: {
-    fontSize: 16,
-    color: Colors.PRIMARY,
-    fontWeight: '600',
+  statsSection: {
+    flexDirection: 'row',
+    gap: 12,
   },
-  countInterested: {
-    fontSize: 16,
-    color: '#e74c3c',
-    fontWeight: '600',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    color: Colors.BLACK,
-  },
-  details: {
-    fontSize: 16,
-    color: Colors.BLACK,
-    lineHeight: 24,
-  },
-  linkText: {
-    fontSize: 16,
-    color: Colors.PRIMARY,
-    textDecorationLine: 'underline',
-  },
-  actions: {
-    marginTop: 20,
-    gap: 10,
-  },
-  interestBtn: {
+  statCard: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.PRIMARY,
-    backgroundColor: Colors.WHITE,
+    padding: 16,
+    borderRadius: 16,
     gap: 8,
   },
-  interestText: {
-    fontSize: 16,
+  detailsCard: {
+    borderRadius: 16,
+  },
+  sectionTitle: {
     fontWeight: '600',
+  },
+  detailsText: {
+    lineHeight: 24,
+  },
+  linkCard: {
+    borderRadius: 16,
+  },
+  linkButtonContent: {
+    paddingVertical: 4,
+  },
+  adminCard: {
+    borderRadius: 16,
+  },
+  adminButton: {
+    marginTop: 8,
+  },
+  bottomSpacing: {
+    height: 20,
+  },
+  fabContainer: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    gap: 12,
+    alignItems: 'flex-end',
+  },
+  interestFab: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  registerFab: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
 })
 

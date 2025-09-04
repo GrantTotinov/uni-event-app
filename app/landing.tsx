@@ -143,7 +143,7 @@ const LandingScreen = React.memo(function LandingScreen() {
                     { color: theme.colors.onSurfaceVariant },
                   ]}
                 >
-                  События
+                  Събития{' '}
                 </Text>
               </View>
 

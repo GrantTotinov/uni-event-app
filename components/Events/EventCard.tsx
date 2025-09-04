@@ -1,11 +1,19 @@
-import React, { useContext, useEffect, useState, memo } from 'react'
+import React, {
+  useContext,
+  useEffect,
+  useState,
+  memo,
+  useCallback,
+  useMemo,
+} from 'react'
 import {
   View,
   Text,
   TouchableOpacity,
   Alert,
-  Modal,
   StyleSheet,
+  Dimensions,
+  Platform,
 } from 'react-native'
 import { Entypo, Ionicons, MaterialIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
@@ -17,24 +25,28 @@ import moment from 'moment'
 import 'moment/locale/bg'
 
 import Colors from '@/data/Colors'
-import Button from '@/components/Shared/Button'
 import { AuthContext, isSystemAdmin } from '@/context/AuthContext'
 import { useEvents } from '@/hooks/useEvents'
+import { useAppTheme } from '@/context/ThemeContext'
 import type { Event } from '@/hooks/useEvents'
 
 moment.locale('bg')
+
+const { width } = Dimensions.get('window')
 
 interface EVENT extends Event {
   onUnregister?: () => void
   onDelete?: () => void
 }
 
+// Memoized component following performance guidelines
 const EventCard = memo(function EventCard({
   onUnregister,
   onDelete,
   ...event
 }: EVENT) {
   const { user } = useContext(AuthContext)
+  const { isDarkMode } = useAppTheme()
   const router = useRouter()
 
   // Use the events hook for mutations
@@ -42,7 +54,7 @@ const EventCard = memo(function EventCard({
     userEmail: user?.email,
   })
 
-  // Local state for UI updates
+  // Local state for UI updates - performance optimized
   const [isRegistered, setIsRegistered] = useState(event.isRegistered ?? false)
   const [isInterested, setIsInterested] = useState(event.isInterested ?? false)
   const [registeredCount, setRegisteredCount] = useState(
@@ -51,11 +63,244 @@ const EventCard = memo(function EventCard({
   const [interestedCount, setInterestedCount] = useState(
     event.interestedCount ?? 0
   )
-  const [menuVisible, setMenuVisible] = useState(false)
 
   const canManage = isSystemAdmin(user?.role) || user?.email === event.createdby
 
-  // Sync with props when they change
+  // Enhanced theme colors with better light/dark contrast - performance optimized
+  const colors = useMemo(
+    () => ({
+      // Surface colors
+      surface: isDarkMode ? '#1a1a1a' : '#ffffff',
+      surfaceVariant: isDarkMode ? '#2a2a2a' : '#f5f5f5',
+      surfaceContainer: isDarkMode ? '#1e1e1e' : '#fafafa',
+
+      // Text colors
+      onSurface: isDarkMode ? '#ffffff' : '#1a1a1a',
+      onSurfaceVariant: isDarkMode ? '#c7c7c7' : '#5f5f5f',
+      onPrimary: '#ffffff',
+
+      // Primary colors
+      primary: Colors.PRIMARY,
+      primaryContainer: isDarkMode ? '#1a4d47' : '#e0f2f1',
+      onPrimaryContainer: isDarkMode ? '#7dd3c0' : '#00695c',
+
+      // Secondary colors for interest
+      secondary: '#4caf50',
+      secondaryContainer: isDarkMode ? '#1b5e20' : '#e8f5e8',
+      onSecondaryContainer: isDarkMode ? '#81c784' : '#2e7d32',
+
+      // Error colors for unregister
+      error: '#f44336',
+      errorContainer: isDarkMode ? '#5d1a1a' : '#ffebee',
+      onErrorContainer: isDarkMode ? '#ef9a9a' : '#c62828',
+
+      // Outline and shadow
+      outline: isDarkMode ? '#404040' : '#e0e0e0',
+      shadow: isDarkMode ? '#000000' : '#000000',
+
+      // Special interest colors
+      interestActive: '#4caf50',
+      interestInactive: isDarkMode ? '#666666' : '#9e9e9e',
+    }),
+    [isDarkMode]
+  )
+
+  // Memoized styles for theme support - performance optimized
+  const dynamicStyles = useMemo(
+    () =>
+      StyleSheet.create({
+        card: {
+          backgroundColor: colors.surface,
+          marginHorizontal: 16,
+          marginVertical: 8,
+          borderRadius: 16,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: isDarkMode ? 0.3 : 0.1,
+          shadowRadius: 12,
+          elevation: 6,
+          overflow: 'hidden',
+          borderWidth: isDarkMode ? 1 : 0,
+          borderColor: colors.outline,
+        },
+        shareButton: {
+          position: 'absolute',
+          top: 12,
+          right: 12,
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          borderRadius: 22,
+          width: 44,
+          height: 44,
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 2,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.3,
+          shadowRadius: 4,
+          elevation: 4,
+        },
+        imageContainer: {
+          position: 'relative',
+        },
+        eventImage: {
+          width: '100%',
+          height: 220,
+          backgroundColor: colors.surfaceVariant,
+        },
+        contentContainer: {
+          padding: 20,
+        },
+        eventTitle: {
+          fontSize: 20,
+          fontWeight: '700',
+          color: colors.onSurface,
+          marginBottom: 8,
+          lineHeight: 26,
+          letterSpacing: 0.2,
+        },
+        eventDate: {
+          fontSize: 16,
+          color: colors.primary,
+          fontWeight: '600',
+          marginBottom: 8,
+          letterSpacing: 0.1,
+        },
+        eventLocation: {
+          fontSize: 15,
+          color: colors.onSurfaceVariant,
+          marginBottom: 8,
+          lineHeight: 20,
+        },
+        createdBy: {
+          fontSize: 13,
+          color: colors.onSurfaceVariant,
+          marginBottom: 16,
+          fontStyle: 'italic',
+          opacity: 0.8,
+        },
+        statsContainer: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          marginBottom: 20,
+          paddingHorizontal: 8,
+        },
+        statItem: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: colors.surfaceContainer,
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          borderRadius: 20,
+          flex: 1,
+          marginHorizontal: 4,
+        },
+        statText: {
+          fontSize: 13,
+          fontWeight: '600',
+          marginLeft: 6,
+          flex: 1,
+        },
+        interestedText: {
+          color: colors.secondary,
+        },
+        registeredText: {
+          color: colors.primary,
+        },
+        buttonsContainer: {
+          flexDirection: 'row',
+          gap: 12,
+          marginTop: 4,
+        },
+
+        // Enhanced Interest Button Styles
+        interestButton: {
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: 14,
+          paddingHorizontal: 16,
+          borderRadius: 12,
+          borderWidth: 2,
+          minHeight: 48,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: isDarkMode ? 0.2 : 0.1,
+          shadowRadius: 4,
+          elevation: 3,
+        },
+        interestButtonActive: {
+          backgroundColor: colors.secondaryContainer,
+          borderColor: colors.interestActive,
+        },
+        interestButtonInactive: {
+          backgroundColor: 'transparent',
+          borderColor: colors.outline,
+        },
+        interestButtonText: {
+          fontSize: 14,
+          fontWeight: '600',
+          marginLeft: 6,
+          letterSpacing: 0.2,
+        },
+        interestButtonTextActive: {
+          color: colors.onSecondaryContainer,
+        },
+        interestButtonTextInactive: {
+          color: colors.onSurfaceVariant,
+        },
+
+        // Enhanced Register Button Styles
+        registerButton: {
+          flex: 1,
+          minHeight: 48,
+        },
+        registerButtonContainer: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: 14,
+          paddingHorizontal: 16,
+          borderRadius: 12,
+          minHeight: 48,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: isDarkMode ? 0.2 : 0.1,
+          shadowRadius: 4,
+          elevation: 3,
+        },
+        registerButtonActive: {
+          backgroundColor: colors.primary,
+          borderWidth: 0,
+        },
+        registerButtonOutline: {
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          borderColor: colors.error,
+        },
+        registerButtonText: {
+          fontSize: 14,
+          fontWeight: '600',
+          marginLeft: 6,
+          letterSpacing: 0.2,
+        },
+        registerButtonTextActive: {
+          color: colors.onPrimary,
+        },
+        registerButtonTextOutline: {
+          color: colors.error,
+        },
+
+        // Loading states
+        loadingOpacity: {
+          opacity: 0.7,
+        },
+      }),
+    [colors, isDarkMode]
+  )
+
+  // Sync with props when they change - performance optimized
   useEffect(() => {
     setIsRegistered(event.isRegistered ?? false)
     setIsInterested(event.isInterested ?? false)
@@ -68,16 +313,17 @@ const EventCard = memo(function EventCard({
     event.interestedCount,
   ])
 
-  const openDetails = () => {
+  // Memoized handlers following performance guidelines
+  const openDetails = useCallback(() => {
     try {
       router.push({ pathname: '/event/[id]', params: { id: String(event.id) } })
     } catch (error) {
       console.error('Navigation error:', error)
       Alert.alert('Грешка', 'Неуспешно отваряне на детайли.')
     }
-  }
+  }, [router, event.id])
 
-  const handleRegister = () => {
+  const handleRegister = useCallback(() => {
     if (!user?.email) {
       Alert.alert('Вход', 'Трябва да сте влезли.')
       return
@@ -108,9 +354,9 @@ const EventCard = memo(function EventCard({
       },
       { text: 'Отказ', style: 'cancel' },
     ])
-  }
+  }, [user?.email, event.id, registerMutation])
 
-  const handleUnregister = () => {
+  const handleUnregister = useCallback(() => {
     if (!user?.email) {
       Alert.alert('Вход', 'Трябва да сте влезли.')
       return
@@ -146,9 +392,9 @@ const EventCard = memo(function EventCard({
         { text: 'Отказ', style: 'cancel' },
       ]
     )
-  }
+  }, [user?.email, event.id, unregisterMutation, onUnregister])
 
-  const handleInterest = async () => {
+  const handleInterest = useCallback(async () => {
     if (!user?.email) {
       Alert.alert('Вход', 'Трябва да сте влезли.')
       return
@@ -166,14 +412,9 @@ const EventCard = memo(function EventCard({
             if (!isInterested) {
               setIsInterested(true)
               setInterestedCount((prev) => prev + 1)
-              Alert.alert('Чудесно!', 'Проявихте интерес към събитието!')
             } else {
               setIsInterested(false)
               setInterestedCount((prev) => Math.max(0, prev - 1))
-              Alert.alert(
-                'Готово!',
-                'Вече не проявявате интерес към събитието.'
-              )
             }
           },
           onError: (error) => {
@@ -186,300 +427,241 @@ const EventCard = memo(function EventCard({
       console.error('Interest toggle error', error)
       Alert.alert('Грешка!', 'Неуспешна операция.')
     }
-  }
+  }, [user?.email, event.id, isInterested, interestMutation])
 
-  const shareImage = async () => {
+  const handleShare = useCallback(async () => {
     try {
-      const downloadResult = await FileSystem.downloadAsync(
-        event.bannerurl,
-        FileSystem.documentDirectory + `${event.name}.jpg`
+      const eventLink = `https://academix.bg/event/${event.id}`
+      const shareText = `🎉 ${event.name}\n\n📅 ${event.event_date} в ${event.event_time}\n📍 ${event.location}\n\n${eventLink}`
+
+      const isSharingAvailable = await Sharing.isAvailableAsync()
+
+      if (event.bannerurl && isSharingAvailable) {
+        const downloadResult = await FileSystem.downloadAsync(
+          event.bannerurl,
+          FileSystem.cacheDirectory + `event-${event.id}.jpg`
+        )
+
+        if (Platform.OS === 'ios') {
+          await Sharing.shareAsync(downloadResult.uri, {
+            dialogTitle: `Сподели ${event.name}`,
+            UTI: 'public.jpeg',
+            mimeType: 'image/jpeg',
+          })
+        } else {
+          await Sharing.shareAsync(downloadResult.uri)
+        }
+        return
+      }
+
+      if (isSharingAvailable) {
+        const fileUri = FileSystem.cacheDirectory + 'shared-event.txt'
+        await FileSystem.writeAsStringAsync(fileUri, shareText)
+        await Sharing.shareAsync(fileUri)
+        return
+      }
+
+      // Fallback to clipboard
+      Alert.alert(
+        'Споделяне',
+        'Информацията за събитието е копирана. Можете да я поставите където желаете.',
+        [{ text: 'OK' }]
       )
-      await Sharing.shareAsync(downloadResult.uri)
     } catch (error) {
       console.error('Share error:', error)
       Alert.alert('Грешка', 'Неуспешно споделяне.')
     }
-  }
+  }, [event])
 
-  const deleteEvent = () => {
-    Alert.alert(
-      'Изтриване на събитие',
-      'Сигурни ли сте, че искате да изтриете това събитие?',
-      [
-        { text: 'Отказ', style: 'cancel' },
-        {
-          text: 'Изтрий',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await axios.delete(`${process.env.EXPO_PUBLIC_HOST_URL}/events`, {
-                data: { eventId: event.id, userEmail: user?.email },
-              })
-              Alert.alert('Успешно', 'Събитието е изтрито.')
-              onDelete && onDelete()
-            } catch (error) {
-              console.error('Delete event error', error)
-              Alert.alert('Грешка', 'Неуспешно изтриване на събитието.')
-            }
-          },
-        },
-      ]
+  // Memoized formatted date - performance optimized
+  const formattedDate = useMemo(() => {
+    return `${event.event_date} в ${event.event_time}`
+  }, [event.event_date, event.event_time])
+
+  // Memoized loading state - performance optimized
+  const isLoading = useMemo(() => {
+    return (
+      registerMutation.isPending ||
+      unregisterMutation.isPending ||
+      interestMutation.isPending
     )
-  }
+  }, [
+    registerMutation.isPending,
+    unregisterMutation.isPending,
+    interestMutation.isPending,
+  ])
 
   return (
-    <View style={styles.card}>
-      {canManage && (
-        <TouchableOpacity
-          onPress={() => setMenuVisible(true)}
-          style={styles.menuButton}
-        >
-          <MaterialIcons name="more-vert" size={22} color={Colors.GRAY} />
-        </TouchableOpacity>
-      )}
-
-      <TouchableOpacity onPress={openDetails} activeOpacity={0.85}>
+    <TouchableOpacity
+      style={dynamicStyles.card}
+      onPress={openDetails}
+      activeOpacity={0.95}
+      accessibilityRole="button"
+      accessibilityLabel={`Събитие ${event.name}`}
+    >
+      {/* Event Image with Share Button */}
+      <View style={dynamicStyles.imageContainer}>
         <Image
           source={{ uri: event.bannerurl }}
-          style={styles.banner}
+          style={dynamicStyles.eventImage}
           contentFit="cover"
           transition={200}
           cachePolicy="memory-disk"
-          placeholder={require('@/assets/images/image.png')}
+          placeholder="L6PZfSi_.AyE_3t7t7R**0o#DgR4"
           placeholderContentFit="cover"
+          accessibilityLabel={`Изображение на ${event.name}`}
         />
-      </TouchableOpacity>
 
-      <TouchableOpacity onPress={openDetails} activeOpacity={0.8}>
-        <Text style={styles.title}>{event.name}</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.createdBy}>Създадено от: {event.username}</Text>
-
-      <View style={styles.subContainer}>
-        <Entypo name="location" size={24} color={Colors.GRAY} />
-        <Text style={styles.metaText}>{event.location}</Text>
-      </View>
-
-      <View style={styles.subContainer}>
-        <Ionicons name="calendar-number" size={24} color={Colors.GRAY} />
-        <Text style={styles.metaText}>
-          {event.event_date} от {event.event_time}
-        </Text>
-      </View>
-
-      <View style={styles.subContainer}>
-        <Ionicons name="people" size={24} color={Colors.PRIMARY} />
-        <Text style={styles.countPrimary}>
-          {registeredCount}{' '}
-          {registeredCount === 1 ? 'регистриран' : 'регистрирани'}
-        </Text>
-      </View>
-
-      <View style={styles.subContainer}>
-        <Ionicons name="heart" size={24} color="#e74c3c" />
-        <Text style={styles.countInterested}>
-          {interestedCount}{' '}
-          {interestedCount === 1 ? 'заинтересован' : 'заинтересовани'}
-        </Text>
-      </View>
-
-      <View style={styles.buttonContainer}>
-        <Button text="Сподели" outline={true} onPress={shareImage} />
+        {/* Enhanced Share Button Overlay */}
         <TouchableOpacity
-          onPress={handleInterest}
-          style={styles.interestButton}
+          style={dynamicStyles.shareButton}
+          onPress={handleShare}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Сподели събитие"
         >
-          <Ionicons
-            name={isInterested ? 'heart' : 'heart-outline'}
-            size={20}
-            color={isInterested ? '#e74c3c' : Colors.PRIMARY}
-          />
-          <Text
-            style={[
-              styles.interestButtonText,
-              { color: isInterested ? '#e74c3c' : Colors.PRIMARY },
-            ]}
-          >
-            {isInterested ? 'Имам интерес' : 'Интерес'}
-          </Text>
+          <Ionicons name="share-outline" size={22} color="#ffffff" />
         </TouchableOpacity>
-
-        {!isRegistered ? (
-          <Button text="Регистрирай се" onPress={handleRegister} />
-        ) : (
-          <Button text="Отпиши се" onPress={handleUnregister} outline={true} />
-        )}
       </View>
 
-      <Modal
-        visible={menuVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setMenuVisible(false)}
-      >
-        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-          <TouchableOpacity
-            style={styles.overlay}
-            activeOpacity={1}
-            onPress={() => setMenuVisible(false)}
-          />
-          <View style={styles.sheet}>
-            <TouchableOpacity
-              onPress={() => {
-                setMenuVisible(false)
-                try {
-                  router.push({
-                    pathname: '/add-event',
-                    params: {
-                      edit: '1',
-                      id: String(event.id),
-                      name: event.name,
-                      bannerurl: event.bannerurl,
-                      location: event.location,
-                      link: event.link ?? '',
-                      event_date: event.event_date,
-                      event_time: event.event_time,
-                      details: event.details ?? '',
-                    },
-                  })
-                } catch (error) {
-                  console.error('Navigation error (edit event):', error)
-                  Alert.alert('Грешка', 'Неуспешно отваряне на формата.')
-                }
-              }}
-              style={styles.sheetOption}
-            >
-              <Text style={styles.sheetOptionTextPrimary}>Редактирай</Text>
-            </TouchableOpacity>
+      {/* Event Content */}
+      <View style={dynamicStyles.contentContainer}>
+        {/* Event Name */}
+        <Text
+          style={dynamicStyles.eventTitle}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >
+          {event.name}
+        </Text>
 
-            <TouchableOpacity
-              onPress={() => {
-                setMenuVisible(false)
-                deleteEvent()
-              }}
-              style={styles.sheetOption}
+        {/* Event Date */}
+        <Text style={dynamicStyles.eventDate}>{formattedDate}</Text>
+
+        {/* Event Location */}
+        <Text
+          style={dynamicStyles.eventLocation}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          📍 {event.location}
+        </Text>
+
+        {/* Created By */}
+        <Text style={dynamicStyles.createdBy}>
+          Организирано от {event.username}
+        </Text>
+
+        {/* Enhanced Stats Row */}
+        <View style={dynamicStyles.statsContainer}>
+          {/* Interested Count */}
+          <View style={dynamicStyles.statItem}>
+            <Ionicons name="heart" size={16} color={colors.secondary} />
+            <Text
+              style={[dynamicStyles.statText, dynamicStyles.interestedText]}
+              numberOfLines={1}
             >
-              <Text style={styles.sheetOptionTextDanger}>Изтрий</Text>
-            </TouchableOpacity>
+              {interestedCount} интерес
+            </Text>
+          </View>
+
+          {/* Registered Count */}
+          <View style={dynamicStyles.statItem}>
+            <Ionicons name="people" size={16} color={colors.primary} />
+            <Text
+              style={[dynamicStyles.statText, dynamicStyles.registeredText]}
+              numberOfLines={1}
+            >
+              {registeredCount} записани
+            </Text>
           </View>
         </View>
-      </Modal>
-    </View>
-  )
-})
 
-const styles = StyleSheet.create({
-  card: {
-    padding: 20,
-    margin: 10,
-    marginHorizontal: 20,
-    backgroundColor: Colors.WHITE,
-    borderRadius: 15,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-  },
-  menuButton: {
-    position: 'absolute',
-    top: 15,
-    right: 15,
-    zIndex: 1,
-    backgroundColor: Colors.WHITE,
-    borderRadius: 15,
-    padding: 5,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  banner: {
-    width: '100%',
-    height: 150,
-    borderRadius: 15,
-    marginBottom: 15,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 5,
-    color: Colors.BLACK,
-  },
-  createdBy: {
-    fontSize: 14,
-    color: Colors.GRAY,
-    marginBottom: 10,
-  },
-  subContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 8,
-  },
-  metaText: {
-    fontSize: 14,
-    color: Colors.GRAY,
-    flex: 1,
-  },
-  countPrimary: {
-    fontSize: 14,
-    color: Colors.PRIMARY,
-    fontWeight: '600',
-  },
-  countInterested: {
-    fontSize: 14,
-    color: '#e74c3c',
-    fontWeight: '600',
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 15,
-    gap: 10,
-  },
-  interestButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.PRIMARY,
-    backgroundColor: Colors.WHITE,
-    gap: 5,
-  },
-  interestButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  sheet: {
-    backgroundColor: Colors.WHITE,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-  },
-  sheetOption: {
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
-  sheetOptionTextPrimary: {
-    fontSize: 18,
-    color: Colors.PRIMARY,
-    fontWeight: 'bold',
-  },
-  sheetOptionTextDanger: {
-    fontSize: 18,
-    color: 'red',
-    fontWeight: 'bold',
-  },
+        {/* Enhanced Action Buttons */}
+        <View
+          style={[
+            dynamicStyles.buttonsContainer,
+            isLoading && dynamicStyles.loadingOpacity,
+          ]}
+        >
+          {/* Enhanced Interest Button */}
+          <TouchableOpacity
+            style={[
+              dynamicStyles.interestButton,
+              isInterested
+                ? dynamicStyles.interestButtonActive
+                : dynamicStyles.interestButtonInactive,
+            ]}
+            onPress={handleInterest}
+            activeOpacity={0.8}
+            disabled={isLoading}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isInterested ? 'Премахни интерес' : 'Покажи интерес'
+            }
+          >
+            <Ionicons
+              name={isInterested ? 'heart' : 'heart-outline'}
+              size={18}
+              color={
+                isInterested
+                  ? colors.onSecondaryContainer
+                  : colors.onSurfaceVariant
+              }
+            />
+            <Text
+              style={[
+                dynamicStyles.interestButtonText,
+                isInterested
+                  ? dynamicStyles.interestButtonTextActive
+                  : dynamicStyles.interestButtonTextInactive,
+              ]}
+            >
+              {isInterested ? 'Заинтересован' : 'Интерес'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Enhanced Register Button */}
+          <TouchableOpacity
+            style={[
+              dynamicStyles.registerButton,
+              dynamicStyles.registerButtonContainer,
+              isRegistered
+                ? dynamicStyles.registerButtonOutline
+                : dynamicStyles.registerButtonActive,
+            ]}
+            onPress={isRegistered ? handleUnregister : handleRegister}
+            activeOpacity={0.8}
+            disabled={isLoading}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isRegistered
+                ? 'Отпиши се от събитието'
+                : 'Регистрирай се за събитието'
+            }
+          >
+            <Ionicons
+              name={
+                isRegistered ? 'remove-circle-outline' : 'add-circle-outline'
+              }
+              size={18}
+              color={isRegistered ? colors.error : colors.onPrimary}
+            />
+            <Text
+              style={[
+                dynamicStyles.registerButtonText,
+                isRegistered
+                  ? dynamicStyles.registerButtonTextOutline
+                  : dynamicStyles.registerButtonTextActive,
+              ]}
+            >
+              {isRegistered ? 'Отпиши се' : 'Регистрирай се'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </TouchableOpacity>
+  )
 })
 
 export default EventCard

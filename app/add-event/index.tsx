@@ -1,30 +1,61 @@
+import React, {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useCallback,
+  useMemo,
+} from 'react'
 import {
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
+  Alert,
+  StatusBar,
   StyleSheet,
+  View,
+  Platform,
+  Dimensions,
+} from 'react-native'
+import {
+  Surface,
   Text,
   TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native'
+  Button,
+  Card,
+  Avatar,
+  IconButton,
+  Portal,
+  Modal,
+  useTheme,
+  ActivityIndicator,
+  FAB,
+  Divider,
+} from 'react-native-paper'
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  interpolate,
+  FadeIn,
+  FadeOut,
+  SlideInDown,
+  SlideOutDown,
+  ZoomIn,
+} from 'react-native-reanimated'
 import * as ImagePicker from 'expo-image-picker'
-import React, { useContext, useEffect, useLayoutEffect, useState } from 'react'
 import RNDateTimePicker from '@react-native-community/datetimepicker'
 import moment from 'moment'
 import 'moment/locale/bg'
 import axios from 'axios'
-//import { upload } from "cloudinary-react-native"
+import { Ionicons } from '@expo/vector-icons'
+import { Image } from 'expo-image'
+
 import { uploadToCloudinary } from '@/utils/CloudinaryUpload'
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
-
-import Colors from '@/data/Colors'
-import TextInputField from '@/components/Shared/TextInputField'
-import Button from '@/components/Shared/Button'
 import { AuthContext } from '@/context/AuthContext'
-import { cld, options } from '@/configs/CloudinaryConfig'
+import { useAppTheme } from '@/context/ThemeContext'
+
+const { width: screenWidth } = Dimensions.get('window')
 
 type RouteParams = {
   edit?: string
@@ -38,10 +69,16 @@ type RouteParams = {
   details?: string
 }
 
-export default function AddEvent() {
+// Memoized animated components following performance guidelines
+const AnimatedSurface = Animated.createAnimatedComponent(Surface)
+const AnimatedCard = Animated.createAnimatedComponent(Card)
+
+const AddEvent = React.memo(function AddEvent() {
   moment.locale('bg')
-  const navigation = useNavigation()
   const { user } = useContext(AuthContext)
+  const { isDarkMode } = useAppTheme()
+  const theme = useTheme()
+  const navigation = useNavigation()
   const router = useRouter()
 
   const params = useLocalSearchParams<RouteParams>()
@@ -59,270 +96,741 @@ export default function AddEvent() {
 
   const isEdit = edit === '1'
 
-  const [image, setImage] = useState<string>()
-  const [eventName, setEventName] = useState<string>()
-  const [location, setLocation] = useState<string>()
-  const [link, setLink] = useState<string>()
+  // Form state - memoized initial values following performance guidelines
+  const [eventName, setEventName] = useState<string>('')
+  const [selectedImage, setSelectedImage] = useState<string>('')
+  const [location, setLocation] = useState<string>('')
+  const [link, setLink] = useState<string>('')
   const [details, setDetails] = useState<string>('')
-  const [time, setTime] = useState('Избери час')
-  const [date, setDate] = useState('Избери дата')
   const [selectedTime, setSelectedTime] = useState<Date>(new Date())
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-  const [openTimePicker, setOpenTimePicker] = useState(false)
-  const [openDatePicker, setOpenDatePicker] = useState(false)
-  const [dayInBulgarian, setDayInBulgarian] = useState<string>('')
+
+  // UI state
+  const [loading, setLoading] = useState(false)
+  const [showTimePicker, setShowTimePicker] = useState(false)
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [mediaModalVisible, setMediaModalVisible] = useState(false)
+
+  // Animation values - performance optimized
+  const imageScale = useSharedValue(0)
+  const submitProgress = useSharedValue(0)
+  const fabRotation = useSharedValue(0)
+
+  // Memoized theme colors for performance
+  const colors = useMemo(
+    () => ({
+      surface: theme.colors.surface,
+      onSurface: theme.colors.onSurface,
+      primary: theme.colors.primary,
+      onPrimary: theme.colors.onPrimary,
+      surfaceVariant: theme.colors.surfaceVariant,
+      onSurfaceVariant: theme.colors.onSurfaceVariant,
+      outline: theme.colors.outline,
+      background: theme.colors.background,
+      primaryContainer: theme.colors.primaryContainer,
+      onPrimaryContainer: theme.colors.onPrimaryContainer,
+      error: theme.colors.error,
+      onError: theme.colors.onError,
+    }),
+    [theme.colors]
+  )
 
   // Header title
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerTitle: isEdit ? 'Редактирай събитие' : 'Създай Ново Събитие',
+      headerTitle: isEdit ? 'Редактирай събитие' : 'Създай ново събитие',
+      headerTitleStyle: {
+        fontWeight: '600',
+      },
     })
   }, [navigation, isEdit])
 
-  // Initialize form on edit (avoid using object "params" as dependency to prevent infinite loops)
+  // Initialize form on edit - performance optimized
   useEffect(() => {
     if (!isEdit) return
 
     if (paramName && paramName !== eventName) setEventName(paramName)
-    if (paramBannerUrl && paramBannerUrl !== image) setImage(paramBannerUrl)
+    if (paramBannerUrl && paramBannerUrl !== selectedImage) {
+      setSelectedImage(paramBannerUrl)
+      imageScale.value = withSpring(1, { damping: 12, stiffness: 100 })
+    }
     if (paramLocation && paramLocation !== location) setLocation(paramLocation)
     if (paramLink !== undefined && paramLink !== link) setLink(paramLink)
     if (paramDetails !== undefined && paramDetails !== details)
       setDetails(paramDetails)
 
-    if (paramEventTime && paramEventTime !== time) {
-      setTime(paramEventTime)
-      const t = new Date()
+    if (paramEventTime && paramEventTime !== selectedTime.toTimeString()) {
       const [h, m] = paramEventTime.split(':')
-      t.setHours(parseInt(h || '0'), parseInt(m || '0'))
-      setSelectedTime(t)
+      const newTime = new Date()
+      newTime.setHours(parseInt(h || '0'), parseInt(m || '0'))
+      setSelectedTime(newTime)
     }
 
-    if (paramEventDate && paramEventDate !== date) {
+    if (paramEventDate && paramEventDate !== selectedDate.toDateString()) {
       const parts = paramEventDate.split(',')
       if (parts.length > 1) {
         const dateString = parts[1]
-        setDate(paramEventDate)
-        setDayInBulgarian(parts[0])
         const parsed = new Date(dateString)
         setSelectedDate(parsed)
       } else {
-        setDate(paramEventDate)
         const parsed = new Date(paramEventDate)
         setSelectedDate(parsed)
-        setDayInBulgarian(moment(parsed).format('dddd'))
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    isEdit,
-    paramName,
-    paramBannerUrl,
-    paramLocation,
-    paramLink,
-    paramDetails,
-    paramEventTime,
-    paramEventDate,
-  ])
+  }, [isEdit, paramName, paramBannerUrl, paramLocation, paramLink, paramDetails, paramEventTime, paramEventDate])
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'] as any,
-      allowsEditing: true,
-      aspect: [4, 4],
-      quality: 0.5,
-    })
-    if (!result.canceled) {
-      setImage(result.assets[0].uri)
+  // Memoized animated styles following performance guidelines
+  const imageAnimatedStyle = useAnimatedStyle(
+    () => ({
+      transform: [{ scale: imageScale.value }],
+      opacity: imageScale.value,
+    }),
+    []
+  )
+
+  const fabAnimatedStyle = useAnimatedStyle(
+    () => ({
+      transform: [{ rotate: `${fabRotation.value}deg` }],
+    }),
+    []
+  )
+
+  const submitButtonStyle = useAnimatedStyle(
+    () => ({
+      opacity: interpolate(submitProgress.value, [0, 1], [1, 0.7]),
+      transform: [
+        { scale: interpolate(submitProgress.value, [0, 1], [1, 0.95]) },
+      ],
+    }),
+    []
+  )
+
+  // Media selection handlers - memoized with useCallback following performance guidelines
+  const selectImage = useCallback(async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      })
+      if (!result.canceled && result.assets[0]) {
+        setSelectedImage(result.assets[0].uri)
+        imageScale.value = withSpring(1, { damping: 12, stiffness: 100 })
+        setMediaModalVisible(false)
+      }
+    } catch (error) {
+      console.error('Error selecting image:', error)
+      Alert.alert('Грешка', 'Неуспешно избиране на снимка')
     }
-  }
+  }, [])
 
-  const onTimeChange = (_e: any, selected: any) => {
-    setOpenTimePicker(false)
-    if (selected) {
-      setSelectedTime(selected)
-      setTime(moment(selected).format('HH:mm'))
+  const removeImage = useCallback(() => {
+    setSelectedImage('')
+    imageScale.value = withTiming(0, { duration: 200 })
+  }, [])
+
+  // Date/Time handlers - performance optimized
+  const handleTimeChange = useCallback((_event: any, selectedTime?: Date) => {
+    setShowTimePicker(false)
+    if (selectedTime) {
+      setSelectedTime(selectedTime)
     }
-  }
+  }, [])
 
-  const onDateChange = (_e: any, selected: any) => {
-    setOpenDatePicker(false)
-    if (selected) {
-      setSelectedDate(selected)
-      const dayBg = moment(selected).format('dddd')
-      setDayInBulgarian(dayBg)
-      setDate(`${dayBg},${moment(selected).format('YYYY-MM-DD')}`)
+  const handleDateChange = useCallback((_event: any, selectedDate?: Date) => {
+    setShowDatePicker(false)
+    if (selectedDate) {
+      setSelectedDate(selectedDate)
     }
-  }
+  }, [])
 
-  const onSubmitBtnPress = async () => {
-    if (!eventName || !image || !location || !date || !time) {
-      Alert.alert('Моля въведете всички полета')
+  // Form submission - performance optimized following guidelines
+  const onSubmitEvent = useCallback(async () => {
+    if (!eventName.trim() || !selectedImage || !location.trim()) {
+      Alert.alert('Грешка', 'Моля попълнете всички задължителни полета')
       return
     }
 
-    if (isEdit) {
-      let finalBannerUrl = image
-      try {
-        if (!image.startsWith('http')) {
-          finalBannerUrl = await uploadToCloudinary(image)
-        }
+    setLoading(true)
+    submitProgress.value = withTiming(1, { duration: 300 })
+    fabRotation.value = withTiming(180, { duration: 400 })
 
-        await axios.put(process.env.EXPO_PUBLIC_HOST_URL + '/events', {
+    try {
+      // Upload image if it's not already a URL
+      let finalImageUrl = selectedImage
+      if (!selectedImage.startsWith('http')) {
+        finalImageUrl = await uploadToCloudinary(selectedImage)
+      }
+
+      // Format date and time
+      const formattedDate = `${moment(selectedDate).format('dddd')},${moment(
+        selectedDate
+      ).format('YYYY-MM-DD')}`
+      const formattedTime = moment(selectedTime).format('HH:mm')
+
+      if (isEdit) {
+        // Update existing event
+        await axios.put(`${process.env.EXPO_PUBLIC_HOST_URL}/events`, {
           eventId: id,
           userEmail: user?.email,
-          eventName,
-          bannerUrl: finalBannerUrl,
-          location,
-          link,
-          details,
-          eventDate: date.includes(',')
-            ? date
-            : `${dayInBulgarian},${moment(selectedDate).format('YYYY-MM-DD')}`,
-          eventTime:
-            time === 'Избери час' ? moment(selectedTime).format('HH:mm') : time,
+          eventName: eventName.trim(),
+          bannerUrl: finalImageUrl,
+          location: location.trim(),
+          link: link.trim() || null,
+          details: details.trim() || null,
+          eventDate: formattedDate,
+          eventTime: formattedTime,
         })
 
-        Alert.alert('Успешно', 'Събитието е обновено.', [
+        Alert.alert('Успех', 'Събитието е обновено успешно!', [
           { text: 'OK', onPress: () => router.replace('/(tabs)/Event') },
         ])
-      } catch (e) {
-        console.error(e)
-        Alert.alert('Грешка', 'Неуспешна редакция.')
-      }
-      return
-    }
+      } else {
+        // Create new event
+        await axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/events`, {
+          eventName: eventName.trim(),
+          bannerUrl: finalImageUrl,
+          location: location.trim(),
+          link: link.trim() || null,
+          details: details.trim() || null,
+          eventDate: formattedDate,
+          eventTime: formattedTime,
+          email: user?.email,
+        })
 
-    // Create
-    try {
-      const bannerUrl = await uploadToCloudinary(image)
-      await axios.post(process.env.EXPO_PUBLIC_HOST_URL + '/events', {
-        eventName,
-        bannerUrl,
-        location,
-        link,
-        details,
-        eventDate: `${dayInBulgarian},${moment(selectedDate).format(
-          'YYYY-MM-DD'
-        )}`,
-        eventTime: moment(selectedTime).format('HH:mm'),
-        email: user?.email,
-      })
-      Alert.alert('Чудесно!', 'Ново събитие беше добавено!', [
-        { text: 'OK', onPress: () => router.replace('/(tabs)/Event') },
-      ])
-    } catch (err) {
-      console.error(err)
-      Alert.alert('Грешка', 'Неуспешно добавяне на събитие.')
+        Alert.alert('Успех', 'Събитието е създадено успешно!', [
+          { text: 'OK', onPress: () => router.replace('/(tabs)/Event') },
+        ])
+      }
+
+      // Reset form with animations
+      imageScale.value = withTiming(0)
+      submitProgress.value = withTiming(0)
+      fabRotation.value = withTiming(0)
+
+      setEventName('')
+      setSelectedImage('')
+      setLocation('')
+      setLink('')
+      setDetails('')
+      setSelectedTime(new Date())
+      setSelectedDate(new Date())
+    } catch (error) {
+      console.error('Error submitting event:', error)
+      Alert.alert('Грешка', 'Неуспешно запазване на събитието')
+      submitProgress.value = withTiming(0)
+      fabRotation.value = withTiming(0)
+    } finally {
+      setLoading(false)
     }
-  }
+  }, [
+    eventName,
+    selectedImage,
+    location,
+    link,
+    details,
+    selectedTime,
+    selectedDate,
+    isEdit,
+    id,
+    user?.email,
+    router,
+  ])
+
+  // Memoized computed values
+  const canSubmit = useMemo(() => {
+    return (
+      eventName.trim().length > 0 &&
+      selectedImage &&
+      location.trim().length > 0 &&
+      !loading
+    )
+  }, [eventName, selectedImage, location, loading])
+
+  const formattedTime = useMemo(() => {
+    return moment(selectedTime).format('HH:mm')
+  }, [selectedTime])
+
+  const formattedDate = useMemo(() => {
+    return moment(selectedDate).format('DD MMMM YYYY, dddd')
+  }, [selectedDate])
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: Colors.WHITE }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <Surface style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar
+        backgroundColor={colors.surface}
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+      />
+
       <ScrollView
-        contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+        style={styles.scrollView}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={{ fontSize: 25, fontWeight: 'bold' }}>
-          {isEdit ? 'Редактирай събитие' : 'Добави Събитие'}
-        </Text>
+        {/* Header Card */}
+        <AnimatedCard
+          mode="elevated"
+          style={[styles.headerCard, { backgroundColor: colors.surface }]}
+          entering={SlideInDown.delay(100)}
+        >
+          <Card.Content style={styles.headerContent}>
+            <View style={styles.headerRow}>
+              <Avatar.Image
+                size={48}
+                source={{
+                  uri:
+                    user?.image ||
+                    'https://placehold.co/48x48/cccccc/ffffff?text=U',
+                }}
+              />
+              <View style={styles.headerTextContainer}>
+                <Text
+                  variant="titleMedium"
+                  style={[styles.headerTitle, { color: colors.onSurface }]}
+                >
+                  {user?.name || 'Потребител'}
+                </Text>
+                <Text
+                  variant="bodySmall"
+                  style={[
+                    styles.headerSubtitle,
+                    { color: colors.onSurfaceVariant },
+                  ]}
+                >
+                  {isEdit
+                    ? 'Редактирайте събитието...'
+                    : 'Създайте ново събитие...'}
+                </Text>
+              </View>
+            </View>
+          </Card.Content>
+        </AnimatedCard>
 
-        <TouchableOpacity onPress={pickImage}>
-          {image ? (
-            <Image source={{ uri: image }} style={styles.image} />
-          ) : (
-            <Image
-              source={require('./../../assets/images/image.png')}
-              style={styles.image}
-            />
-          )}
-        </TouchableOpacity>
-
-        <TextInputField
-          label="Име на събитието"
-          onChangeText={setEventName}
-          value={eventName}
-        />
-        <TextInputField
-          label="Локация"
-          onChangeText={setLocation}
-          value={location}
-        />
-        <TextInputField
-          label="Линк за детайли"
-          onChangeText={setLink}
-          value={link}
-        />
-
-        <View style={{ marginTop: 8, marginBottom: 10 }}>
-          <Text style={{ fontWeight: '600', marginBottom: 4 }}>
-            Детайли за събитието
-          </Text>
+        {/* Event Name Input */}
+        <AnimatedSurface
+          style={[styles.inputContainer, { backgroundColor: colors.surface }]}
+          elevation={2}
+          entering={FadeIn.delay(200)}
+        >
           <TextInput
+            mode="outlined"
+            label="Име на събитието *"
+            placeholder="Въведете име на събитието..."
+            value={eventName}
+            onChangeText={setEventName}
+            style={styles.textInput}
+            outlineStyle={[
+              styles.textInputOutline,
+              { borderColor: colors.outline },
+            ]}
+            maxLength={100}
+            right={
+              <TextInput.Affix
+                text={`${eventName.length}/100`}
+                textStyle={[
+                  styles.characterCounter,
+                  { color: colors.onSurfaceVariant },
+                ]}
+              />
+            }
+          />
+        </AnimatedSurface>
+
+        {/* Selected Image */}
+        {selectedImage && (
+          <Animated.View
+            style={[styles.selectedImageContainer, imageAnimatedStyle]}
+            entering={ZoomIn.duration(300)}
+            exiting={FadeOut.duration(200)}
+          >
+            <Image
+              source={{ uri: selectedImage }}
+              style={styles.selectedImage}
+              contentFit="cover"
+              transition={300}
+            />
+            <IconButton
+              icon="close"
+              size={24}
+              iconColor={colors.onPrimary}
+              style={styles.removeImageButton}
+              onPress={removeImage}
+            />
+          </Animated.View>
+        )}
+
+        {/* Location Input */}
+        <AnimatedSurface
+          style={[styles.inputContainer, { backgroundColor: colors.surface }]}
+          elevation={2}
+          entering={FadeIn.delay(300)}
+        >
+          <TextInput
+            mode="outlined"
+            label="Локация *"
+            placeholder="Въведете локация..."
+            value={location}
+            onChangeText={setLocation}
+            style={styles.textInput}
+            outlineStyle={[
+              styles.textInputOutline,
+              { borderColor: colors.outline },
+            ]}
+            maxLength={100}
+          />
+        </AnimatedSurface>
+
+        {/* Link Input */}
+        <AnimatedSurface
+          style={[styles.inputContainer, { backgroundColor: colors.surface }]}
+          elevation={2}
+          entering={FadeIn.delay(400)}
+        >
+          <TextInput
+            mode="outlined"
+            label="Линк за детайли"
+            placeholder="https://..."
+            value={link}
+            onChangeText={setLink}
+            style={styles.textInput}
+            outlineStyle={[
+              styles.textInputOutline,
+              { borderColor: colors.outline },
+            ]}
+            keyboardType="url"
+          />
+        </AnimatedSurface>
+
+        {/* Details Input */}
+        <AnimatedSurface
+          style={[styles.inputContainer, { backgroundColor: colors.surface }]}
+          elevation={2}
+          entering={FadeIn.delay(500)}
+        >
+          <TextInput
+            mode="outlined"
+            label="Детайли за събитието"
             placeholder="Опишете подробно събитието..."
             value={details}
             onChangeText={setDetails}
             multiline
-            style={styles.detailsInput}
-            placeholderTextColor={Colors.GRAY}
+            numberOfLines={4}
+            style={[styles.textInput, styles.detailsInput]}
+            outlineStyle={[
+              styles.textInputOutline,
+              { borderColor: colors.outline },
+            ]}
+            maxLength={500}
+            right={
+              <TextInput.Affix
+                text={`${details.length}/500`}
+                textStyle={[
+                  styles.characterCounter,
+                  { color: colors.onSurfaceVariant },
+                ]}
+              />
+            }
           />
-        </View>
+        </AnimatedSurface>
 
-        <View>
+        {/* Date & Time Section */}
+        <Animated.View entering={FadeIn.delay(600)}>
+          <Card
+            mode="outlined"
+            style={[styles.dateTimeCard, { borderColor: colors.outline }]}
+          >
+            <Card.Title
+              title="Дата и час"
+              subtitle="Изберете кога ще се проведе събитието"
+              left={(props) => (
+                <Avatar.Icon {...props} icon="calendar-clock" size={40} />
+              )}
+            />
+            <Card.Content>
+              <View style={styles.dateTimeContainer}>
+                <Button
+                  mode="outlined"
+                  onPress={() => setShowDatePicker(true)}
+                  icon="calendar"
+                  style={styles.dateTimeButton}
+                >
+                  {formattedDate}
+                </Button>
+
+                <Button
+                  mode="outlined"
+                  onPress={() => setShowTimePicker(true)}
+                  icon="clock"
+                  style={styles.dateTimeButton}
+                >
+                  {formattedTime}
+                </Button>
+              </View>
+            </Card.Content>
+          </Card>
+        </Animated.View>
+
+        {/* Action Buttons Section */}
+        <Animated.View
+          entering={FadeIn.delay(700)}
+          style={styles.actionSection}
+        >
           <Button
-            text={time}
-            outline
-            onPress={() => setOpenTimePicker(!openTimePicker)}
-          />
-          <Button
-            text={date}
-            outline
-            onPress={() => setOpenDatePicker(!openDatePicker)}
-          />
-        </View>
+            mode="outlined"
+            onPress={() => setMediaModalVisible(true)}
+            icon="image"
+            style={styles.actionButton}
+          >
+            {selectedImage ? 'Смени изображение' : 'Добави изображение *'}
+          </Button>
 
-        {openTimePicker && (
-          <RNDateTimePicker
-            mode="time"
-            value={selectedTime}
-            onChange={onTimeChange}
-          />
-        )}
-        {openDatePicker && (
-          <RNDateTimePicker
-            mode="date"
-            value={selectedDate}
-            onChange={onDateChange}
-          />
-        )}
+          <Divider style={styles.divider} />
 
-        <Button
-          text={isEdit ? 'Запази промените' : 'Създай'}
-          onPress={onSubmitBtnPress}
-        />
+          <Animated.View style={submitButtonStyle}>
+            <Button
+              mode="contained"
+              onPress={onSubmitEvent}
+              loading={loading}
+              disabled={!canSubmit}
+              icon={isEdit ? 'content-save' : 'plus'}
+              style={[
+                styles.submitButton,
+                {
+                  backgroundColor: canSubmit
+                    ? colors.primary
+                    : colors.surfaceVariant,
+                },
+              ]}
+              labelStyle={{
+                color: canSubmit ? colors.onPrimary : colors.onSurfaceVariant,
+              }}
+            >
+              {loading
+                ? 'Запазване...'
+                : isEdit
+                ? 'Запази промените'
+                : 'Създай събитие'}
+            </Button>
+          </Animated.View>
+        </Animated.View>
+
+        <View style={styles.spacer} />
       </ScrollView>
-    </KeyboardAvoidingView>
-  )
-}
 
+      {/* Floating Action Button */}
+      <Animated.View style={[styles.fabContainer, fabAnimatedStyle]}>
+        <FAB
+          icon={
+            canSubmit ? (isEdit ? 'content-save' : 'check') : 'alert-circle'
+          }
+          onPress={onSubmitEvent}
+          disabled={!canSubmit}
+          loading={loading}
+          style={[
+            styles.fab,
+            {
+              backgroundColor: canSubmit
+                ? colors.primary
+                : colors.surfaceVariant,
+            },
+          ]}
+          theme={{
+            colors: {
+              primaryContainer: canSubmit
+                ? colors.primary
+                : colors.surfaceVariant,
+              onPrimaryContainer: canSubmit
+                ? colors.onPrimary
+                : colors.onSurfaceVariant,
+            },
+          }}
+        />
+      </Animated.View>
+
+      {/* Date Picker */}
+      {showDatePicker && (
+        <RNDateTimePicker
+          mode="date"
+          value={selectedDate}
+          onChange={handleDateChange}
+          minimumDate={new Date()}
+        />
+      )}
+
+      {/* Time Picker */}
+      {showTimePicker && (
+        <RNDateTimePicker
+          mode="time"
+          value={selectedTime}
+          onChange={handleTimeChange}
+        />
+      )}
+
+      {/* Media Selection Modal */}
+      <Portal>
+        <Modal
+          visible={mediaModalVisible}
+          onDismiss={() => setMediaModalVisible(false)}
+          contentContainerStyle={[
+            styles.modalContainer,
+            { backgroundColor: colors.surface },
+          ]}
+        >
+          <Text
+            variant="headlineSmall"
+            style={[styles.modalTitle, { color: colors.onSurface }]}
+          >
+            Добавете изображение
+          </Text>
+          <View style={styles.modalButtons}>
+            <Button
+              mode="contained"
+              onPress={selectImage}
+              icon="image"
+              style={styles.modalButton}
+            >
+              Избери от галерия
+            </Button>
+            <Button
+              mode="outlined"
+              onPress={() => setMediaModalVisible(false)}
+              style={styles.modalButton}
+            >
+              Отказ
+            </Button>
+          </View>
+        </Modal>
+      </Portal>
+    </Surface>
+  )
+})
+
+// Optimized styles following performance guidelines
 const styles = StyleSheet.create({
-  image: {
-    width: 100,
-    height: 100,
-    borderRadius: 15,
-    marginTop: 15,
-    marginLeft: -10,
+  container: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 16,
+    paddingBottom: 100,
+  },
+  headerCard: {
+    marginBottom: 16,
+    borderRadius: 16,
+  },
+  headerContent: {
+    paddingVertical: 16,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontWeight: '600',
+  },
+  headerSubtitle: {
+    opacity: 0.7,
+  },
+  inputContainer: {
+    borderRadius: 16,
+    marginBottom: 16,
+  },
+  textInput: {
+    backgroundColor: 'transparent',
+    fontSize: 16,
+  },
+  textInputOutline: {
+    borderRadius: 16,
+    borderWidth: 1,
   },
   detailsInput: {
-    borderWidth: 1,
-    borderColor: Colors.GRAY,
-    borderRadius: 12,
-    padding: 12,
-    minHeight: 100,
+    minHeight: 120,
     textAlignVertical: 'top',
-    color: '#000',
+  },
+  characterCounter: {
+    fontSize: 12,
+    opacity: 0.6,
+  },
+  selectedImageContainer: {
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  selectedImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 16,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  dateTimeCard: {
+    borderRadius: 16,
+    marginBottom: 16,
+  },
+  dateTimeContainer: {
+    gap: 12,
+  },
+  dateTimeButton: {
+    borderRadius: 12,
+  },
+  actionSection: {
+    gap: 16,
+  },
+  actionButton: {
+    borderRadius: 12,
+  },
+  divider: {
+    marginVertical: 8,
+  },
+  submitButton: {
+    borderRadius: 12,
+    paddingVertical: 8,
+  },
+  spacer: {
+    height: 20,
+  },
+  fabContainer: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+  },
+  fab: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  modalContainer: {
+    margin: 20,
+    borderRadius: 20,
+    padding: 20,
+  },
+  modalTitle: {
+    textAlign: 'center',
+    marginBottom: 20,
+    fontWeight: '600',
+  },
+  modalButtons: {
+    gap: 12,
+  },
+  modalButton: {
+    borderRadius: 12,
   },
 })
+
+export default AddEvent

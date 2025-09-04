@@ -66,6 +66,8 @@ const LatestPost = React.memo(function LatestPost({
       inputBorder: isDarkMode ? '#404040' : '#e5e5e5',
       tabBackground: isDarkMode ? '#2d2d2d' : '#ffffff',
       tabBackgroundActive: Colors.PRIMARY,
+      searchContainerBackground: isDarkMode ? '#1a1a1a' : '#ffffff', // Бял фон за light theme
+      tabsContainerBackground: isDarkMode ? '#1a1a1a' : '#ffffff', // Бял фон за light theme
     }),
     [isDarkMode]
   )
@@ -75,7 +77,8 @@ const LatestPost = React.memo(function LatestPost({
     () =>
       StyleSheet.create({
         container: {
-          marginTop: 15,
+          marginTop: 3,
+          backgroundColor: colors.searchContainerBackground, // ПОПРАВЕНО: Добавен фон на контейнера
         },
         searchContainer: {
           flexDirection: 'row',
@@ -93,6 +96,7 @@ const LatestPost = React.memo(function LatestPost({
           shadowOpacity: isDarkMode ? 0.3 : 0.1,
           shadowRadius: 4,
           elevation: 3,
+          marginTop: 3,
         },
         searchIcon: {
           marginRight: 12,
@@ -101,9 +105,9 @@ const LatestPost = React.memo(function LatestPost({
           flex: 1,
           fontSize: 16,
           color: colors.onSurface,
-          height: 20, // Fixed height to prevent expansion
+          height: 20,
           textAlignVertical: 'center',
-          paddingVertical: 0, // Remove default padding
+          paddingVertical: 0,
         },
         clearButton: {
           padding: 6,
@@ -116,6 +120,9 @@ const LatestPost = React.memo(function LatestPost({
           gap: 10,
           paddingHorizontal: 20,
           marginBottom: 12,
+          backgroundColor: colors.tabsContainerBackground, // ПОПРАВЕНО: Добавен фон на табовете
+          paddingVertical: 8,
+          marginBottom: 5, // ПОПРАВЕНО: Добавен padding за по-добър вид
         },
         tabButton: {
           paddingVertical: 10,
@@ -171,6 +178,7 @@ const LatestPost = React.memo(function LatestPost({
         uhtInfoContainer: {
           paddingHorizontal: 20,
           marginBottom: 12,
+          backgroundColor: colors.searchContainerBackground, // ПОПРАВЕНО: Използва белия фон
         },
         uhtInfoText: {
           color: colors.onSurfaceVariant,

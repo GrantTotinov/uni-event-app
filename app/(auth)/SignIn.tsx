@@ -63,9 +63,8 @@ const SignIn = React.memo(function SignIn() {
     async (uid: string, retries = 3): Promise<any> => {
       try {
         const result = await axios.get(
-          `${process.env.EXPO_PUBLIC_HOST_URL}/user/${uid}`
+          `${process.env.EXPO_PUBLIC_HOST_URL}/user?uid=${uid}`
         )
-
         if (result.data) {
           return result.data
         } else {

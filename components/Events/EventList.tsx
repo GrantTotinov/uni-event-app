@@ -1,12 +1,13 @@
-import React, { memo } from 'react'
+import React, { memo, useCallback, useMemo } from 'react'
 import {
   FlatList,
   RefreshControl,
   ActivityIndicator,
   View,
-  Text,
+  StyleSheet,
 } from 'react-native'
-import Colors from '@/data/Colors'
+import { Surface, Text, useTheme } from 'react-native-paper'
+import { useAppTheme } from '@/context/ThemeContext'
 import EventCard from './EventCard'
 import EventCardSkeleton from './EventCardSkeleton'
 import type { Event } from '@/hooks/useEvents'
@@ -51,60 +52,96 @@ const EventList = memo(function EventList({
   selectedTab,
   searchQuery = '',
 }: EventListProps) {
-  const renderEvent = ({ item }: { item: Event }) => (
-    <EventItem item={item} onUpdate={onEventUpdate} />
+  const { isDarkMode } = useAppTheme()
+  const theme = useTheme()
+
+  // Memoized theme colors for performance
+  const colors = useMemo(
+    () => ({
+      primary: theme.colors.primary,
+      onSurfaceVariant: theme.colors.onSurfaceVariant,
+      surface: theme.colors.surface,
+      background: theme.colors.background,
+    }),
+    [theme.colors]
   )
 
-  const renderFooter = () => {
+  const renderEvent = useCallback(
+    ({ item }: { item: Event }) => (
+      <EventItem item={item} onUpdate={onEventUpdate} />
+    ),
+    [onEventUpdate]
+  )
+
+  const renderFooter = useCallback(() => {
     if (!loadingMore) return null
     return (
-      <View style={{ paddingVertical: 20 }}>
-        <ActivityIndicator color={Colors.PRIMARY} size="small" />
-      </View>
+      <Surface style={styles.footerContainer}>
+        <ActivityIndicator
+          color={colors.primary}
+          size="small"
+          animating={true}
+        />
+      </Surface>
     )
-  }
+  }, [loadingMore, colors.primary])
 
-  const renderEmptyComponent = () => {
+  const renderEmptyComponent = useCallback(() => {
     if (loading || showSkeleton) return null
 
     const isSearching = searchQuery.trim().length > 0
 
     return (
-      <View style={{ padding: 30, alignItems: 'center' }}>
-        <Text style={{ textAlign: 'center', color: Colors.GRAY, fontSize: 16 }}>
+      <Surface
+        style={[styles.emptyContainer, { backgroundColor: colors.surface }]}
+      >
+        <Text
+          variant="titleMedium"
+          style={[styles.emptyTitle, { color: colors.onSurfaceVariant }]}
+        >
           {isSearching
             ? `Няма намерени събития за "${searchQuery}"`
-            : selectedTab === 0
-            ? 'Няма предстоящи събития.'
-            : 'Нямате записани събития.'}
+            : getEmptyMessage(selectedTab)}
         </Text>
         {isSearching && (
           <Text
-            style={{
-              textAlign: 'center',
-              color: Colors.GRAY,
-              fontSize: 14,
-              marginTop: 8,
-            }}
+            variant="bodyMedium"
+            style={[styles.emptySubtitle, { color: colors.onSurfaceVariant }]}
           >
             Опитайте с различни ключови думи
           </Text>
         )}
-      </View>
+      </Surface>
     )
-  }
+  }, [loading, showSkeleton, searchQuery, selectedTab, colors])
 
-  const keyExtractor = (item: Event) => String(item.id)
+  const getEmptyMessage = useCallback((tab: number) => {
+    switch (tab) {
+      case 0:
+        return 'Няма предстоящи събития'
+      case 1:
+        return 'Нямате регистрации за събития'
+      case 2:
+        return 'Нямате създадени събития'
+      case 3:
+        return 'Няма популярни събития'
+      default:
+        return 'Няма събития'
+    }
+  }, [])
 
-  const onEndReached = () => {
+  const keyExtractor = useCallback((item: Event) => String(item.id), [])
+
+  const onEndReached = useCallback(() => {
     if (onLoadMore && hasMore && !loadingMore && !loading && !showSkeleton) {
       onLoadMore()
     }
-  }
+  }, [onLoadMore, hasMore, loadingMore, loading, showSkeleton])
 
   // Add skeleton events for initial loading
-  const eventsWithSkeleton = showSkeleton
-    ? [
+  const eventsWithSkeleton = useMemo(() => {
+    if (showSkeleton) {
+      return [
         ...Array.from({ length: 3 }, (_, index) => ({
           id: -(index + 1),
           name: '',
@@ -119,7 +156,9 @@ const EventList = memo(function EventList({
         })),
         ...events,
       ]
-    : events
+    }
+    return events
+  }, [showSkeleton, events])
 
   // Don't show refresh control if showing skeleton
   const shouldShowRefreshControl = !showSkeleton
@@ -129,17 +168,17 @@ const EventList = memo(function EventList({
       data={eventsWithSkeleton}
       keyExtractor={keyExtractor}
       renderItem={renderEvent}
-      contentContainerStyle={{
-        paddingBottom: 120,
-        flexGrow: 1,
-      }}
+      contentContainerStyle={[
+        styles.contentContainer,
+        { backgroundColor: colors.background },
+      ]}
       refreshControl={
         shouldShowRefreshControl ? (
           <RefreshControl
             refreshing={loading}
             onRefresh={onRefresh}
-            tintColor={Colors.PRIMARY}
-            colors={[Colors.PRIMARY]}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
           />
         ) : undefined
       }
@@ -152,8 +191,43 @@ const EventList = memo(function EventList({
       windowSize={10}
       initialNumToRender={8}
       showsVerticalScrollIndicator={false}
+      ItemSeparatorComponent={() => <View style={styles.separator} />}
     />
   )
+})
+
+const styles = StyleSheet.create({
+  contentContainer: {
+    paddingTop: 8,
+    paddingBottom: 120,
+    paddingHorizontal: 16,
+    flexGrow: 1,
+  },
+  footerContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    borderRadius: 16,
+    marginTop: 40,
+  },
+  emptyTitle: {
+    textAlign: 'center',
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    textAlign: 'center',
+    opacity: 0.7,
+  },
+  separator: {
+    height: 12,
+  },
 })
 
 export default EventList
