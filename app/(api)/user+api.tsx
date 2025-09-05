@@ -57,10 +57,22 @@ export async function GET(request: Request) {
   const email = url.searchParams.get('email')
   const uid = url.searchParams.get('uid')
 
+  // ПОПРАВЕНО: Максимално агресивни no-cache headers
+  const headers = {
+    'Cache-Control':
+      'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0, proxy-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+    'Content-Type': 'application/json',
+    'Last-Modified': new Date().toUTCString(),
+    ETag: `"${Date.now()}-${Math.random()}"`,
+    Vary: '*',
+  }
+
   if (!email && !uid) {
     return Response.json(
       { error: 'Email или uid са задължителни' },
-      { status: 400 }
+      { status: 400, headers }
     )
   }
 
@@ -83,16 +95,26 @@ export async function GET(request: Request) {
     if (result.rows.length === 0) {
       return Response.json(
         { error: 'Потребителят не е намерен' },
-        { status: 404 }
+        { status: 404, headers }
       )
     }
 
-    return Response.json(result.rows[0])
+    // ПОПРАВЕНО: Fresh data with metadata
+    const userData = {
+      ...result.rows[0],
+      _fetchedAt: new Date().toISOString(),
+      _serverTime: Date.now(),
+      _fresh: true,
+    }
+
+    console.log('API returning fresh user data:', userData)
+
+    return Response.json(userData, { headers })
   } catch (error) {
     console.error('Error fetching user:', error)
     return Response.json(
       { error: 'Грешка при извличане на данните' },
-      { status: 500 }
+      { status: 500, headers }
     )
   }
 }
@@ -102,6 +124,7 @@ export async function PUT(request: Request) {
     const {
       email,
       name,
+      image, // ДОБАВЕНО: image поле
       contact_email,
       contact_phone,
       currentPassword,
@@ -117,7 +140,7 @@ export async function PUT(request: Request) {
     }
 
     // Update profile fields if provided
-    if (name || contact_email || contact_phone || uid) {
+    if (name || image !== undefined || contact_email || contact_phone || uid) {
       const fields = []
       const values = []
       let idx = 1
@@ -125,6 +148,12 @@ export async function PUT(request: Request) {
       if (name) {
         fields.push(`name = $${idx++}`)
         values.push(name)
+      }
+
+      // ДОБАВЕНО: Обработка на image поле
+      if (image !== undefined) {
+        fields.push(`image = $${idx++}`)
+        values.push(image)
       }
 
       if (contact_email !== undefined) {

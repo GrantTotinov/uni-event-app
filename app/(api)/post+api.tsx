@@ -50,27 +50,27 @@ export async function GET(request: Request) {
 
   try {
     let baseQuery = `
-      SELECT
-        post.id AS post_id,
-        post.context,
-        post.imageurl,
-        post.createdby,
-        post.club,
-        clubs.name AS club_name,
-        clubs.createdby AS group_creator_email,
-        post.is_uht_related,
-        post.createdon,
-        post.createdon AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS createdon_local,
-        users.name,
-        users.image,
-        users.role,
-        COALESCE(lc.count, 0)::integer AS like_count,
-        COALESCE(cc.count, 0)::integer AS comment_count,
-        CASE WHEN ul.post_id IS NULL THEN false ELSE true END AS is_liked
-      FROM post
-      INNER JOIN users ON post.createdby = users.email
-      LEFT JOIN clubs ON post.club = clubs.id
-      LEFT JOIN (
+    SELECT
+      post.id AS post_id,
+      post.context,
+      post.imageurl,
+      post.createdby,
+      post.club,
+      clubs.name AS club_name,  -- ПОПРАВЕНО: Добавете това ако липсва
+      clubs.createdby AS group_creator_email,
+      post.is_uht_related,
+      post.createdon,
+      post.createdon AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Sofia' AS createdon_local,
+      users.name,
+      users.image,
+      users.role,
+      COALESCE(lc.count, 0)::integer AS like_count,
+      COALESCE(cc.count, 0)::integer AS comment_count,
+      CASE WHEN ul.post_id IS NULL THEN false ELSE true END AS is_liked
+    FROM post
+    INNER JOIN users ON post.createdby = users.email
+    LEFT JOIN clubs ON post.club = clubs.id  -- ПОПРАВЕНО: Уверете се, че това JOIN е включено
+        LEFT JOIN (
         SELECT post_id, COUNT(*)::integer AS count 
         FROM likes 
         GROUP BY post_id

@@ -1,6 +1,12 @@
-// app/(tabs)/Profile.tsx
 import React, { useContext, useEffect, useState, useCallback } from 'react'
-import { View, ScrollView, StyleSheet, Platform, StatusBar } from 'react-native'
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Platform,
+  StatusBar,
+  Alert,
+} from 'react-native'
 import {
   Text,
   Card,
@@ -20,7 +26,22 @@ import { useRouter } from 'expo-router'
 import { signOut } from 'firebase/auth'
 import { auth } from '@/configs/FirebaseConfig'
 import { useUserFollowers } from '@/hooks/useUserFollowers'
-import axios from 'axios'
+import { useUser, useUpdateUserImage } from '@/hooks/useUser'
+import { useImagePicker } from '@/hooks/useImagePicker'
+import { uploadToCloudinary } from '@/utils/CloudinaryUpload'
+import { Image } from 'expo-image'
+
+// Type definitions
+interface UserDetails {
+  id: number
+  name: string
+  email: string
+  image?: string
+  role: string
+  contact_email?: string
+  contact_phone?: string
+  uid?: string
+}
 
 const getRoleDisplayText = (userRole?: string): string => {
   switch (userRole) {
@@ -64,9 +85,15 @@ export default function Profile() {
   const { isDarkMode, toggleTheme } = useAppTheme()
   const theme = useTheme()
   const router = useRouter()
-  const [userDetails, setUserDetails] = useState<any>(null)
-  const [loading, setLoading] = useState<boolean>(true)
+  const [updatingImage, setUpdatingImage] = useState(false)
 
+  // Hooks
+  const { data: userDetails, isLoading, refetch } = useUser(user?.email)
+  const { data: followStats } = useUserFollowers(user?.email)
+  const updateImageMutation = useUpdateUserImage()
+  const { pickImage } = useImagePicker()
+
+  // Handlers
   const handleSettingsPress = useCallback(() => {
     router.push('/settings')
   }, [router])
@@ -80,30 +107,57 @@ export default function Profile() {
       .catch(() => {})
   }, [setUser, router])
 
-  const { data: followStats } = useUserFollowers(user?.email)
-
-  useEffect(() => {
-    const fetchUserDetails = async () => {
-      if (!user?.email) return
-      setLoading(true)
-      try {
-        const res = await axios.get(
-          `${process.env.EXPO_PUBLIC_HOST_URL}/user?email=${encodeURIComponent(
-            user.email
-          )}`
-        )
-        setUserDetails(res.data)
-      } catch (error) {
-        console.error('Error fetching user details:', error)
-        setUserDetails(null)
-      } finally {
-        setLoading(false)
-      }
+  const handleImagePress = useCallback(async () => {
+    if (!user?.email) {
+      Alert.alert('Грешка', 'Потребителят не е намерен')
+      return
     }
-    fetchUserDetails()
-  }, [user?.email])
 
-  if (loading) {
+    try {
+      setUpdatingImage(true)
+
+      // Избираме нова снимка
+      const selectedImageUri = await pickImage()
+      if (!selectedImageUri) {
+        setUpdatingImage(false)
+        return
+      }
+
+      // Качваме в Cloudinary
+      const uploadedImageUrl = await uploadToCloudinary(selectedImageUri)
+
+      // Изчистваме кеша на снимките
+      await Image.clearMemoryCache()
+      await Image.clearDiskCache()
+
+      // Обновяваме в базата данни
+      const updatedUser = await updateImageMutation.mutateAsync({
+        email: user.email,
+        imageUrl: uploadedImageUrl,
+      })
+
+      // Обновяваме AuthContext
+      setUser({
+        ...user,
+        image: uploadedImageUrl,
+      })
+
+      Alert.alert('Успех', 'Снимката е обновена успешно!')
+    } catch (error) {
+      console.error('Error updating profile image:', error)
+      Alert.alert('Грешка', 'Неуспешно обновяване на снимката')
+    } finally {
+      setUpdatingImage(false)
+    }
+  }, [user, pickImage, updateImageMutation, setUser])
+
+  // Computed values
+  const currentImageUrl =
+    userDetails?.image || user?.image || 'https://placehold.co/120x120'
+  const currentUserName = userDetails?.name || user?.name || 'Потребител'
+  const currentUserRole = userDetails?.role || user?.role || 'student'
+
+  if (isLoading) {
     return (
       <Surface style={styles.loadingContainer}>
         <ActivityIndicator size="large" />
@@ -163,31 +217,49 @@ export default function Profile() {
         {/* Profile Card */}
         <Card style={styles.profileCard} mode="elevated">
           <Card.Content style={styles.profileContent}>
-            <Avatar.Image
-              size={120}
-              source={{
-                uri: userDetails?.image || 'https://placehold.co/120x120',
-              }}
-              style={styles.avatar}
-            />
+            <View style={styles.avatarContainer}>
+              <Avatar.Image
+                size={120}
+                source={{ uri: currentImageUrl }}
+                style={styles.avatar}
+              />
+              {updatingImage && (
+                <View style={styles.avatarLoader}>
+                  <ActivityIndicator
+                    size="large"
+                    color={theme.colors.primary}
+                  />
+                </View>
+              )}
+              <IconButton
+                icon="camera"
+                size={24}
+                mode="contained"
+                onPress={handleImagePress}
+                disabled={updatingImage}
+                style={styles.cameraButton}
+                iconColor={theme.colors.onPrimary}
+                containerColor={theme.colors.primary}
+              />
+            </View>
 
             <Text variant="headlineSmall" style={styles.userName}>
-              {userDetails?.name || 'Потребител'}
+              {currentUserName}
             </Text>
 
             <Chip
-              icon={getRoleIcon(userDetails?.role)}
+              icon={getRoleIcon(currentUserRole)}
               mode="outlined"
               style={[
                 styles.roleChip,
-                { borderColor: getRoleColor(theme, userDetails?.role) },
+                { borderColor: getRoleColor(theme, currentUserRole) },
               ]}
               textStyle={{
-                color: getRoleColor(theme, userDetails?.role),
+                color: getRoleColor(theme, currentUserRole),
                 fontWeight: '600',
               }}
             >
-              {getRoleDisplayText(userDetails?.role)}
+              {getRoleDisplayText(currentUserRole)}
             </Chip>
           </Card.Content>
         </Card>
@@ -229,7 +301,7 @@ export default function Profile() {
           <Card.Content>
             <List.Item
               title="Основен имейл"
-              description={userDetails?.email || 'не е зададен'}
+              description={userDetails?.email || user?.email || 'не е зададен'}
               left={(props) => <List.Icon {...props} icon="email" />}
               style={styles.listItem}
             />
@@ -321,8 +393,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 24,
   },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
   avatar: {
     marginBottom: 16,
+  },
+  avatarLoader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 60,
+    marginBottom: 16,
+  },
+  cameraButton: {
+    position: 'absolute',
+    bottom: 8,
+    right: -8,
   },
   userName: {
     fontWeight: 'bold',
@@ -351,11 +444,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statLabel: {
+    opacity: 0.7,
     textAlign: 'center',
   },
   statDivider: {
     height: 40,
     width: 1,
+    marginHorizontal: 16,
   },
   infoCard: {
     marginHorizontal: 16,

@@ -7,6 +7,8 @@ applyTo: '**/*.tsx, **/*.ts'
 
 ## Project Context
 
+- When generating code, clearly indicate the target file for the changes. Add the file name as a comment at the top of the snippet, e.g., //File: src/components/MyComponent.tsx
+- Focus on mobile-specific best practices, performance optimizations, and UX considerations
 - Latest React Native version
 - TypeScript enabled
 - Functional components with hooks

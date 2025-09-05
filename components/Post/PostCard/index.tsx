@@ -42,7 +42,9 @@ export default function PostCard({
   onUpdate?: () => void
 }) {
   const { user } = useContext(AuthContext)
-  const canDelete = isSystemAdmin(user?.role) || user?.email === post.createdby
+  const canDelete = Boolean(
+    user?.email && (isSystemAdmin(user?.role) || user?.email === post.createdby)
+  )
 
   const [isLiked, setIsLiked] = useState(!!post.is_liked)
   const [likeCount, setLikeCount] = useState(post.like_count ?? 0)

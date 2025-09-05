@@ -1,34 +1,34 @@
-import React, { useContext, useCallback, useMemo } from 'react'
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native'
-import Ionicons from '@expo/vector-icons/Ionicons'
-import { MaterialIcons } from '@expo/vector-icons'
+import React, { useMemo, useCallback, useContext } from 'react'
+import { View, TouchableOpacity, StyleSheet } from 'react-native'
+import { Text } from 'react-native-paper'
+import { Image } from 'expo-image'
+import { Ionicons } from '@expo/vector-icons'
 import { useRouter, Href } from 'expo-router'
-
-import Colors from '@/data/Colors'
 import { AuthContext } from '@/context/AuthContext'
 import { useAppTheme } from '@/context/ThemeContext'
+import { useUser } from '@/hooks/useUser'
+import Colors from '@/data/Colors'
 
-// Memoized component following performance guidelines
+// Performance optimized component with React.memo
 const Header = React.memo(function Header() {
   const { user } = useContext(AuthContext)
-  const { isDarkMode, theme } = useAppTheme()
+  const { isDarkMode } = useAppTheme()
   const router = useRouter()
 
-  // Memoized safe text utility - performance optimized
-  const safeText = useCallback((value: any): string => {
-    if (value === null || value === undefined) return ''
-    if (typeof value !== 'string') return String(value)
-    return value
-  }, [])
+  // Зареждаме най-новите данни за потребителя
+  const { data: userDetails } = useUser(user?.email)
 
-  // Memoized user data - prevents unnecessary re-renders
-  const userData = useMemo(
-    () => ({
-      name: safeText(user?.name) || 'Потребител',
-      image: safeText(user?.image) || 'https://placehold.co/50x50',
-    }),
-    [user?.name, user?.image, safeText]
-  )
+  // Memoized user data combining AuthContext and fresh data
+  const userData = useMemo(() => {
+    const currentImage =
+      userDetails?.image || user?.image || 'https://placehold.co/50x50'
+    const currentName = userDetails?.name || user?.name || 'Потребител'
+
+    return {
+      name: currentName,
+      image: currentImage,
+    }
+  }, [userDetails?.image, userDetails?.name, user?.image, user?.name])
 
   // Memoized navigation handlers following performance guidelines
   const handleChatPress = useCallback(() => {
@@ -51,39 +51,38 @@ const Header = React.memo(function Header() {
       onSurface: isDarkMode ? '#ffffff' : '#000000',
       primary: Colors.PRIMARY,
       onPrimary: '#ffffff',
-      surfaceVariant: isDarkMode ? '#2a2a2a' : '#f5f5f5',
+      surfaceVariant: isDarkMode ? '#2a2a2a' : '#f0f0f0',
       shadow: isDarkMode ? '#000000' : '#000000',
-      error: '#ef4444',
-      border: isDarkMode ? '#333333' : '#e5e5e5',
     }),
     [isDarkMode]
   )
 
-  // Memoized styles for theme support - performance optimized
+  // Memoized dynamic styles - performance optimized
   const dynamicStyles = useMemo(
     () =>
       StyleSheet.create({
         container: {
           backgroundColor: colors.surface,
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
+          paddingHorizontal: 20,
+          paddingVertical: 16,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          elevation: 3,
         },
         headerRow: {
           flexDirection: 'row',
-          justifyContent: 'space-between',
           alignItems: 'center',
+          justifyContent: 'space-between',
         },
         leftSection: {
-          flexDirection: 'row',
-          alignItems: 'center',
           flex: 1,
         },
         rightSection: {
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 12,
+          gap: 8,
         },
         avatarContainer: {
           flexDirection: 'row',
@@ -153,6 +152,8 @@ const Header = React.memo(function Header() {
               style={dynamicStyles.avatar}
               defaultSource={require('@/assets/images/profile.png')}
               accessibilityLabel={`Снимка на ${userData.name}`}
+              cachePolicy="memory-disk"
+              transition={200}
             />
             <Text
               style={dynamicStyles.userName}
@@ -166,6 +167,21 @@ const Header = React.memo(function Header() {
 
         {/* Right Section - Action Buttons */}
         <View style={dynamicStyles.rightSection}>
+          {/* Chat Button */}
+          <TouchableOpacity
+            onPress={handleChatPress}
+            style={dynamicStyles.iconButton}
+            activeOpacity={0.8}
+            accessibilityLabel="Отвори чат"
+            accessibilityRole="button"
+          >
+            <Ionicons
+              name="chatbubble-outline"
+              size={20}
+              color={colors.onPrimary}
+            />
+          </TouchableOpacity>
+
           {/* Notifications Button */}
           <TouchableOpacity
             onPress={handleNotificationsPress}
@@ -173,31 +189,13 @@ const Header = React.memo(function Header() {
             activeOpacity={0.8}
             accessibilityLabel="Известия"
             accessibilityRole="button"
-            accessibilityHint="Отвори известията"
-          >
-            <MaterialIcons
-              name="notifications-none"
-              size={20}
-              color={colors.onPrimary}
-            />
-            {/* Notification Badge - можете да добавите логика за броя */}
-            {/* <View style={dynamicStyles.notificationBadge} /> */}
-          </TouchableOpacity>
-
-          {/* Chat Button */}
-          <TouchableOpacity
-            onPress={handleChatPress}
-            style={dynamicStyles.iconButton}
-            activeOpacity={0.8}
-            accessibilityLabel="Съобщения"
-            accessibilityRole="button"
-            accessibilityHint="Отвори чата"
           >
             <Ionicons
-              name="chatbubbles-outline"
+              name="notifications-outline"
               size={20}
               color={colors.onPrimary}
             />
+            {/* TODO: Add notification badge when implementing notifications */}
           </TouchableOpacity>
         </View>
       </View>

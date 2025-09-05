@@ -122,7 +122,7 @@ const LatestPost = React.memo(function LatestPost({
           marginBottom: 12,
           backgroundColor: colors.tabsContainerBackground, // ПОПРАВЕНО: Добавен фон на табовете
           paddingVertical: 8,
-          marginBottom: 5, // ПОПРАВЕНО: Добавен padding за по-добър вид
+          // ПОПРАВЕНО: Добавен padding за по-добър вид
         },
         tabButton: {
           paddingVertical: 10,

@@ -1,9 +1,11 @@
-import { View, Text, Image, TouchableOpacity } from 'react-native'
 import React from 'react'
+import { View, Text, TouchableOpacity } from 'react-native'
+import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
-import Colors from '@/data/Colors'
 import moment from 'moment'
 import 'moment/locale/bg'
+import Colors from '@/data/Colors'
+import { useUser } from '@/hooks/useUser'
 
 moment.locale('bg')
 
@@ -31,6 +33,9 @@ export default function UserAvatar({
   disabled = false,
 }: USER_AVATAR) {
   const router = useRouter()
+
+  // Зареждаме най-новите данни за потребителя за актуална снимка
+  const { data: userDetails } = useUser(email, { enabled: !!email })
 
   let formattedDate = 'Невалидна дата'
 
@@ -84,49 +89,72 @@ export default function UserAvatar({
 
   const ContentComponent = email && !disabled ? TouchableOpacity : View
 
+  // Използваме най-новата снимка от userDetails или fallback към подадената снимка
+  const currentImage =
+    userDetails?.image || image || 'https://via.placeholder.com/36'
+
   return (
     <View
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        paddingVertical: 8,
+        gap: 12,
       }}
     >
       <ContentComponent
-        style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}
         onPress={email && !disabled ? handlePress : undefined}
-        activeOpacity={email && !disabled ? 0.7 : 1}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          flex: 1,
+        }}
+        disabled={disabled}
       >
         <Image
-          source={{ uri: image }}
-          style={{ width: 50, height: 50, borderRadius: 99 }}
+          source={{ uri: currentImage }}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+          }}
+          defaultSource={require('@/assets/images/profile.png')}
+          cachePolicy="memory-disk"
+          transition={200}
         />
-        <View>
-          <Text style={{ fontWeight: 'bold', fontSize: 16 }}>{name}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <View style={{ flex: 1 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
+            }}
+          >
             <Text
               style={{
-                color: getRoleColor(role),
-                fontSize: 12,
-                fontWeight: '600',
+                fontWeight: 'bold',
+                fontSize: 14,
+                color: Colors.BLACK,
+                maxWidth: 120,
               }}
+              numberOfLines={1}
             >
-              {getRoleDisplayText(role)}
+              {name}
             </Text>
             {isUhtRelated && (
               <View
                 style={{
-                  backgroundColor: '#e8f4fd',
-                  borderColor: '#0066cc',
-                  borderWidth: 1,
-                  borderRadius: 8,
+                  backgroundColor: '#007bff',
                   paddingHorizontal: 6,
                   paddingVertical: 2,
+                  borderRadius: 8,
                 }}
               >
                 <Text
                   style={{
-                    color: '#0066cc',
+                    color: 'white',
                     fontSize: 10,
                     fontWeight: 'bold',
                   }}
@@ -135,10 +163,26 @@ export default function UserAvatar({
                 </Text>
               </View>
             )}
-            <Text style={{ color: Colors.GRAY, fontSize: 12 }}>
-              {formattedDate}
+            <Text
+              style={{
+                fontSize: 10,
+                fontWeight: 'bold',
+                color: getRoleColor(role),
+                textTransform: 'uppercase',
+              }}
+            >
+              {getRoleDisplayText(role)}
             </Text>
           </View>
+          <Text
+            style={{
+              fontSize: 12,
+              color: Colors.GRAY,
+              marginTop: 2,
+            }}
+          >
+            {formattedDate}
+          </Text>
         </View>
       </ContentComponent>
     </View>

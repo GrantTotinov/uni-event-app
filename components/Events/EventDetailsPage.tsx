@@ -499,7 +499,7 @@ const EventDetailsPage = memo(function EventDetailsPage({
         {/* Interest FAB */}
         <FAB
           icon={event.isInterested ? 'heart' : 'heart-outline'}
-          mode="surface"
+          mode="flat"
           size="medium"
           onPress={toggleInterest}
           loading={interestedLoading}
@@ -526,7 +526,7 @@ const EventDetailsPage = memo(function EventDetailsPage({
         {/* Register FAB */}
         <FAB
           icon={event.isRegistered ? 'account-minus' : 'account-plus'}
-          mode={event.isRegistered ? 'surface' : 'elevated'}
+          mode={event.isRegistered ? 'flat' : 'elevated'}
           size="large"
           onPress={toggleRegister}
           loading={registering}
