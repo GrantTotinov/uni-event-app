@@ -1,3 +1,4 @@
+// File: components/Home/Header.tsx
 import React, { useMemo, useCallback, useContext } from 'react'
 import { View, TouchableOpacity, StyleSheet } from 'react-native'
 import { Text } from 'react-native-paper'
@@ -119,17 +120,6 @@ const Header = React.memo(function Header() {
           shadowOpacity: 0.15,
           shadowRadius: 4,
           elevation: 4,
-        },
-        notificationBadge: {
-          position: 'absolute',
-          top: 8,
-          right: 8,
-          backgroundColor: colors.error,
-          borderRadius: 6,
-          minWidth: 12,
-          height: 12,
-          justifyContent: 'center',
-          alignItems: 'center',
         },
       }),
     [colors]
