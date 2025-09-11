@@ -1,5 +1,12 @@
-// app/chat/ChatRoom.tsx
-import React, { useContext, useEffect, useState } from 'react'
+// File: app/chat/[id].tsx
+import React, {
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+} from 'react'
 import {
   View,
   Text,
@@ -12,6 +19,8 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  Keyboard,
+  Dimensions,
 } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { AuthContext } from '@/context/AuthContext'
@@ -27,6 +36,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/configs/FirebaseConfig'
 import Colors from '@/data/Colors'
+import { deleteChatRoom, canDeleteChat } from '@/utils/chatUtils'
 
 interface Message {
   id: string
@@ -40,20 +50,192 @@ interface Message {
   system?: boolean
 }
 
-export default function ChatRoom() {
+const { height: screenHeight } = Dimensions.get('window')
+
+// ОПТИМИЗИРАНО: Memoized Message Component за по-добра производителност
+const MessageItem = React.memo(
+  ({
+    item,
+    index,
+    messages,
+    getUserUid,
+    formatTime,
+    safeText,
+  }: {
+    item: Message
+    index: number
+    messages: Message[]
+    getUserUid: () => string | null
+    formatTime: (timestamp: any) => string
+    safeText: (value: any) => string
+  }) => {
+    const isMyMessage = item.user._id === getUserUid()
+    const showAvatar =
+      !isMyMessage &&
+      (index === 0 || messages[index - 1]?.user._id !== item.user._id)
+
+    return (
+      <View
+        style={[
+          styles.messageContainer,
+          isMyMessage && styles.myMessageContainer,
+        ]}
+      >
+        {showAvatar && (
+          <Image source={{ uri: item.user.avatar }} style={styles.avatar} />
+        )}
+        <View
+          style={[
+            styles.messageWrapper,
+            !showAvatar && !isMyMessage && styles.messageWrapperNoAvatar,
+          ]}
+        >
+          {!isMyMessage && showAvatar && (
+            <Text style={styles.senderName}>{safeText(item.user.name)}</Text>
+          )}
+          <View
+            style={[
+              styles.messageBubble,
+              isMyMessage ? styles.myMessage : styles.otherMessage,
+              item.system && styles.systemMessage,
+            ]}
+          >
+            <Text
+              style={[
+                styles.messageText,
+                isMyMessage ? styles.myMessageText : styles.otherMessageText,
+                item.system && styles.systemMessageText,
+              ]}
+            >
+              {safeText(item.text)}
+            </Text>
+            <Text
+              style={[
+                styles.messageTime,
+                isMyMessage ? styles.myMessageTime : styles.otherMessageTime,
+              ]}
+            >
+              {formatTime(item.createdAt)}
+            </Text>
+          </View>
+        </View>
+      </View>
+    )
+  }
+)
+
+// ОПТИМИЗИРАНО: Main Chat Component
+const ChatRoom = React.memo(function ChatRoom() {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [chatRoom, setChatRoom] = useState<any>(null)
+  const [canDelete, setCanDelete] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
+
+  // ОПТИМИЗИРАНО: Spam protection с по-кратки интервали
+  const [isSending, setIsSending] = useState(false)
+  const [lastSentTime, setLastSentTime] = useState(0)
+  const sendTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const duplicateCheckRef = useRef<string>('')
+  const flatListRef = useRef<FlatList>(null)
+
+  // ОПТИМИЗИРАНО: Performance settings
+  const SEND_DELAY = 300 // 300ms като Messenger
+  const DUPLICATE_CHECK_DELAY = 2000
+  const MIN_MESSAGE_LENGTH = 1
+  const MAX_MESSAGE_LENGTH = 1000
+
   const { id } = useLocalSearchParams()
   const router = useRouter()
   const { user, getUserUid } = useContext(AuthContext)
 
-  const safeText = (value: any) => {
+  // ОПТИМИЗИРАНО: Memoized utility functions
+  const safeText = useCallback((value: any): string => {
     if (value === null || value === undefined) return ''
     if (typeof value !== 'string') return String(value)
     return value
-  }
+  }, [])
 
+  const formatTime = useCallback((timestamp: any): string => {
+    if (!timestamp) return ''
+
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+    const now = new Date()
+    const diffInDays = Math.floor(
+      (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
+    )
+
+    if (diffInDays === 0) {
+      return date.toLocaleTimeString('bg-BG', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
+    } else if (diffInDays === 1) {
+      return (
+        'Вчера ' +
+        date.toLocaleTimeString('bg-BG', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        })
+      )
+    } else {
+      return date.toLocaleDateString('bg-BG', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
+    }
+  }, [])
+
+  // ПОПРАВЕНО: Keyboard listeners за по-добро управление
+  useEffect(() => {
+    const keyboardWillShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height)
+        // ОПТИМИЗИРАНО: Scroll до дъното при отваряне на клавиатурата
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true })
+        }, 100)
+      }
+    )
+
+    const keyboardWillHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0)
+      }
+    )
+
+    return () => {
+      keyboardWillShowListener.remove()
+      keyboardWillHideListener.remove()
+    }
+  }, [])
+
+  // Check delete permissions
+  useEffect(() => {
+    const checkDeletePermissions = async () => {
+      if (!id || !user?.email) return
+
+      try {
+        const canDeleteResult = await canDeleteChat(id as string, user.email)
+        setCanDelete(canDeleteResult)
+      } catch (error) {
+        console.error('Error checking delete permissions:', error)
+        setCanDelete(false)
+      }
+    }
+
+    checkDeletePermissions()
+  }, [id, user?.email])
+
+  // ОПТИМИЗИРАНО: Real-time listeners с по-добра производителност
   useEffect(() => {
     if (!id) return
 
@@ -82,6 +264,11 @@ export default function ChatRoom() {
         })
       })
       setMessages(msgs)
+
+      // ОПТИМИЗИРАНО: Auto-scroll до дъното при нови съобщения
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true })
+      }, 100)
     })
 
     return () => {
@@ -90,15 +277,58 @@ export default function ChatRoom() {
     }
   }, [id])
 
-  const sendMessage = async () => {
-    if (!newMessage.trim() || !user || !id) return
+  // ОПТИМИЗИРАНО: Message sending с по-добра производителност
+  const sendMessage = useCallback(async () => {
+    const trimmedMessage = newMessage.trim()
+
+    if (!trimmedMessage || !user || !id) return
+    if (trimmedMessage.length < MIN_MESSAGE_LENGTH) return
+    if (trimmedMessage.length > MAX_MESSAGE_LENGTH) {
+      Alert.alert(
+        'Съобщението е твърде дълго',
+        `Максимум ${MAX_MESSAGE_LENGTH} символа`
+      )
+      return
+    }
 
     const uid = getUserUid()
     if (!uid) return
 
+    const now = Date.now()
+
+    if (isSending) {
+      console.log('⏳ Message sending in progress, ignoring duplicate request')
+      return
+    }
+
+    if (now - lastSentTime < SEND_DELAY) {
+      console.log('⏳ Rate limited, ignoring send request')
+      return
+    }
+
+    if (
+      duplicateCheckRef.current === trimmedMessage &&
+      now - lastSentTime < DUPLICATE_CHECK_DELAY
+    ) {
+      console.log('⏳ Duplicate message detected, ignoring')
+      return
+    }
+
+    if (sendTimeoutRef.current) {
+      clearTimeout(sendTimeoutRef.current)
+      sendTimeoutRef.current = null
+    }
+
+    setIsSending(true)
+    duplicateCheckRef.current = trimmedMessage
+    setLastSentTime(now)
+
     try {
+      // ОПТИМИЗИРАНО: Clear input веднага за по-бърз отговор
+      setNewMessage('')
+
       await addDoc(collection(db, 'chatRooms', id as string, 'messages'), {
-        text: newMessage.trim(),
+        text: trimmedMessage,
         user: {
           _id: uid,
           name: user.name,
@@ -111,139 +341,123 @@ export default function ChatRoom() {
         lastMessageTime: serverTimestamp(),
       })
 
-      setNewMessage('')
+      console.log('✅ Message sent successfully')
     } catch (error) {
-      console.error('Error sending message: ', error)
-      Alert.alert('Грешка', 'Неуспешно изпращане на съобщение')
+      console.error('❌ Error sending message:', error)
+      setNewMessage(trimmedMessage)
+      Alert.alert(
+        'Грешка при изпращане',
+        'Съобщението не можа да бъде изпратено. Опитайте отново.'
+      )
+    } finally {
+      sendTimeoutRef.current = setTimeout(() => {
+        setIsSending(false)
+        sendTimeoutRef.current = null
+      }, SEND_DELAY)
     }
-  }
+  }, [newMessage, user, id, getUserUid, lastSentTime, isSending])
 
-  const formatTime = (timestamp: any) => {
-    if (!timestamp) return ''
+  // ОПТИМИЗИРАНО: Delete chat function
+  const handleDeleteChat = useCallback(() => {
+    if (!canDelete || !user?.email || !id) return
 
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
-    const now = new Date()
-    const diffInDays = Math.floor(
-      (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
+    Alert.alert(
+      'Изтриване на чат',
+      'Сигурни ли сте, че искате да изтриете този чат? Това действие е необратимо и ще премахне всички съобщения.',
+      [
+        {
+          text: 'Отказ',
+          style: 'cancel',
+        },
+        {
+          text: 'Изтрий',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeleting(true)
+            try {
+              await deleteChatRoom(id as string, user.email)
+              Alert.alert('Успех', 'Чатът беше изтрит успешно', [
+                { text: 'OK', onPress: () => router.back() },
+              ])
+            } catch (error) {
+              console.error('Error deleting chat:', error)
+              const errorMessage =
+                error instanceof Error
+                  ? error.message
+                  : 'Неуспешно изтриване на чат'
+
+              Alert.alert('Грешка', errorMessage)
+            } finally {
+              setIsDeleting(false)
+            }
+          },
+        },
+      ]
     )
+  }, [canDelete, user?.email, id, router])
 
-    if (diffInDays === 0) {
-      return date.toLocaleTimeString('bg-BG', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      })
-    } else if (diffInDays === 1) {
-      return (
-        'Вчера ' +
-        date.toLocaleTimeString('bg-BG', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        })
-      )
-    } else if (diffInDays < 7) {
-      return (
-        date.toLocaleDateString('bg-BG', { weekday: 'short' }) +
-        ' ' +
-        date.toLocaleTimeString('bg-BG', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        })
-      )
-    } else {
-      return (
-        date.toLocaleDateString('bg-BG', {
-          day: '2-digit',
-          month: '2-digit',
-        }) +
-        ' ' +
-        date.toLocaleTimeString('bg-BG', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        })
-      )
+  // ОПТИМИЗИРАНО: Memoized render function за по-добра производителност
+  const renderMessage = useCallback(
+    ({ item, index }: { item: Message; index: number }) => (
+      <MessageItem
+        item={item}
+        index={index}
+        messages={messages}
+        getUserUid={getUserUid}
+        formatTime={formatTime}
+        safeText={safeText}
+      />
+    ),
+    [messages, getUserUid, formatTime, safeText]
+  )
+
+  // ОПТИМИЗИРАНО: Memoized props за FlatList
+  const keyExtractor = useCallback((item: Message) => item.id, [])
+
+  const getItemLayout = useCallback(
+    (data: any, index: number) => ({
+      length: 80,
+      offset: 80 * index,
+      index,
+    }),
+    []
+  )
+
+  // ОПТИМИЗИРАНО: Memoized computed values
+  const canSendMessage = useMemo(
+    () =>
+      newMessage.trim().length >= MIN_MESSAGE_LENGTH &&
+      newMessage.trim().length <= MAX_MESSAGE_LENGTH &&
+      !isSending,
+    [newMessage, isSending]
+  )
+
+  const inputContainerPaddingBottom = useMemo(
+    () => Math.max(10, keyboardHeight > 0 ? 10 : 10),
+    [keyboardHeight]
+  )
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (sendTimeoutRef.current) {
+        clearTimeout(sendTimeoutRef.current)
+      }
     }
-  }
-
-  const renderMessage = ({ item }: { item: Message }) => {
-    const isMyMessage = item.user._id === getUserUid()
-
-    if (item.system) {
-      return (
-        <View style={styles.systemMessageContainer}>
-          <View style={styles.systemMessageBubble}>
-            <Text style={styles.systemMessageText}>{safeText(item.text)}</Text>
-            <Text style={styles.systemMessageTime}>
-              {formatTime(item.createdAt)}
-            </Text>
-          </View>
-        </View>
-      )
-    }
-
-    return (
-      <View
-        style={[
-          styles.messageRow,
-          isMyMessage ? styles.myMessageRow : styles.otherMessageRow,
-        ]}
-      >
-        {!isMyMessage && (
-          <Image
-            source={{ uri: safeText(item.user.avatar) }}
-            style={styles.avatar}
-          />
-        )}
-
-        <View style={styles.messageContent}>
-          <View
-            style={[
-              styles.messageBubble,
-              isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble,
-            ]}
-          >
-            {!isMyMessage && (
-              <Text style={styles.senderName}>{safeText(item.user.name)}</Text>
-            )}
-            <Text
-              style={[
-                styles.messageText,
-                isMyMessage ? styles.myMessageText : styles.otherMessageText,
-              ]}
-            >
-              {safeText(item.text)}
-            </Text>
-            <Text
-              style={[
-                styles.messageTime,
-                isMyMessage ? styles.myMessageTime : styles.otherMessageTime,
-              ]}
-            >
-              {formatTime(item.createdAt)}
-            </Text>
-          </View>
-        </View>
-      </View>
-    )
-  }
+  }, [])
 
   if (!chatRoom) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.PRIMARY} />
+        <Text style={styles.loadingText}>Зареждане на чат...</Text>
       </View>
     )
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={90}
-    >
+    <View style={styles.container}>
+      {/* ПОПРАВЕНО: Header с по-добро позициониране */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -253,7 +467,7 @@ export default function ChatRoom() {
         </TouchableOpacity>
         <Image
           source={{
-            uri: safeText(chatRoom.avatar || 'https://placehold.co/600x400'),
+            uri: safeText(chatRoom.avatar || 'https://placehold.co/40x40'),
           }}
           style={styles.headerAvatar}
         />
@@ -263,46 +477,119 @@ export default function ChatRoom() {
             {safeText(chatRoom.participants?.length)} участници
           </Text>
         </View>
+
+        {canDelete && (
+          <TouchableOpacity
+            onPress={handleDeleteChat}
+            style={styles.deleteButton}
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <ActivityIndicator size="small" color="#ff4444" />
+            ) : (
+              <Text style={styles.deleteButtonText}>🗑️</Text>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
 
-      <View style={styles.messagesContainer}>
+      {/* ОПТИМИЗИРАНО: Messages container със стабилна височина */}
+      <View
+        style={[
+          styles.messagesContainer,
+          { paddingBottom: keyboardHeight > 0 ? 10 : 0 },
+        ]}
+      >
         <FlatList
+          ref={flatListRef}
           data={messages}
           renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
           style={styles.messagesList}
           contentContainerStyle={styles.messagesContent}
           showsVerticalScrollIndicator={false}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={15}
+          windowSize={21}
+          initialNumToRender={10}
+          getItemLayout={getItemLayout}
+          onContentSizeChange={() =>
+            flatListRef.current?.scrollToEnd({ animated: false })
+          }
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0,
+            autoscrollToTopThreshold: 10,
+          }}
+          keyboardShouldPersistTaps="handled"
         />
       </View>
 
-      <View style={styles.inputContainer}>
-        <View style={styles.inputWrapper}>
-          <TextInput
-            style={styles.textInput}
-            value={newMessage}
-            onChangeText={setNewMessage}
-            placeholder="Съобщение..."
-            placeholderTextColor="#999"
-            multiline
-            maxLength={1000}
-          />
-          <TouchableOpacity
-            onPress={sendMessage}
-            style={[
-              styles.sendButton,
-              !newMessage.trim() && styles.sendButtonDisabled,
-            ]}
-            disabled={!newMessage.trim()}
-          >
-            <Text style={styles.sendButtonText}>➤</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
-  )
-}
+      {/* ПОПРАВЕНО: Input container с подобрено keyboard handling */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        style={styles.keyboardAvoidingView}
+      >
+        <View
+          style={[
+            styles.inputContainer,
+            { paddingBottom: inputContainerPaddingBottom },
+          ]}
+        >
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={[styles.textInput, isSending && styles.textInputDisabled]}
+              value={newMessage}
+              onChangeText={setNewMessage}
+              placeholder="Съобщение..."
+              placeholderTextColor="#999"
+              multiline
+              maxLength={MAX_MESSAGE_LENGTH}
+              editable={!isSending}
+              returnKeyType="send"
+              onSubmitEditing={() => {
+                if (canSendMessage) {
+                  sendMessage()
+                }
+              }}
+              blurOnSubmit={false}
+            />
 
+            {newMessage.length > MAX_MESSAGE_LENGTH * 0.9 && (
+              <Text
+                style={[
+                  styles.characterCounter,
+                  newMessage.length > MAX_MESSAGE_LENGTH &&
+                    styles.characterCounterError,
+                ]}
+              >
+                {newMessage.length}/{MAX_MESSAGE_LENGTH}
+              </Text>
+            )}
+
+            <TouchableOpacity
+              onPress={sendMessage}
+              style={[
+                styles.sendButton,
+                !canSendMessage && styles.sendButtonDisabled,
+              ]}
+              disabled={!canSendMessage}
+              activeOpacity={0.8}
+            >
+              {isSending ? (
+                <ActivityIndicator size="small" color={Colors.WHITE} />
+              ) : (
+                <Text style={styles.sendButtonText}>➤</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </View>
+  )
+})
+
+// ОПТИМИЗИРАНО: Styles за по-добра производителност
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -314,24 +601,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F0F2F5',
   },
-
-  // Header Styles
+  loadingText: {
+    marginTop: 10,
+    color: Colors.GRAY,
+    fontSize: 16,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.PRIMARY,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingTop: Platform.OS === 'ios' ? 50 : 12,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    zIndex: 1000,
   },
   backButton: {
-    marginRight: 12,
-    padding: 4,
+    padding: 5,
+    marginRight: 10,
   },
   backButtonText: {
     color: '#fff',
@@ -348,136 +639,130 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
     color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   headerSubtitle: {
-    fontSize: 13,
-    color: '#E8F5E8',
-    marginTop: 1,
+    color: '#fff',
+    fontSize: 12,
+    opacity: 0.8,
   },
-
-  // Messages Container
+  deleteButton: {
+    padding: 8,
+    marginLeft: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    minWidth: 36,
+    minHeight: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteButtonText: {
+    fontSize: 18,
+    textAlign: 'center',
+  },
   messagesContainer: {
     flex: 1,
-    backgroundColor: '#E5DDD5',
   },
   messagesList: {
     flex: 1,
   },
   messagesContent: {
-    padding: 8,
-  },
-
-  // Message Row Styles
-  messageRow: {
-    flexDirection: 'row',
-    marginVertical: 2,
-    paddingHorizontal: 8,
-  },
-  myMessageRow: {
+    paddingVertical: 10,
+    flexGrow: 1,
     justifyContent: 'flex-end',
   },
-  otherMessageRow: {
-    justifyContent: 'flex-start',
+  messageContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 10,
+    marginVertical: 2,
   },
-
-  // Avatar
+  myMessageContainer: {
+    justifyContent: 'flex-end',
+  },
   avatar: {
     width: 32,
     height: 32,
     borderRadius: 16,
     marginRight: 8,
     alignSelf: 'flex-end',
-    marginBottom: 4,
+    marginBottom: 8,
   },
-
-  // Message Content
-  messageContent: {
-    maxWidth: '75%',
+  messageWrapper: {
+    maxWidth: '80%',
+  },
+  messageWrapperNoAvatar: {
+    marginLeft: 40,
+  },
+  senderName: {
+    fontSize: 12,
+    color: Colors.GRAY,
+    marginBottom: 2,
+    marginLeft: 12,
   },
   messageBubble: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    padding: 12,
     borderRadius: 18,
+    marginBottom: 2,
+  },
+  myMessage: {
+    backgroundColor: Colors.PRIMARY,
+    alignSelf: 'flex-end',
+    borderBottomRightRadius: 4,
+  },
+  otherMessage: {
+    backgroundColor: '#fff',
+    alignSelf: 'flex-start',
+    borderBottomLeftRadius: 4,
     elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 1,
   },
-  myMessageBubble: {
-    backgroundColor: '#DCF8C6',
-    borderBottomRightRadius: 4,
-  },
-  otherMessageBubble: {
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 4,
-  },
-
-  // Message Text
-  senderName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.PRIMARY,
-    marginBottom: 2,
+  systemMessage: {
+    backgroundColor: '#e3f2fd',
+    alignSelf: 'center',
+    borderRadius: 12,
   },
   messageText: {
     fontSize: 16,
     lineHeight: 20,
-    marginBottom: 2,
   },
   myMessageText: {
-    color: '#000',
+    color: '#fff',
   },
   otherMessageText: {
-    color: '#000',
-  },
-
-  // Message Time
-  messageTime: {
-    fontSize: 11,
-    alignSelf: 'flex-end',
-    marginTop: 2,
-  },
-  myMessageTime: {
-    color: '#4A4A4A',
-  },
-  otherMessageTime: {
-    color: '#999',
-  },
-
-  // System Messages
-  systemMessageContainer: {
-    alignItems: 'center',
-    marginVertical: 8,
-  },
-  systemMessageBubble: {
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    alignItems: 'center',
+    color: '#333',
   },
   systemMessageText: {
-    color: '#666',
-    fontSize: 13,
+    color: '#1976d2',
     fontStyle: 'italic',
     textAlign: 'center',
   },
-  systemMessageTime: {
-    color: '#999',
+  messageTime: {
     fontSize: 10,
-    marginTop: 2,
+    marginTop: 4,
   },
-
-  // Input Container
+  myMessageTime: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'right',
+  },
+  otherMessageTime: {
+    color: Colors.GRAY,
+    textAlign: 'left',
+  },
+  keyboardAvoidingView: {
+    // Не задавай flex тук, за да избегнеш проблеми с клавиатурата
+  },
   inputContainer: {
-    backgroundColor: '#F0F2F5',
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+    backgroundColor: '#fff',
+    paddingHorizontal: 15,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    minHeight: 60,
   },
   inputWrapper: {
     flexDirection: 'row',
@@ -491,14 +776,31 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
+    position: 'relative',
+    minHeight: 44,
   },
   textInput: {
     flex: 1,
     fontSize: 16,
     maxHeight: 100,
-    paddingVertical: 0,
+    paddingVertical: 8,
     paddingRight: 8,
     textAlignVertical: 'center',
+    lineHeight: 20,
+  },
+  textInputDisabled: {
+    opacity: 0.8,
+  },
+  characterCounter: {
+    position: 'absolute',
+    bottom: -15,
+    right: 50,
+    fontSize: 10,
+    color: Colors.GRAY,
+  },
+  characterCounterError: {
+    color: '#ff4444',
+    fontWeight: 'bold',
   },
   sendButton: {
     width: 36,
@@ -507,9 +809,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.PRIMARY,
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: 8,
   },
   sendButtonDisabled: {
     backgroundColor: '#CCC',
+    opacity: 0.6,
   },
   sendButtonText: {
     color: '#fff',
@@ -517,3 +821,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 })
+
+export default ChatRoom

@@ -1,4 +1,4 @@
-// app/chat/index.tsx
+// File: app/chat/index.tsx
 import React, {
   useContext,
   useEffect,
@@ -16,6 +16,7 @@ import {
   Image,
   Platform,
   StatusBar,
+  Alert,
 } from 'react-native'
 import { AuthContext } from '@/context/AuthContext'
 import {
@@ -30,6 +31,7 @@ import {
 import { db } from '@/configs/FirebaseConfig'
 import Colors from '@/data/Colors'
 import { useRouter, Href } from 'expo-router'
+import { deleteChatRoom } from '@/utils/chatUtils'
 
 interface MessageData {
   id: string
@@ -56,7 +58,8 @@ interface ChatRoom {
   isDirect?: boolean
 }
 
-export default function ChatList() {
+// FIXED: Memoized component with proper function declarations
+const ChatList = React.memo(function ChatList() {
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -70,6 +73,164 @@ export default function ChatList() {
     return { uid, email }
   }, [getUserUid, user?.email])
 
+  // FIXED: Declare utility functions first before usage
+  // Memoized utility functions for performance
+  const formatTime = useCallback((timestamp: any): string => {
+    if (!timestamp) return ''
+    const date =
+      timestamp instanceof Date
+        ? timestamp
+        : timestamp.toDate
+        ? timestamp.toDate()
+        : new Date(timestamp)
+    const now = new Date()
+    const diffInDays = Math.floor(
+      (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
+    )
+
+    if (diffInDays === 0) {
+      return date.toLocaleTimeString('bg-BG', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
+    } else if (diffInDays === 1) return 'Вчера'
+    else if (diffInDays < 7)
+      return date.toLocaleDateString('bg-BG', { weekday: 'short' })
+    else
+      return date.toLocaleDateString('bg-BG', {
+        day: '2-digit',
+        month: '2-digit',
+      })
+  }, [])
+
+  const truncateMessage = useCallback(
+    (message?: string, maxLength: number = 35): string => {
+      if (!message) return ''
+      if (message.length <= maxLength) return message
+      return message.substring(0, maxLength) + '...'
+    },
+    []
+  )
+
+  // Navigation handler
+  const handleChatPress = useCallback(
+    (chatId: string) => {
+      router.push(`/chat/${chatId}` as Href)
+    },
+    [router]
+  )
+
+  const handleDeleteChat = useCallback(
+    (chatId: string, chatName: string) => {
+      Alert.alert(
+        'Изтриване на чат',
+        `Сигурни ли сте, че искате да изтриете чата "${chatName}"? Това действие е необратимо.`,
+        [
+          {
+            text: 'Отказ',
+            style: 'cancel',
+          },
+          {
+            text: 'Изтрий',
+            style: 'destructive',
+            onPress: async () => {
+              if (!user?.email) return
+
+              try {
+                await deleteChatRoom(chatId, user.email)
+                // Remove chat from local list immediately
+                setChatRooms((prev) =>
+                  prev.filter((chat) => chat.id !== chatId)
+                )
+                Alert.alert('Успех', 'Чатът беше изтрит успешно')
+              } catch (error) {
+                console.error('Error deleting chat:', error)
+                Alert.alert(
+                  'Грешка',
+                  error instanceof Error
+                    ? error.message
+                    : 'Неуспешно изтриване на чат'
+                )
+              }
+            },
+          },
+        ]
+      )
+    },
+    [user?.email]
+  )
+
+  // FIXED: Now renderChatItem can use the declared functions
+  const renderChatItem = useCallback(
+    ({ item }: { item: ChatRoom }) => {
+      const formattedTime = formatTime(item.lastMessageTime)
+      const isMyLastMessage = item.lastMessageUser === user?.name
+
+      // Handle empty avatar URI
+      const avatarUri =
+        item.avatar &&
+        item.avatar.trim() &&
+        item.avatar !== 'https://placehold.co/600x400'
+          ? item.avatar
+          : 'https://placehold.co/120x120/e0e0e0/666666?text=' +
+            encodeURIComponent(item.name?.charAt(0) || 'C')
+
+      return (
+        <TouchableOpacity
+          style={styles.chatItem}
+          onPress={() => handleChatPress(item.id)}
+          onLongPress={() =>
+            handleDeleteChat(item.id, item.name || 'Неименован чат')
+          }
+          activeOpacity={0.7}
+        >
+          <View style={styles.chatContent}>
+            <View style={styles.avatarContainer}>
+              <Image
+                source={{ uri: avatarUri }}
+                style={styles.avatar}
+                defaultSource={require('@/assets/images/profile.png')}
+              />
+              {item.unreadCount != null && item.unreadCount > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadText}>
+                    {item.unreadCount > 99 ? '99+' : String(item.unreadCount)}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.chatInfo}>
+              <View style={styles.chatHeader}>
+                <Text style={styles.chatName} numberOfLines={1}>
+                  {String(item.name || 'Чат')}
+                </Text>
+                {formattedTime ? (
+                  <Text style={styles.timeText}>{String(formattedTime)}</Text>
+                ) : null}
+              </View>
+              {item.lastMessage ? (
+                <View style={styles.lastMessageContainer}>
+                  <Text style={styles.lastMessageText} numberOfLines={1}>
+                    {isMyLastMessage &&
+                    !item.lastMessage?.startsWith('Чат стаята')
+                      ? `Вие: ${truncateMessage(item.lastMessage)}`
+                      : truncateMessage(item.lastMessage)}
+                  </Text>
+                  {item.unreadCount && item.unreadCount > 0 ? (
+                    <View style={styles.unreadIndicator} />
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          </View>
+        </TouchableOpacity>
+      )
+    },
+    [formatTime, truncateMessage, handleChatPress, handleDeleteChat, user?.name]
+  )
+
+  // Set up real-time chat listeners following performance guidelines
   useEffect(() => {
     if (!userIdentifiers.uid && !userIdentifiers.email) {
       setLoading(false)
@@ -208,7 +369,7 @@ export default function ChatList() {
 
                 if (sortedMessages.length > 0) {
                   const lastMsg = sortedMessages[0]
-                  // Fixed: Properly access text and user properties
+                  // Properly access text and user properties
                   lastMessage = String(lastMsg.text || '')
                   lastMessageUser = String(lastMsg.user?.name || '')
                 }
@@ -283,109 +444,6 @@ export default function ChatList() {
     }
   }, [userIdentifiers.uid, userIdentifiers.email])
 
-  // Memoized utility functions for performance
-  const formatTime = useCallback((timestamp: any) => {
-    if (!timestamp) return ''
-    const date =
-      timestamp instanceof Date
-        ? timestamp
-        : timestamp.toDate
-        ? timestamp.toDate()
-        : new Date(timestamp)
-    const now = new Date()
-    const diffInDays = Math.floor(
-      (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
-    )
-
-    if (diffInDays === 0) {
-      return date.toLocaleTimeString('bg-BG', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      })
-    } else if (diffInDays === 1) return 'Вчера'
-    else if (diffInDays < 7)
-      return date.toLocaleDateString('bg-BG', { weekday: 'short' })
-    else
-      return date.toLocaleDateString('bg-BG', {
-        day: '2-digit',
-        month: '2-digit',
-      })
-  }, [])
-
-  const truncateMessage = useCallback(
-    (message?: string, maxLength: number = 35) => {
-      if (!message) return ''
-      if (message.length <= maxLength) return message
-      return message.substring(0, maxLength) + '...'
-    },
-    []
-  )
-
-  // Navigation handler
-  const handleChatPress = useCallback(
-    (chatId: string) => {
-      router.push(`/chat/${chatId}` as Href)
-    },
-    [router]
-  )
-
-  // Optimized render function with proper text wrapping
-  const renderChatItem = useCallback(
-    ({ item }: { item: ChatRoom }) => {
-      const formattedTime = formatTime(item.lastMessageTime)
-      const isMyLastMessage = item.lastMessageUser === user?.name
-
-      return (
-        <TouchableOpacity
-          style={styles.chatItem}
-          onPress={() => handleChatPress(item.id)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.chatContent}>
-            <View style={styles.avatarContainer}>
-              <Image
-                source={{ uri: item.avatar || 'https://placehold.co/600x400' }}
-                style={styles.avatar}
-              />
-              {item.unreadCount != null && item.unreadCount > 0 && (
-                <View style={styles.unreadBadge}>
-                  <Text style={styles.unreadText}>
-                    {item.unreadCount > 99 ? '99+' : String(item.unreadCount)}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.chatInfo}>
-              <View style={styles.chatHeader}>
-                <Text style={styles.chatName} numberOfLines={1}>
-                  {String(item.name || 'Чат')}
-                </Text>
-                {formattedTime ? (
-                  <Text style={styles.timeText}>{String(formattedTime)}</Text>
-                ) : null}
-              </View>
-              {item.lastMessage ? (
-                <View style={styles.lastMessageContainer}>
-                  <Text style={styles.lastMessageText} numberOfLines={1}>
-                    {isMyLastMessage &&
-                    !item.lastMessage?.startsWith('Чат стаята')
-                      ? `Вие: ${truncateMessage(item.lastMessage)}`
-                      : truncateMessage(item.lastMessage)}
-                  </Text>
-                  {item.unreadCount && item.unreadCount > 0 ? (
-                    <View style={styles.unreadIndicator} />
-                  ) : null}
-                </View>
-              ) : null}
-            </View>
-          </View>
-        </TouchableOpacity>
-      )
-    },
-    [formatTime, truncateMessage, handleChatPress, user?.name]
-  )
-
   // Memoized key extractor
   const keyExtractor = useCallback((item: ChatRoom) => item.id, [])
 
@@ -426,6 +484,13 @@ export default function ChatList() {
         </View>
       </View>
 
+      {/* Info for deletion */}
+      <View style={styles.infoContainer}>
+        <Text style={styles.infoText}>
+          💡 Задръжте върху чат за да го изтриете
+        </Text>
+      </View>
+
       <FlatList
         data={chatRooms}
         renderItem={renderChatItem}
@@ -445,8 +510,9 @@ export default function ChatList() {
       />
     </View>
   )
-}
+})
 
+// Optimized styles following performance guidelines
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   loadingContainer: {
@@ -459,6 +525,19 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: Colors.GRAY,
+  },
+  infoContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: '#f8f9fa',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  infoText: {
+    fontSize: 12,
+    color: '#6c757d',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   header: {
     flexDirection: 'row',
@@ -556,3 +635,5 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 })
+
+export default ChatList

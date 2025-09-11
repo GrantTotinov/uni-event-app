@@ -35,7 +35,7 @@ import {
 } from '@/hooks/useUserFollowers'
 import { useUser } from '@/hooks/useUser'
 import { createDirectChat } from '@/utils/chatUtils'
-import Colors from '@/data/Colors'
+import { MaterialCommunityIcons } from '@expo/vector-icons'
 
 interface UserProfilePageProps {
   userEmail: string
@@ -81,9 +81,9 @@ const getRoleIcon = (userRole: string | null | undefined): string => {
       return 'school'
     case 'user':
     case 'student':
-      return 'person' // ПОПРАВЕНО: Сменено на 'person'
+      return 'account' // ПОПРАВЕНО: Сменено на 'account'
     default:
-      return 'person' // ПОПРАВЕНО: Сменено на 'person'
+      return 'account' // ПОПРАВЕНО: Сменено на 'account'
   }
 }
 
@@ -334,24 +334,29 @@ const UserProfilePage = React.memo(function UserProfilePage({
     }
 
     try {
+      // ПОДОБРЕНО: Показваме loading състояние
+      console.log('💬 Starting chat creation/search...')
+
       const chatId = await createDirectChat({
         currentUser: {
           email: currentUser.email,
           name: currentUser.name,
-          image: currentUser.image,
+          image: currentUser.image || 'https://placehold.co/50x50',
           uid: currentUser.uid,
         },
         targetUser: {
           email: userEmail,
           name: currentUserData.name,
-          image: currentUserData.image,
+          image: currentUserData.image || 'https://placehold.co/50x50',
+          uid: undefined, // Нямаме uid на целевия потребител
         },
       })
 
+      console.log('✅ Chat ready, navigating to:', chatId)
       router.push(`/chat/${chatId}`)
     } catch (error) {
-      console.error('Error creating/finding chat:', error)
-      Alert.alert('Грешка', 'Неуспешно създаване на чат')
+      console.error('❌ Error creating/finding chat:', error)
+      Alert.alert('Грешка', 'Неуспешно създаване на чат. Моля опитайте отново.')
     }
   }, [currentUser, userEmail, currentUserData, router])
 
