@@ -89,6 +89,9 @@ export function usePostLikes(
     }) => {
       if (!userEmail) throw new Error('User email required')
 
+      // ДОБАВЕНО: Artificial delay за да предотвратим spam
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
       if (isLiked) {
         return axios.delete(`${process.env.EXPO_PUBLIC_HOST_URL}/post-like`, {
           data: { postId, userEmail },
@@ -99,6 +102,14 @@ export function usePostLikes(
           userEmail,
         })
       }
+    },
+    // ДОБАВЕНО: Retry configuration
+    retry: (failureCount, error) => {
+      // Не retry при validation грешки
+      if (axios.isAxiosError(error) && error.response?.status === 400) {
+        return false
+      }
+      return failureCount < 2
     },
     onMutate: async ({ postId, isLiked }) => {
       // Cancel outgoing refetches

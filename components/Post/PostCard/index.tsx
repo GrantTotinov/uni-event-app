@@ -1,5 +1,11 @@
-import React, { useContext, useState, useCallback } from 'react'
-import { View } from 'react-native'
+import React, {
+  useContext,
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+} from 'react'
+import { Alert, View } from 'react-native'
 import axios from 'axios'
 import moment from 'moment-timezone'
 import 'moment/locale/bg'
@@ -71,6 +77,12 @@ export default function PostCard({
 
   // Submission tracking
   const [isSubmittingComment, setIsSubmittingComment] = useState(false)
+  const [isTogglingLike, setIsTogglingLike] = useState(false)
+  const lastLikeTimeRef = useRef(0)
+  const likeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const LIKE_DELAY = 500 // 500ms delay между лайкове
+  const DUPLICATE_LIKE_DELAY = 1000 // 1 секунда за duplicate protection
 
   // React Query hooks for comments
   const {
@@ -106,27 +118,76 @@ export default function PostCard({
 
   const replies = buildRepliesMap(comments)
 
-  const handleToggleLike = async () => {
+  const handleToggleLike = useCallback(async () => {
     if (!user) return
+
+    const now = Date.now()
+
+    // Проверка за активно лайкване
+    if (isTogglingLike) {
+      console.log('⏳ Like toggle in progress, ignoring duplicate request')
+      return
+    }
+
+    // Rate limiting проверка
+    if (now - lastLikeTimeRef.current < LIKE_DELAY) {
+      console.log('⏳ Rate limited, ignoring like request')
+      return
+    }
+
+    // Clear предишен timeout ако има такъв
+    if (likeTimeoutRef.current) {
+      clearTimeout(likeTimeoutRef.current)
+      likeTimeoutRef.current = null
+    }
+
+    setIsTogglingLike(true)
+    lastLikeTimeRef.current = now
+
+    // Optimistic update за по-добър UX
+    const previousIsLiked = isLiked
+    const previousLikeCount = likeCount
+
+    setIsLiked(!isLiked)
+    setLikeCount((prev) => (isLiked ? Math.max(0, prev - 1) : prev + 1))
+
     try {
       if (!isLiked) {
         await axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/post-like`, {
           postId: post.post_id,
           userEmail: user.email,
         })
-        setIsLiked(true)
-        setLikeCount((prev) => prev + 1)
+        console.log('✅ Like added successfully')
       } else {
         await axios.delete(`${process.env.EXPO_PUBLIC_HOST_URL}/post-like`, {
           data: { postId: post.post_id, userEmail: user.email },
         })
-        setIsLiked(false)
-        setLikeCount((prev) => Math.max(0, prev - 1))
+        console.log('✅ Like removed successfully')
       }
     } catch (error) {
-      console.error('Error toggling like', error)
+      console.error('❌ Error toggling like:', error)
+
+      // Revert optimistic update при грешка
+      setIsLiked(previousIsLiked)
+      setLikeCount(previousLikeCount)
+
+      Alert.alert('Грешка', 'Неуспешно лайкване. Опитайте отново.')
+    } finally {
+      // Set timeout за да предотвратим spam
+      likeTimeoutRef.current = setTimeout(() => {
+        setIsTogglingLike(false)
+        likeTimeoutRef.current = null
+      }, LIKE_DELAY)
     }
-  }
+  }, [user, isLiked, likeCount, post.post_id, isTogglingLike])
+
+  useEffect(() => {
+    return () => {
+      if (likeTimeoutRef.current) {
+        clearTimeout(likeTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // Optimized comment submission with anti-spam protection
   const handleSubmitComment = useCallback(
@@ -336,6 +397,7 @@ export default function PostCard({
         commentCount={commentCount}
         commentsVisible={commentsModalVisible}
         onToggleLike={handleToggleLike}
+        isTogglingLike={isTogglingLike}
         onToggleComments={() => setCommentsModalVisible(true)}
         commentText={commentText}
         onCommentTextChange={setCommentText}

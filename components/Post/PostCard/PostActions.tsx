@@ -6,6 +6,7 @@ import {
   Alert,
   Platform,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native'
 import { Surface, useTheme } from 'react-native-paper'
 import { Ionicons } from '@expo/vector-icons'
@@ -29,6 +30,7 @@ interface PostActionsProps {
   postId?: number
   postImageUrl?: string
   totalCommentCount?: number // New prop for total comments including replies
+  isTogglingLike?: boolean
 }
 
 const PostActions = memo(function PostActions({
@@ -46,6 +48,7 @@ const PostActions = memo(function PostActions({
   postId,
   postImageUrl,
   totalCommentCount,
+  isTogglingLike = false,
 }: PostActionsProps) {
   const { isDarkMode } = useAppTheme()
   const theme = useTheme()
@@ -190,26 +193,43 @@ const PostActions = memo(function PostActions({
           style={[
             styles.actionButton,
             isLiked && { backgroundColor: colors.primaryContainer },
+            isTogglingLike && styles.actionButtonDisabled, // ДОБАВЕНО: Disabled style
           ]}
           activeOpacity={0.7}
-          accessibilityLabel={isLiked ? 'Премахни харесване' : 'Харесай'}
+          disabled={isTogglingLike} // ДОБАВЕНО: Disable при loading
+          accessibilityLabel={
+            isTogglingLike
+              ? 'Обработва се...'
+              : isLiked
+              ? 'Премахни харесване'
+              : 'Харесай'
+          }
           accessibilityRole="button"
         >
-          <Ionicons
-            name={isLiked ? 'heart' : 'heart-outline'}
-            size={20}
-            color={isLiked ? colors.primary : colors.onSurface}
-          />
+          {isTogglingLike ? (
+            // ДОБАВЕНО: Loading indicator
+            <ActivityIndicator
+              size={20}
+              color={isLiked ? colors.primary : colors.onSurface}
+            />
+          ) : (
+            <Ionicons
+              name={isLiked ? 'heart' : 'heart-outline'}
+              size={20}
+              color={isLiked ? colors.primary : colors.onSurface}
+            />
+          )}
           <Text
             style={[
               styles.actionText,
               {
                 color: isLiked ? colors.primary : colors.onSurface,
                 fontWeight: isLiked ? '600' : '500',
+                opacity: isTogglingLike ? 0.6 : 1, // ДОБАВЕНО: Opacity при loading
               },
             ]}
           >
-            Харесай
+            {isTogglingLike ? 'Обработва...' : 'Харесай'}
           </Text>
         </TouchableOpacity>
 
@@ -309,6 +329,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: 8,
     gap: 6,
+  },
+  actionButtonDisabled: {
+    opacity: 0.6,
   },
   actionText: {
     fontSize: 14,
