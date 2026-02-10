@@ -1,6 +1,12 @@
-// components/Clubs/ClubInfo.tsx
-import React, { useState, useCallback } from 'react'
-import { View, StyleSheet, ScrollView, Alert } from 'react-native'
+// File: components/Clubs/ClubInfo.tsx
+import React, { useContext, useState, useCallback } from 'react'
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+} from 'react-native'
 import {
   Surface,
   Text,
@@ -8,13 +14,14 @@ import {
   Button,
   Card,
   Avatar,
-  useTheme,
   HelperText,
+  useTheme,
 } from 'react-native-paper'
+import { useRouter } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { uploadToCloudinary } from '@/utils/CloudinaryUpload'
 import axios from 'axios'
-import { useRouter } from 'expo-router'
+import { AuthContext } from '@/context/AuthContext'
 
 export default function ClubInfo() {
   const [name, setName] = useState('')
@@ -26,6 +33,7 @@ export default function ClubInfo() {
 
   const router = useRouter()
   const theme = useTheme()
+  const { user } = useContext(AuthContext)
 
   const validateForm = useCallback(() => {
     let isValid = true
@@ -78,10 +86,11 @@ export default function ClubInfo() {
           clubName: name.trim(),
           imageUrl: uploadImageUrl,
           about: about.trim(),
+          createdBy: user?.email, // ДОБАВЕНО: createdBy field
         }
       )
 
-      console.log(result.data)
+      console.log('Club created:', result.data)
       Alert.alert('Успех', 'Групата беше създадена успешно!', [
         { text: 'OK', onPress: () => router.replace('/(tabs)/Club') },
       ])
@@ -91,7 +100,7 @@ export default function ClubInfo() {
     } finally {
       setLoading(false)
     }
-  }, [name, about, selectedImage, validateForm, router])
+  }, [name, about, selectedImage, validateForm, router, user?.email])
 
   const pickImage = useCallback(async () => {
     try {
@@ -119,17 +128,6 @@ export default function ClubInfo() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Header */}
-        <Text variant="headlineMedium" style={styles.title}>
-          Създай нова група
-        </Text>
-        <Text
-          variant="bodyLarge"
-          style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}
-        >
-          Споделете своите интереси със студентската общност
-        </Text>
-
         {/* Image Selection Card */}
         <Card style={styles.imageCard} mode="elevated" onPress={pickImage}>
           <Card.Content style={styles.imageCardContent}>
@@ -228,18 +226,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  title: {
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    textAlign: 'center',
-    marginBottom: 32,
-    opacity: 0.8,
+    padding: 16,
+    paddingBottom: 100,
   },
   imageCard: {
     marginBottom: 24,
