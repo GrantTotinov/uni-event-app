@@ -15,6 +15,17 @@ _Master's thesis project: a cross-platform mobile app built for a Bulgarian univ
 
 ---
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/02-home.png" width="200" alt="Home: next event countdown and Campus Pulse" />
+  <img src="docs/screenshots/03-events.png" width="200" alt="Events with countdown, calendar export and sharing" />
+  <img src="docs/screenshots/05-notifications.png" width="200" alt="Notifications center" />
+  <img src="docs/screenshots/08-home-dark.png" width="200" alt="Home in dark mode" />
+</p>
+
+<p align="center"><sub>Home · Events · Notifications · Dark mode (demo data)</sub></p>
+
 ## What it does
 
 | Area | Features |
