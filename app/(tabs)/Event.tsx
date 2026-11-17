@@ -19,12 +19,9 @@ import { useRouter } from 'expo-router'
 import { AuthContext } from '@/context/AuthContext'
 import { useAppTheme } from '@/context/ThemeContext'
 import EventList from '@/components/Events/EventList'
-import {
-  useAllEvents,
-  useRegisteredEvents,
-  useMyEvents,
-  usePopularEvents,
-} from '@/hooks/useEvents'
+import { useEvents, type EventFilter } from '@/hooks/useEvents'
+
+const TAB_FILTERS: EventFilter[] = ['upcoming', 'registered', 'mine', 'popular']
 
 const Event = React.memo(function Event() {
   const { user } = useContext(AuthContext)
@@ -62,38 +59,8 @@ const Event = React.memo(function Event() {
     [theme.colors]
   )
 
-  // Use hooks based on selected tab with search functionality
-  const allEventsQuery = useAllEvents(user?.email, debouncedSearchQuery)
-  const registeredEventsQuery = useRegisteredEvents(
-    user?.email,
-    debouncedSearchQuery
-  )
-  const myEventsQuery = useMyEvents(user?.email, debouncedSearchQuery)
-  const popularEventsQuery = usePopularEvents(user?.email, debouncedSearchQuery)
-
-  // Select appropriate query based on selected tab
-  const getCurrentQuery = useCallback(() => {
-    switch (selectedTab) {
-      case 0:
-        return allEventsQuery
-      case 1:
-        return registeredEventsQuery
-      case 2:
-        return myEventsQuery
-      case 3:
-        return popularEventsQuery
-      default:
-        return allEventsQuery
-    }
-  }, [
-    selectedTab,
-    allEventsQuery,
-    registeredEventsQuery,
-    myEventsQuery,
-    popularEventsQuery,
-  ])
-
-  const currentQuery = getCurrentQuery()
+  // Only the active tab fetches; switching tabs reuses cached pages
+  const filter = TAB_FILTERS[selectedTab]
   const {
     events,
     isLoading,
@@ -102,7 +69,11 @@ const Event = React.memo(function Event() {
     fetchNextPage,
     refetch,
     invalidateEvents,
-  } = currentQuery
+  } = useEvents({
+    userEmail: user?.email,
+    filter,
+    searchQuery: debouncedSearchQuery,
+  })
 
   // Memoized handlers following performance guidelines
   const onRefresh = useCallback(() => {

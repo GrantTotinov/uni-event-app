@@ -30,6 +30,8 @@ import { useUser, useUpdateUserImage } from '@/hooks/useUser'
 import { useImagePicker } from '@/hooks/useImagePicker'
 import { uploadToCloudinary } from '@/utils/CloudinaryUpload'
 import { Image } from 'expo-image'
+import LevelCard from '@/components/Pulse/LevelCard'
+import { roleColor, roleIcon, roleLabel } from '@/utils/roles'
 
 // Type definitions
 interface UserDetails {
@@ -41,43 +43,6 @@ interface UserDetails {
   contact_email?: string
   contact_phone?: string
   uid?: string
-}
-
-const getRoleDisplayText = (userRole?: string): string => {
-  switch (userRole) {
-    case 'systemadmin':
-      return 'Системен Админ'
-    case 'teacher':
-      return 'Преподавател'
-    case 'user':
-    case 'student':
-    default:
-      return 'Студент'
-  }
-}
-
-const getRoleColor = (theme: any, userRole?: string): string => {
-  switch (userRole) {
-    case 'systemadmin':
-      return '#dc3545'
-    case 'teacher':
-      return '#007bff'
-    default:
-      return theme.colors.onSurfaceVariant
-  }
-}
-
-const getRoleIcon = (userRole?: string): string => {
-  switch (userRole) {
-    case 'systemadmin':
-      return 'shield-crown'
-    case 'teacher':
-      return 'school'
-    case 'user':
-    case 'student':
-    default:
-      return 'account'
-  }
 }
 
 export default function Profile() {
@@ -248,18 +213,18 @@ export default function Profile() {
             </Text>
 
             <Chip
-              icon={getRoleIcon(currentUserRole)}
+              icon={roleIcon(currentUserRole)}
               mode="outlined"
               style={[
                 styles.roleChip,
-                { borderColor: getRoleColor(theme, currentUserRole) },
+                { borderColor: roleColor(currentUserRole, theme.colors.onSurfaceVariant) },
               ]}
               textStyle={{
-                color: getRoleColor(theme, currentUserRole),
+                color: roleColor(currentUserRole, theme.colors.onSurfaceVariant),
                 fontWeight: '600',
               }}
             >
-              {getRoleDisplayText(currentUserRole)}
+              {roleLabel(currentUserRole)}
             </Chip>
           </Card.Content>
         </Card>
@@ -290,6 +255,9 @@ export default function Profile() {
             </View>
           </Card.Content>
         </Card>
+
+        {/* Пулс на кампуса: ниво + значки */}
+        <LevelCard email={user?.email} />
 
         {/* Information Card */}
         <Card style={styles.infoCard} mode="elevated">

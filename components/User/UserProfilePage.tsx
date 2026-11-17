@@ -36,6 +36,7 @@ import {
 import { useUser } from '@/hooks/useUser'
 import { createDirectChat } from '@/utils/chatUtils'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
+import { roleColor, roleIcon, roleLabel } from '@/utils/roles'
 
 interface UserProfilePageProps {
   userEmail: string
@@ -45,48 +46,6 @@ interface UserProfilePageProps {
 }
 
 // Utility functions for role display - memoized for performance
-const getRoleDisplayText = (userRole: string | null | undefined): string => {
-  switch (userRole) {
-    case 'systemadmin':
-      return 'Системен Админ'
-    case 'teacher':
-      return 'Преподавател'
-    case 'user':
-    case 'student':
-      return 'Студент'
-    default:
-      return 'Студент'
-  }
-}
-
-const getRoleColor = (userRole: string | null | undefined): string => {
-  switch (userRole) {
-    case 'systemadmin':
-      return '#dc3545'
-    case 'teacher':
-      return '#007bff'
-    case 'user':
-    case 'student':
-      return '#9e9e9e'
-    default:
-      return '#9e9e9e'
-  }
-}
-
-const getRoleIcon = (userRole: string | null | undefined): string => {
-  switch (userRole) {
-    case 'systemadmin':
-      return 'shield-crown'
-    case 'teacher':
-      return 'school'
-    case 'user':
-    case 'student':
-      return 'account' // ПОПРАВЕНО: Сменено на 'account'
-    default:
-      return 'account' // ПОПРАВЕНО: Сменено на 'account'
-  }
-}
-
 // Memoized animated components following performance guidelines
 const AnimatedSurface = Animated.createAnimatedComponent(Surface)
 const AnimatedCard = Animated.createAnimatedComponent(Card)
@@ -416,7 +375,7 @@ const UserProfilePage = React.memo(function UserProfilePage({
               />
               <View style={dynamicStyles.badgeContainer}>
                 <Ionicons
-                  name={getRoleIcon(currentUserData.role) as any} // ПОПРАВЕНО: TypeScript fix
+                  name={roleIcon(currentUserData.role) as any} // ПОПРАВЕНО: TypeScript fix
                   size={20}
                   color={colors.onPrimaryContainer}
                 />
@@ -432,18 +391,18 @@ const UserProfilePage = React.memo(function UserProfilePage({
             </Text>
 
             <Chip
-              icon={getRoleIcon(currentUserData.role)}
+              icon={roleIcon(currentUserData.role)}
               mode="outlined"
               style={[
                 dynamicStyles.roleChip,
-                { borderColor: getRoleColor(currentUserData.role) },
+                { borderColor: roleColor(currentUserData.role) },
               ]}
               textStyle={{
-                color: getRoleColor(currentUserData.role),
+                color: roleColor(currentUserData.role),
                 fontWeight: '600',
               }}
             >
-              {getRoleDisplayText(currentUserData.role)}
+              {roleLabel(currentUserData.role)}
             </Chip>
           </Card.Content>
         </AnimatedCard>
@@ -607,9 +566,9 @@ const UserProfilePage = React.memo(function UserProfilePage({
             <View style={dynamicStyles.infoItem}>
               <View style={dynamicStyles.infoItemContent}>
                 <Ionicons
-                  name={getRoleIcon(currentUserData.role) as any} // ПОПРАВЕНО: TypeScript fix
+                  name={roleIcon(currentUserData.role) as any} // ПОПРАВЕНО: TypeScript fix
                   size={24}
-                  color={getRoleColor(currentUserData.role)}
+                  color={roleColor(currentUserData.role)}
                 />
                 <View style={{ flex: 1 }}>
                   <Text
@@ -623,12 +582,12 @@ const UserProfilePage = React.memo(function UserProfilePage({
                     style={[
                       dynamicStyles.infoText,
                       {
-                        color: getRoleColor(currentUserData.role),
+                        color: roleColor(currentUserData.role),
                         fontWeight: '600',
                       },
                     ]}
                   >
-                    {getRoleDisplayText(currentUserData.role)}
+                    {roleLabel(currentUserData.role)}
                   </Text>
                 </View>
               </View>

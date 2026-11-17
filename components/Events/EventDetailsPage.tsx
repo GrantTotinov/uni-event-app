@@ -32,9 +32,13 @@ import Animated, {
   useAnimatedScrollHandler,
 } from 'react-native-reanimated'
 
+import * as WebBrowser from 'expo-web-browser'
 import { AuthContext, isSystemAdmin } from '@/context/AuthContext'
-import { useEventDetails, useEvents } from '@/hooks/useEvents'
+import { useEventDetails, useEventMutations } from '@/hooks/useEvents'
 import { useAppTheme } from '@/context/ThemeContext'
+import { countdown, eventStart, formatEventDate } from '@/utils/eventDate'
+import { addEventToCalendar, shareEvent } from '@/utils/eventActions'
+import { TONE_COLORS } from './EventCard'
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window')
 
@@ -55,22 +59,22 @@ const EventDetailsPage = memo(function EventDetailsPage({
 
   // Use the event details hook
   const {
-    data: eventData,
+    data: event,
     isLoading,
     error,
     refetch,
   } = useEventDetails(eventId, user?.email)
 
-  // Use the events hook for mutations
-  const { registerMutation, unregisterMutation, interestMutation } = useEvents({
-    userEmail: user?.email,
-  })
+  const { registerMutation, unregisterMutation, interestMutation } =
+    useEventMutations()
 
   const [registering, setRegistering] = useState(false)
   const [interestedLoading, setInterestedLoading] = useState(false)
 
-  // Extract event from query data
-  const event = eventData?.pages?.[0]
+  const when = useMemo(
+    () => event && countdown(eventStart(event.event_date, event.event_time)),
+    [event]
+  )
 
   // Memoized theme colors
   const colors = useMemo(
@@ -121,7 +125,10 @@ const EventDetailsPage = memo(function EventDetailsPage({
           eventId: event.id,
           userEmail: user.email,
         })
-        Alert.alert('Успех', 'Регистрирахте се.')
+        Alert.alert('Записахте се! 🎉', 'Искате ли да добавите събитието в календара си?', [
+          { text: 'Не сега', style: 'cancel' },
+          { text: 'Добави', onPress: () => addEventToCalendar(event) },
+        ])
       } else {
         await unregisterMutation.mutateAsync({
           eventId: event.id,
@@ -298,6 +305,26 @@ const EventDetailsPage = memo(function EventDetailsPage({
             >
               Създадено от {event.username}
             </Text>
+            <View style={styles.quickActions}>
+              <Button
+                mode="contained-tonal"
+                icon="share-variant"
+                compact
+                onPress={() => shareEvent(event)}
+              >
+                Сподели
+              </Button>
+              {when?.tone !== 'past' && (
+                <Button
+                  mode="contained-tonal"
+                  icon="calendar-plus"
+                  compact
+                  onPress={() => addEventToCalendar(event)}
+                >
+                  В календара
+                </Button>
+              )}
+            </View>
           </View>
 
           {/* Event Info Cards */}
@@ -324,9 +351,18 @@ const EventDetailsPage = memo(function EventDetailsPage({
                     variant="bodyLarge"
                     style={{ color: colors.onSurface, fontWeight: '600' }}
                   >
-                    {event.event_date} в {event.event_time}
+                    {formatEventDate(event.event_date, event.event_time)}
                   </Text>
                 </View>
+                {when && (
+                  <Chip
+                    compact
+                    style={{ backgroundColor: TONE_COLORS[when.tone] }}
+                    textStyle={{ color: '#fff', fontWeight: '700' }}
+                  >
+                    {when.label}
+                  </Chip>
+                )}
               </Card.Content>
             </Card>
 
@@ -439,7 +475,14 @@ const EventDetailsPage = memo(function EventDetailsPage({
                 <Button
                   mode="text"
                   icon="open-in-new"
-                  onPress={() => Alert.alert('Линк', event.link || '')}
+                  onPress={() =>
+                    event.link &&
+                    WebBrowser.openBrowserAsync(
+                      /^https?:\/\//i.test(event.link)
+                        ? event.link
+                        : `https://${event.link}`
+                    ).catch(() => Alert.alert('Линк', event.link ?? ''))
+                  }
                   contentStyle={styles.linkButtonContent}
                 >
                   Виж допълнителна информация
@@ -647,6 +690,11 @@ const styles = StyleSheet.create({
   },
   createdBy: {
     fontStyle: 'italic',
+  },
+  quickActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
   },
   infoSection: {
     gap: 12,

@@ -50,184 +50,99 @@ export async function POST(request: Request) {
   }
 }
 
-// Извличане на събития с pagination и търсене:
-// - без параметри: списък с броячи (пагиниран)
-// - ?email=...: списък + isRegistered/isInterested за този user (пагиниран)
-// - ?id=... [&email=...]: конкретно събитие (детайлна страница)
-// - ?limit=... & offset=...: pagination параметри
-// - ?search=...: търсене в име, локация и детайли
-// - ?orderBy=registeredCount&orderDir=DESC: подреждане по брой регистрирани
+// Извличане на събития:
+// - ?id=...[&email=...]       → едно събитие (детайлна страница)
+// - ?filter=upcoming          → бъдещи събития, най-близките първи (по подразбиране в UI)
+// - ?filter=registered        → събития, за които email е записан (upcomingOnly=1 → само бъдещи)
+// - ?filter=mine              → създадени от email
+// - ?filter=popular           → по брой регистрации
+// - без filter                → всички, най-новите първи (стар режим)
+// - ?search=... ?limit=... ?offset=...
+//
+// event_date е текст "<ден>,YYYY-MM-DD" → датата се вади с regex.
+const EVENT_DAY = `to_date(substring(events.event_date::text from '[0-9]{4}-[0-9]{2}-[0-9]{2}'), 'YYYY-MM-DD')`
+const TODAY = `(now() AT TIME ZONE 'Europe/Sofia')::date`
+
+const EVENT_SELECT = `
+  SELECT
+    events.*,
+    users.name AS username,
+    (er.event_id IS NOT NULL) AS "isRegistered",
+    (ei.event_id IS NOT NULL) AS "isInterested",
+    COALESCE(reg_count.count, 0)::integer AS "registeredCount",
+    COALESCE(int_count.count, 0)::integer AS "interestedCount"
+  FROM events
+  INNER JOIN users ON events.createdby = users.email
+  LEFT JOIN event_registration er ON events.id = er.event_id AND er.user_email = $1
+  LEFT JOIN event_interest ei ON events.id = ei.event_id AND ei.user_email = $1
+  LEFT JOIN (
+    SELECT event_id, COUNT(*)::integer AS count FROM event_registration GROUP BY event_id
+  ) reg_count ON events.id = reg_count.event_id
+  LEFT JOIN (
+    SELECT event_id, COUNT(*)::integer AS count FROM event_interest GROUP BY event_id
+  ) int_count ON events.id = int_count.event_id`
+
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  const email = url.searchParams.get('email')
+  const email = url.searchParams.get('email') // $1; null → флаговете са false
   const id = url.searchParams.get('id')
-  const search = url.searchParams.get('search')
-  const orderBy = url.searchParams.get('orderBy')
-  const orderDir = url.searchParams.get('orderDir')
-  const limit = Math.max(
-    1,
-    Math.min(50, Number(url.searchParams.get('limit') || 10))
-  )
+  const search = url.searchParams.get('search')?.trim()
+  const filter = url.searchParams.get('filter')
+  const upcomingOnly = url.searchParams.get('upcomingOnly') === '1'
+  const legacyPopular = url.searchParams.get('orderBy') === 'registeredCount'
+  const limit = Math.max(1, Math.min(50, Number(url.searchParams.get('limit') || 10)))
   const offset = Math.max(0, Number(url.searchParams.get('offset') || 0))
 
   try {
-    // Детайл за конкретно събитие (без pagination)
     if (id) {
-      if (email) {
-        const result = await pool.query(
-          `SELECT 
-             events.*,
-             users.name as username,
-             CASE WHEN er.event_id IS NOT NULL THEN true ELSE false END as "isRegistered",
-             CASE WHEN ei.event_id IS NOT NULL THEN true ELSE false END as "isInterested",
-             COALESCE(reg_count.count, 0)::integer as "registeredCount",
-             COALESCE(int_count.count, 0)::integer as "interestedCount"
-           FROM events
-           INNER JOIN users ON events.createdby = users.email
-           LEFT JOIN event_registration er ON events.id = er.event_id AND er.user_email = $2
-           LEFT JOIN event_interest ei ON events.id = ei.event_id AND ei.user_email = $2
-           LEFT JOIN (
-             SELECT event_id, COUNT(*)::integer as count 
-             FROM event_registration 
-             GROUP BY event_id
-           ) reg_count ON events.id = reg_count.event_id
-           LEFT JOIN (
-             SELECT event_id, COUNT(*)::integer as count 
-             FROM event_interest 
-             GROUP BY event_id
-           ) int_count ON events.id = int_count.event_id
-           WHERE events.id = $1
-           LIMIT 1`,
-          [id, email]
-        )
-        return Response.json(result.rows[0] ?? null)
-      } else {
-        const result = await pool.query(
-          `SELECT 
-             events.*,
-             users.name as username,
-             COALESCE(reg_count.count, 0)::integer as "registeredCount",
-             COALESCE(int_count.count, 0)::integer as "interestedCount"
-           FROM events
-           INNER JOIN users ON events.createdby = users.email
-           LEFT JOIN (
-             SELECT event_id, COUNT(*)::integer as count 
-             FROM event_registration 
-             GROUP BY event_id
-           ) reg_count ON events.id = reg_count.event_id
-           LEFT JOIN (
-             SELECT event_id, COUNT(*)::integer as count 
-             FROM event_interest 
-             GROUP BY event_id
-           ) int_count ON events.id = int_count.event_id
-           WHERE events.id = $1
-           LIMIT 1`,
-          [id]
-        )
-        return Response.json(result.rows[0] ?? null)
-      }
-    }
-
-    // Построяваме WHERE условията за търсене
-    const conditions: string[] = []
-    const params: any[] = []
-    let paramIndex = 1
-
-    // Ако има search параметър, добавяме търсене в name, location и details
-    if (search && search.trim()) {
-      const searchTerm = `%${search.trim()}%`
-      conditions.push(
-        `(events.name ILIKE $${paramIndex} OR events.location ILIKE $${
-          paramIndex + 1
-        } OR events.details ILIKE $${paramIndex + 2})`
-      )
-      params.push(searchTerm, searchTerm, searchTerm)
-      paramIndex += 3
-    }
-
-    // Determine the ORDER BY clause based on orderBy parameter
-    let orderByClause = 'ORDER BY events.id DESC' // Default ordering
-    if (orderBy === 'registeredCount') {
-      const direction = orderDir === 'ASC' ? 'ASC' : 'DESC'
-      orderByClause = `ORDER BY COALESCE(reg_count.count, 0) ${direction}, events.id DESC`
-    }
-
-    // Списък със събития (с pagination и търсене)
-    if (email) {
-      // Добавяме email параметър
-      params.push(email)
-      const emailParamIndex = paramIndex++
-
-      // Добавяме limit и offset
-      params.push(limit, offset)
-      const limitParamIndex = paramIndex++
-      const offsetParamIndex = paramIndex++
-
-      const whereClause =
-        conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
-
       const result = await pool.query(
-        `SELECT 
-           events.*,
-           users.name as username,
-           CASE WHEN er.event_id IS NOT NULL THEN true ELSE false END as "isRegistered",
-           CASE WHEN ei.event_id IS NOT NULL THEN true ELSE false END as "isInterested",
-           COALESCE(reg_count.count, 0)::integer as "registeredCount",
-           COALESCE(int_count.count, 0)::integer as "interestedCount"
-         FROM events
-         INNER JOIN users ON events.createdby = users.email
-         LEFT JOIN event_registration er ON events.id = er.event_id AND er.user_email = $${emailParamIndex}
-         LEFT JOIN event_interest ei ON events.id = ei.event_id AND ei.user_email = $${emailParamIndex}
-         LEFT JOIN (
-           SELECT event_id, COUNT(*)::integer as count 
-           FROM event_registration 
-           GROUP BY event_id
-         ) reg_count ON events.id = reg_count.event_id
-         LEFT JOIN (
-           SELECT event_id, COUNT(*)::integer as count 
-           FROM event_interest 
-           GROUP BY event_id
-         ) int_count ON events.id = int_count.event_id
-         ${whereClause}
-         ${orderByClause}
-         LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`,
-        params
+        `${EVENT_SELECT} WHERE events.id = $2 LIMIT 1`,
+        [email, id]
       )
-      return Response.json(result.rows)
-    } else {
-      // Добавяме limit и offset
-      params.push(limit, offset)
-      const limitParamIndex = paramIndex++
-      const offsetParamIndex = paramIndex++
-
-      const whereClause =
-        conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
-
-      const result = await pool.query(
-        `SELECT 
-           events.*,
-           users.name as username,
-           COALESCE(reg_count.count, 0)::integer as "registeredCount",
-           COALESCE(int_count.count, 0)::integer as "interestedCount"
-         FROM events
-         INNER JOIN users ON events.createdby = users.email
-         LEFT JOIN (
-           SELECT event_id, COUNT(*)::integer as count 
-           FROM event_registration 
-           GROUP BY event_id
-         ) reg_count ON events.id = reg_count.event_id
-         LEFT JOIN (
-           SELECT event_id, COUNT(*)::integer as count 
-           FROM event_interest 
-           GROUP BY event_id
-         ) int_count ON events.id = int_count.event_id
-         ${whereClause}
-         ${orderByClause}
-         LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`,
-        params
-      )
-      return Response.json(result.rows)
+      return Response.json(result.rows[0] ?? null)
     }
+
+    const params: unknown[] = [email]
+    const where: string[] = []
+
+    if (search) {
+      params.push(`%${search}%`)
+      const p = `$${params.length}`
+      where.push(`(events.name ILIKE ${p} OR events.location ILIKE ${p} OR events.details ILIKE ${p})`)
+    }
+
+    let orderBy = 'events.id DESC'
+    switch (filter) {
+      case 'upcoming':
+        where.push(`${EVENT_DAY} >= ${TODAY}`)
+        orderBy = `${EVENT_DAY} ASC, events.event_time ASC`
+        break
+      case 'registered':
+      case 'mine':
+        if (!email) return Response.json([])
+        where.push(filter === 'registered' ? 'er.event_id IS NOT NULL' : 'events.createdby = $1')
+        if (upcomingOnly) where.push(`${EVENT_DAY} >= ${TODAY}`)
+        // предстоящите (най-близките първи), после миналите (най-новите първи)
+        orderBy = `(${EVENT_DAY} < ${TODAY}) ASC,
+          CASE WHEN ${EVENT_DAY} >= ${TODAY} THEN ${EVENT_DAY} END ASC,
+          ${EVENT_DAY} DESC, events.event_time ASC`
+        break
+      case 'popular':
+        orderBy = 'COALESCE(reg_count.count, 0) DESC, COALESCE(int_count.count, 0) DESC, events.id DESC'
+        break
+      default:
+        if (legacyPopular) orderBy = 'COALESCE(reg_count.count, 0) DESC, events.id DESC'
+    }
+
+    params.push(limit, offset)
+    const result = await pool.query(
+      `${EVENT_SELECT}
+       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+       ORDER BY ${orderBy}
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
+    )
+    return Response.json(result.rows)
   } catch (error) {
     console.error('Грешка при извличане на събития:', error)
     return Response.json(

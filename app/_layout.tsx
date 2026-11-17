@@ -1,17 +1,62 @@
 // app/_layout.tsx
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import React from 'react'
-import { View, StyleSheet, StatusBar, Platform } from 'react-native'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { LinearGradient } from 'expo-linear-gradient'
+import { View, StyleSheet, StatusBar } from 'react-native'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { Stack } from 'expo-router'
-import { SafeAreaProvider } from 'react-native-safe-area-context'
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context'
 import { AuthContextProvider } from '@/context/AuthContext'
-import { ThemeProvider } from '@/context/ThemeContext'
-import Colors from '@/data/Colors'
+import { ThemeProvider, useAppTheme } from '@/context/ThemeContext'
+import { queryClient } from '@/context/QueryClient'
 
-// Initialize QueryClient once for the app
-const queryClient = new QueryClient()
+// Every route draws its own header
+const SCREENS = [
+  'index',
+  'landing',
+  '(tabs)',
+  '(auth)/SignIn',
+  '(auth)/SignUp',
+  'chat/index',
+  'chat/[id]',
+  'add-event/index',
+  'add-post/index',
+  'add-club/index',
+  'explore-clubs/index',
+  'user-page/[email]',
+  'event/[id]',
+  'settings/index',
+  'notifications/index',
+]
+
+function ThemedStack() {
+  const { isDarkMode, theme } = useAppTheme()
+  const { top } = useSafeAreaInsets()
+  return (
+    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
+      <StatusBar
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        backgroundColor="transparent"
+        translucent
+      />
+      <View style={[styles.root, { paddingTop: top }]}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: theme.colors.background },
+            animation: 'slide_from_right',
+          }}
+        >
+          {SCREENS.map((name) => (
+            <Stack.Screen key={name} name={name} />
+          ))}
+        </Stack>
+      </View>
+    </View>
+  )
+}
 
 export default function RootLayout() {
   return (
@@ -20,89 +65,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <ThemeProvider>
             <AuthContextProvider>
-              <View style={styles.root}>
-                {/* Gradient background fills the whole screen */}
-                <LinearGradient
-                  colors={['#f5f7fa', '#e0eafc', '#c9d6ff']}
-                  style={StyleSheet.absoluteFill}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                />
-                <View style={styles.flex}>
-                  <StatusBar
-                    barStyle={
-                      Platform.OS === 'ios' ? 'dark-content' : 'light-content'
-                    }
-                    backgroundColor="transparent"
-                    translucent
-                  />
-                  <View style={styles.contentWrapper}>
-                    <Stack>
-                      {/* Main and Auth Screens */}
-                      <Stack.Screen
-                        name="index"
-                        options={{ headerShown: false }}
-                      />
-                      <Stack.Screen
-                        name="landing"
-                        options={{ headerShown: false }}
-                      />
-                      <Stack.Screen
-                        name="(tabs)"
-                        options={{ headerShown: false }}
-                      />
-                      <Stack.Screen
-                        name="(auth)/SignIn"
-                        options={{ headerShown: false }}
-                      />
-                      <Stack.Screen
-                        name="(auth)/SignUp"
-                        options={{ headerShown: false }}
-                      />
-
-                      <Stack.Screen
-                        name="chat/index"
-                        options={{ headerShown: false }}
-                      />
-                      <Stack.Screen
-                        name="chat/[id]"
-                        options={{ headerShown: false }}
-                      />
-                      {/* Event Screens */}
-                      <Stack.Screen
-                        name="add-event/index"
-                        options={{ headerShown: false }}
-                      />
-                      <Stack.Screen
-                        name="add-post/index"
-                        options={{ headerShown: false }}
-                      />
-                      <Stack.Screen
-                        name="add-club/index"
-                        options={{ headerShown: false }}
-                      />
-                      <Stack.Screen
-                        name="explore-clubs/index"
-                        options={{ headerShown: false }}
-                      />
-                      <Stack.Screen
-                        name="user-page/[email]"
-                        options={{ headerShown: false }}
-                      />
-                      <Stack.Screen
-                        name="event/[eventId]"
-                        options={{ headerShown: false }}
-                      />
-                      <Stack.Screen
-                        name="settings/index"
-                        options={{ headerShown: false }}
-                      />
-
-                      {/* Add any additional screens here as needed */}
-                    </Stack>
-                  </View>
-                </View>
-              </View>
+              <ThemedStack />
             </AuthContextProvider>
           </ThemeProvider>
         </QueryClientProvider>
@@ -112,17 +75,5 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#f5f7fa',
-    position: 'relative',
-  },
-  flex: {
-    flex: 1,
-  },
-  contentWrapper: {
-    flex: 1,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight ?? 24 : 0,
-    paddingHorizontal: 0,
-  },
+  root: { flex: 1 },
 })

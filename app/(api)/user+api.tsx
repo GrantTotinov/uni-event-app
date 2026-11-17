@@ -127,8 +127,6 @@ export async function PUT(request: Request) {
       image, // ДОБАВЕНО: image поле
       contact_email,
       contact_phone,
-      currentPassword,
-      newPassword,
       uid,
     } = await request.json()
 
@@ -215,58 +213,7 @@ export async function PUT(request: Request) {
       }
     }
 
-    // Update password if provided
-    if (currentPassword && newPassword) {
-      let passwordQuery
-
-      if (email) {
-        passwordQuery = await pool.query(
-          `SELECT password FROM users WHERE email = $1`,
-          [email]
-        )
-      } else if (uid) {
-        passwordQuery = await pool.query(
-          `SELECT password FROM users WHERE uid = $1`,
-          [uid]
-        )
-      } else {
-        return Response.json(
-          { error: 'Липсват данни за идентификация' },
-          { status: 400 }
-        )
-      }
-
-      if (passwordQuery.rows.length === 0) {
-        return Response.json(
-          { error: 'Потребителят не съществува' },
-          { status: 404 }
-        )
-      }
-
-      const storedPassword = passwordQuery.rows[0].password
-
-      if (storedPassword !== currentPassword) {
-        return Response.json(
-          { error: 'Текущата парола е грешна' },
-          { status: 403 }
-        )
-      }
-
-      if (email) {
-        await pool.query(`UPDATE users SET password = $1 WHERE email = $2`, [
-          newPassword,
-          email,
-        ])
-      } else {
-        await pool.query(`UPDATE users SET password = $1 WHERE uid = $2`, [
-          newPassword,
-          uid,
-        ])
-      }
-
-      return Response.json({ message: 'Паролата е променена успешно' })
-    }
-
+    // Паролите се управляват от Firebase Auth (виж app/settings), не от тази таблица.
     return Response.json({ message: 'Няма промени' })
   } catch (error) {
     console.error('Error updating user:', error)

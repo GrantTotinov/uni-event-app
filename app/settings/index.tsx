@@ -1,204 +1,234 @@
-import React, { useContext, useState, useEffect } from 'react'
+import React, { useContext, useState } from 'react'
+import { View, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native'
 import {
-  View,
+  Surface,
   Text,
   TextInput,
-  TouchableOpacity,
-  Alert,
-  StyleSheet,
-  ScrollView,
-} from 'react-native'
+  Button,
+  IconButton,
+  SegmentedButtons,
+  useTheme,
+} from 'react-native-paper'
+import { useRouter } from 'expo-router'
+import { useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import Colors from '@/data/Colors'
+import {
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
+} from 'firebase/auth'
+import { auth } from '@/configs/FirebaseConfig'
 import { AuthContext } from '@/context/AuthContext'
+import { ThemePreference, useAppTheme } from '@/context/ThemeContext'
+
+const AUTH_ERRORS: Record<string, string> = {
+  'auth/wrong-password': 'Текущата парола е грешна.',
+  'auth/invalid-credential': 'Текущата парола е грешна.',
+  'auth/weak-password': 'Новата парола е твърде слаба (мин. 6 символа).',
+  'auth/too-many-requests': 'Твърде много опити. Опитайте по-късно.',
+  'auth/requires-recent-login': 'Моля, влезте отново и опитайте пак.',
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const theme = useTheme()
+  return (
+    <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]} elevation={1}>
+      <Text variant="titleSmall" style={[styles.sectionTitle, { color: theme.colors.primary }]}>
+        {title}
+      </Text>
+      {children}
+    </Surface>
+  )
+}
 
 export default function Settings() {
   const { user, setUser } = useContext(AuthContext)
-  const [newName, setNewName] = useState('')
-  const [contactEmail, setContactEmail] = useState('')
-  const [contactPhone, setContactPhone] = useState('')
+  const { preference, setPreference } = useAppTheme()
+  const theme = useTheme()
+  const router = useRouter()
+  const queryClient = useQueryClient()
+
+  const [name, setName] = useState(user?.name ?? '')
+  const [contactEmail, setContactEmail] = useState(user?.contact_email ?? '')
+  const [contactPhone, setContactPhone] = useState(user?.contact_phone ?? '')
+  const [savingProfile, setSavingProfile] = useState(false)
+
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    if (user) {
-      setNewName(user.name || '')
-      setContactEmail(user.contact_email || '')
-      setContactPhone(user.contact_phone || '')
-    }
-  }, [user])
+  const [showPasswords, setShowPasswords] = useState(false)
+  const [savingPassword, setSavingPassword] = useState(false)
 
   const updateProfile = async () => {
-    if (!user?.email) {
-      Alert.alert('Грешка', 'Потребителят не е намерен.')
+    if (!user?.email) return
+    if (!name.trim()) {
+      Alert.alert('Грешка', 'Името не може да е празно.')
       return
     }
-    setLoading(true)
+    setSavingProfile(true)
     try {
       await axios.put(`${process.env.EXPO_PUBLIC_HOST_URL}/user`, {
         email: user.email,
-        name: newName,
-        contact_email: contactEmail,
-        contact_phone: contactPhone,
+        name: name.trim(),
+        contact_email: contactEmail.trim(),
+        contact_phone: contactPhone.trim(),
       })
       setUser({
         ...user,
-        name: newName,
-        contact_email: contactEmail,
-        contact_phone: contactPhone,
+        name: name.trim(),
+        contact_email: contactEmail.trim(),
+        contact_phone: contactPhone.trim(),
       })
-      Alert.alert('Успех', 'Профилът е обновен успешно.')
+      queryClient.invalidateQueries({ queryKey: ['user'] })
+      Alert.alert('Готово', 'Профилът е обновен.')
     } catch (error) {
       console.error('Грешка при обновяване на профила:', error)
       Alert.alert('Грешка', 'Неуспешно обновяване на профила.')
+    } finally {
+      setSavingProfile(false)
     }
-    setLoading(false)
   }
 
-  const updatePasswordHandler = async () => {
-    if (!currentPassword || !newPassword) {
-      Alert.alert('Грешка', 'Моля, попълнете всички полета.')
+  // Passwords live in Firebase Auth, not in our DB
+  const changePassword = async () => {
+    const fbUser = auth.currentUser
+    if (!fbUser?.email) {
+      Alert.alert('Грешка', 'Моля, влезте отново.')
       return
     }
-    if (!user?.email) {
-      Alert.alert('Грешка', 'Потребителят не е намерен.')
+    if (newPassword.length < 6) {
+      Alert.alert('Грешка', 'Новата парола трябва да е поне 6 символа.')
       return
     }
-    setLoading(true)
+    setSavingPassword(true)
     try {
-      await axios.put(`${process.env.EXPO_PUBLIC_HOST_URL}/user`, {
-        email: user.email,
-        currentPassword,
-        newPassword,
-      })
-      Alert.alert('Успех', 'Паролата е успешно променена.')
+      await reauthenticateWithCredential(
+        fbUser,
+        EmailAuthProvider.credential(fbUser.email, currentPassword)
+      )
+      await updatePassword(fbUser, newPassword)
       setCurrentPassword('')
       setNewPassword('')
-    } catch (error) {
-      console.error('Грешка при промяна на паролата:', error)
-      Alert.alert('Грешка', 'Неуспешна промяна на паролата.')
+      Alert.alert('Готово', 'Паролата е сменена успешно.')
+    } catch (error: any) {
+      Alert.alert('Грешка', AUTH_ERRORS[error?.code] ?? 'Неуспешна смяна на паролата.')
+    } finally {
+      setSavingPassword(false)
     }
-    setLoading(false)
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Настройки</Text>
-
-      {/* Промяна на име */}
-      <View style={styles.section}>
-        <Text style={styles.label}>Име</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Въведете ново име"
-          value={newName}
-          onChangeText={setNewName}
-        />
-      </View>
-
-      {/* Промяна на контакт имейл */}
-      <View style={styles.section}>
-        <Text style={styles.label}>Контакт имейл</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Въведете контакт имейл"
-          value={contactEmail}
-          onChangeText={setContactEmail}
-        />
-      </View>
-
-      {/* Промяна на контакт телефон */}
-      <View style={styles.section}>
-        <Text style={styles.label}>Контакт телефон</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Въведете контакт телефон"
-          value={contactPhone}
-          onChangeText={setContactPhone}
-        />
-      </View>
-
-      <TouchableOpacity
-        onPress={updateProfile}
-        style={styles.saveButton}
-        disabled={loading}
-      >
-        <Text style={styles.saveButtonText}>
-          {loading ? 'Запазване...' : 'Запази промените'}
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <View style={styles.header}>
+        <IconButton icon="arrow-left" onPress={() => router.back()} />
+        <Text variant="titleLarge" style={styles.headerTitle}>
+          Настройки
         </Text>
-      </TouchableOpacity>
-
-      {/* Смяна на парола */}
-      <View style={styles.section}>
-        <Text style={styles.label}>Смяна на парола</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Текуща парола"
-          secureTextEntry
-          value={currentPassword}
-          onChangeText={setCurrentPassword}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Нова парола"
-          secureTextEntry
-          value={newPassword}
-          onChangeText={setNewPassword}
-        />
-        <TouchableOpacity
-          onPress={updatePasswordHandler}
-          style={styles.saveButton}
-          disabled={loading}
-        >
-          <Text style={styles.saveButtonText}>
-            {loading ? 'Запазване...' : 'Запази паролата'}
-          </Text>
-        </TouchableOpacity>
       </View>
-    </ScrollView>
+
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Section title="Външен вид">
+          <SegmentedButtons
+            value={preference}
+            onValueChange={(v) => setPreference(v as ThemePreference)}
+            buttons={[
+              { value: 'system', label: 'Система', icon: 'cellphone' },
+              { value: 'light', label: 'Светла', icon: 'white-balance-sunny' },
+              { value: 'dark', label: 'Тъмна', icon: 'weather-night' },
+            ]}
+          />
+        </Section>
+
+        <Section title="Профил">
+          <TextInput
+            mode="outlined"
+            label="Име"
+            value={name}
+            onChangeText={setName}
+            left={<TextInput.Icon icon="account" />}
+          />
+          <TextInput
+            mode="outlined"
+            label="Имейл за контакт"
+            value={contactEmail}
+            onChangeText={setContactEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            left={<TextInput.Icon icon="email-outline" />}
+          />
+          <TextInput
+            mode="outlined"
+            label="Телефон за контакт"
+            value={contactPhone}
+            onChangeText={setContactPhone}
+            keyboardType="phone-pad"
+            left={<TextInput.Icon icon="phone" />}
+          />
+          <Button
+            mode="contained"
+            icon="content-save"
+            onPress={updateProfile}
+            loading={savingProfile}
+            disabled={savingProfile}
+            style={styles.button}
+          >
+            Запази промените
+          </Button>
+        </Section>
+
+        <Section title="Сигурност">
+          <TextInput
+            mode="outlined"
+            label="Текуща парола"
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            secureTextEntry={!showPasswords}
+            autoComplete="current-password"
+            left={<TextInput.Icon icon="lock-outline" />}
+            right={
+              <TextInput.Icon
+                icon={showPasswords ? 'eye-off' : 'eye'}
+                onPress={() => setShowPasswords((s) => !s)}
+              />
+            }
+          />
+          <TextInput
+            mode="outlined"
+            label="Нова парола"
+            value={newPassword}
+            onChangeText={setNewPassword}
+            secureTextEntry={!showPasswords}
+            autoComplete="new-password"
+            left={<TextInput.Icon icon="lock-reset" />}
+          />
+          <Button
+            mode="contained-tonal"
+            icon="shield-check"
+            onPress={changePassword}
+            loading={savingPassword}
+            disabled={savingPassword || !currentPassword || !newPassword}
+            style={styles.button}
+          >
+            Смени паролата
+          </Button>
+        </Section>
+
+        <Text style={[styles.footer, { color: theme.colors.onSurfaceVariant }]}>
+          AcademiX · {user?.email}
+        </Text>
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    paddingBottom: 40,
-    backgroundColor: Colors.WHITE,
-  },
-  title: {
-    fontSize: 25,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  section: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 6,
-    color: Colors.PRIMARY,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: Colors.GRAY,
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 16,
-    color: Colors.BLACK,
-    backgroundColor: Colors.WHITE,
-  },
-  saveButton: {
-    backgroundColor: Colors.PRIMARY,
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 10,
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    color: Colors.WHITE,
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 },
+  headerTitle: { fontWeight: '700' },
+  container: { padding: 16, paddingBottom: 48, gap: 16 },
+  section: { borderRadius: 20, padding: 16, gap: 12 },
+  sectionTitle: { fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase' },
+  button: { marginTop: 4, borderRadius: 14 },
+  footer: { textAlign: 'center', fontSize: 12, marginTop: 8 },
 })
