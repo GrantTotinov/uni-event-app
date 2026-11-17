@@ -1,119 +1,69 @@
-<div align="center">
+# AcademiX
 
-# 🎓 AcademiX
+A mobile app for university students: events, interest groups, posts and chat in one place. It's my master's thesis project. The interface is in Bulgarian.
 
-### The social network of your university: events, groups, posts and chat in one app
+It runs on iOS and Android with Expo. The same code also runs in the browser.
 
-[![React Native](https://img.shields.io/badge/React_Native-0.76-61DAFB?style=for-the-badge&logo=react&logoColor=white)](https://reactnative.dev/)
-[![Expo](https://img.shields.io/badge/Expo-SDK_52-000020?style=for-the-badge&logo=expo&logoColor=white)](https://expo.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Nile-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.thenile.dev/)
+<p>
+  <img src="docs/screenshots/02-home.png" width="24%" alt="Home" />
+  <img src="docs/screenshots/03-events.png" width="24%" alt="Events" />
+  <img src="docs/screenshots/04-event-details.png" width="24%" alt="Event details" />
+  <img src="docs/screenshots/05-notifications.png" width="24%" alt="Notifications" />
+</p>
+<p>
+  <img src="docs/screenshots/06-profile-level.png" width="24%" alt="Profile level and badges" />
+  <img src="docs/screenshots/08-home-dark.png" width="24%" alt="Home, dark theme" />
+  <img src="docs/screenshots/09-events-dark.png" width="24%" alt="Events, dark theme" />
+  <img src="docs/screenshots/01-landing.png" width="24%" alt="Landing screen" />
+</p>
 
-_Master's thesis project: a cross-platform mobile app built for a Bulgarian university community (UI in Bulgarian)._
+The screenshots come from the web build with made-up demo data.
 
-</div>
+## What you can do in it
 
----
+- Browse upcoming events, register, and add them to your phone's calendar. Each card shows how soon the event starts.
+- Get notified when someone comments on your post, replies to you or follows you, and two days before an event you signed up for.
+- Join groups and post in them. Teachers and admins get their own badges, and official university (УХТ) posts get their own tab in the feed.
+- Chat one-on-one or in groups.
+- Earn points for being active. They move you up through study levels, from first-year student to professor. The home screen shows the top 10.
+- Switch between light and dark theme.
 
-## Screenshots
+## How it's built
 
-| Home | Events | Event details | Notifications |
-| :---: | :---: | :---: | :---: |
-| <img src="docs/screenshots/02-home.png" width="200" alt="Home: next event countdown, quick actions and Campus Pulse leaderboard" /> | <img src="docs/screenshots/03-events.png" width="200" alt="Upcoming events with countdown chip, calendar export and sharing" /> | <img src="docs/screenshots/04-event-details.png" width="200" alt="Event details with share and add-to-calendar actions" /> | <img src="docs/screenshots/05-notifications.png" width="200" alt="Notifications grouped by day with unread highlights" /> |
+The app is React Native with Expo Router and TypeScript. The backend consists of Expo API routes (`app/(api)`) that talk to PostgreSQL on Nile through `pg`. Firebase handles sign-in and the chat (Firestore), and images are stored on Cloudinary. TanStack Query caches the server data.
 
-| Level & badges | Dark mode | Dark mode | Welcome |
-| :---: | :---: | :---: | :---: |
-| <img src="docs/screenshots/06-profile-level.png" width="200" alt="Profile: academic level, progress and badges" /> | <img src="docs/screenshots/08-home-dark.png" width="200" alt="Home in dark mode" /> | <img src="docs/screenshots/09-events-dark.png" width="200" alt="Events in dark mode" /> | <img src="docs/screenshots/01-landing.png" width="200" alt="Landing screen" /> |
+A few things worth looking at in the code:
 
-<sub>Captured from the web build with demo data (no real users).</sub>
+- Notifications and the points leaderboard are computed with SQL from the existing tables (`app/(api)/user-notifications+api.tsx`, `app/(api)/pulse+api.tsx`). There's no extra table or background job to keep in sync.
+- Event lists are filtered on the server, and each tab requests only what it shows.
+- Registering for an event patches every cached list in place instead of refetching (`hooks/useEvents.ts`).
+- The date, countdown and calendar-file logic lives in `utils/eventDate.ts` and has unit tests.
 
-## What it does
-
-| Area | Features |
-| --- | --- |
-| **Home** | Time-of-day greeting, a **"Next event" hero** with a live day countdown, quick actions, the **Campus Pulse** leaderboard and a feed with *Latest / Popular / Official (УХТ)* tabs |
-| **Events** | Upcoming events sorted by date (past ones hidden), *My registrations*, *My events* and *Popular* tabs, search, register/interest, a countdown chip on each card (*Днес · 14:00*, *Утре*, *След 3 дни*), **Add to calendar (.ics with a 1h reminder)** and native sharing |
-| **Notifications** | Comments on your posts, replies to your comments, new followers, new posts in your groups and **reminders 2 days before events you registered for**. Grouped by *Today / Yesterday / This week / Earlier*, with an unread badge on the bell |
-| **Campus Pulse** | Activity points turn into **academic levels**: Първокурсник → Второкурсник → Бакалавър → Магистър → Докторант → Професор. Badges are unlocked by milestones. Shown on Home (top 10 + your rank) and on your profile (level card + badges) |
-| **Groups** | Explore and follow clubs, club-only posts, owner moderation |
-| **Posts** | Text, images and documents, likes, threaded comments with likes, role badges (Student / Teacher / Admin) |
-| **Chat** | Real-time 1:1 and group chat on Firestore |
-| **Profile & settings** | Avatar upload (Cloudinary), followers/following, **System / Light / Dark theme (remembered)**, contact info and a **secure password change through Firebase Auth** |
-
-### Campus Pulse scoring
-
-| Action | Points |
-| --- | --- |
-| Post | +10 |
-| Event registration | +5 |
-| Comment | +3 |
-| Like received | +2 |
-| Follower | +2 |
-
-The weights live in [`utils/pulse.ts`](utils/pulse.ts). The API passes them to SQL as parameters, so the ranking and the UI can never disagree.
-
-## Architecture
-
-```
-React Native (Expo Router) ──axios──▶ Expo API routes  app/(api)/*+api.tsx ──pg──▶ PostgreSQL (Nile)
-        │                                                         
-        ├── Firebase Auth   (sign-in, password)                   
-        ├── Firestore       (chat rooms & messages, realtime)     
-        └── Cloudinary      (image uploads)                       
-```
-
-- **Server state**: TanStack Query. Event mutations patch every cached list and the details entry in place (`useEventMutations`), so cards update without refetching.
-- **Notifications** and **Campus Pulse** are computed from existing tables with SQL (`UNION ALL` / CTE + `RANK()`). There is no extra schema and no background jobs. The *unread* state is a per-user `lastSeen` timestamp in AsyncStorage.
-- **Events filtering** happens server-side (`?filter=upcoming|registered|mine|popular`). Only the active tab fetches.
-- **Theme**: a single Material 3 palette (deep teal + warm sand) for light and dark, applied through React Native Paper.
-
-## Project structure
-
-```
-app/
-  (api)/            REST endpoints: events, post, comment, user, clubs, notifications, pulse, ...
-  (auth)/           SignIn, SignUp
-  (tabs)/           Home, Event, AddPost, Club, Profile
-  event/[id].tsx    event details
-  notifications/    notifications center
-  user-page/        public profiles
-  chat/ settings/ add-event/ add-post/ add-club/ explore-clubs/
-components/
-  Home/             Header, CampusHero, LatestPost
-  Pulse/            PulseStrip, LevelCard
-  Events/ Post/ Clubs/ User/ Shared/
-hooks/              useEvents, useNotifications, usePulse, usePosts, useComments, ...
-utils/              eventDate (dates, countdown, ICS), eventActions (share/calendar), pulse, roles
-context/            Auth, Theme, QueryClient
-configs/            Firebase, Postgres pool, Cloudinary
-```
-
-## Getting started
+## Running it
 
 ```bash
 npm install
-npm start          # Expo dev server (LAN, port 8082)
-npm run check      # TypeScript
-npx jest utils --watchAll=false   # unit tests
+npm start
 ```
 
-Create a `.env` file in the project root:
+It needs a `.env` file in the project root:
 
 ```env
-EXPO_PUBLIC_HOST_URL=http://<your-LAN-IP>:8082   # where the API routes are served
-EXPO_PUBLIC_NILE_DB_USERNAME=...
-EXPO_PUBLIC_NILE_DB_PASSWORD=...
-EXPO_PUBLIC_CLOUDINARY_NAME=...
-EXPO_PUBLIC_CLOUDINARY_API_KEY=...
-EXPO_PUBLIC_CLOUDINARY_PRESET=...
+EXPO_PUBLIC_HOST_URL=http://<your LAN IP>:8082
+EXPO_PUBLIC_NILE_DB_USERNAME=
+EXPO_PUBLIC_NILE_DB_PASSWORD=
+EXPO_PUBLIC_CLOUDINARY_NAME=
+EXPO_PUBLIC_CLOUDINARY_API_KEY=
+EXPO_PUBLIC_CLOUDINARY_PRESET=
 ```
 
-## Database tables
+Run `npm run check` for the type check and `npx jest --watchAll=false` for the tests.
 
-`users`, `post`, `likes`, `comments`, `comment_likes`, `documents`, `clubs`, `clubfollowers`, `events`, `event_registration`, `event_interest`, `user_followers`
+## Project layout
 
-`events.event_date` is stored as `"<weekday>,YYYY-MM-DD"`. Server queries extract the ISO part with a regex, and so does `utils/eventDate.ts` on the client.
-
----
-
-<div align="center">Built with React Native & Expo · © AcademiX</div>
+```
+app/          screens (Expo Router), API routes in app/(api)
+components/   UI, grouped by feature
+hooks/        data fetching and mutations
+utils/        dates, calendar export, points, roles
+```
