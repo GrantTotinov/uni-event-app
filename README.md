@@ -15,6 +15,18 @@ _Master's thesis project: a cross-platform mobile app built for a Bulgarian univ
 
 ---
 
+## Screenshots
+
+| Home | Events | Event details | Notifications |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/02-home.png" width="200" alt="Home: next event countdown, quick actions and Campus Pulse leaderboard" /> | <img src="docs/screenshots/03-events.png" width="200" alt="Upcoming events with countdown chip, calendar export and sharing" /> | <img src="docs/screenshots/04-event-details.png" width="200" alt="Event details with share and add-to-calendar actions" /> | <img src="docs/screenshots/05-notifications.png" width="200" alt="Notifications grouped by day with unread highlights" /> |
+
+| Level & badges | Dark mode | Dark mode | Welcome |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/06-profile-level.png" width="200" alt="Profile: academic level, progress and badges" /> | <img src="docs/screenshots/08-home-dark.png" width="200" alt="Home in dark mode" /> | <img src="docs/screenshots/09-events-dark.png" width="200" alt="Events in dark mode" /> | <img src="docs/screenshots/01-landing.png" width="200" alt="Landing screen" /> |
+
+<sub>Captured from the web build with demo data (no real users).</sub>
+
 ## What it does
 
 | Area | Features |

@@ -1,6 +1,6 @@
 import React, { useContext } from 'react'
 import { View, FlatList, TouchableOpacity, StyleSheet } from 'react-native'
-import { Text, ProgressBar, useTheme } from 'react-native-paper'
+import { Text, useTheme } from 'react-native-paper'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
@@ -53,11 +53,9 @@ const PulseStrip = React.memo(function PulseStrip() {
               {me?.points ?? 0} т.
             </Text>
           </View>
-          <ProgressBar
-            progress={level.progress}
-            color={Colors.PRIMARY}
-            style={styles.progress}
-          />
+          <View style={[styles.progress, { backgroundColor: theme.colors.surfaceVariant }]}>
+            <View style={[styles.progressFill, { width: `${level.progress * 100}%` }]} />
+          </View>
           <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
             {level.next
               ? `Още ${level.toNext} т. до „${level.next.title}“`
@@ -152,7 +150,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   levelRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  progress: { height: 6, borderRadius: 3 },
+  // plain Views: Paper's ProgressBar is height:100% on web and breaks the layout
+  progress: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 3, backgroundColor: Colors.PRIMARY },
   list: { gap: 14, paddingVertical: 14, paddingRight: 8 },
   person: { alignItems: 'center', width: 64 },
   ring: { borderWidth: 3, borderRadius: 32, padding: 2 },
