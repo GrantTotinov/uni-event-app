@@ -2,6 +2,7 @@ import React, { useContext } from 'react'
 import { Tabs } from 'expo-router'
 import { View, StyleSheet } from 'react-native'
 import { useTheme } from 'react-native-paper'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import * as Haptics from 'expo-haptics'
@@ -18,6 +19,7 @@ const icon =
 export default function TabLayout() {
   const { user } = useContext(AuthContext)
   const theme = useTheme()
+  const { bottom } = useSafeAreaInsets()
 
   return (
     <Tabs
@@ -31,6 +33,9 @@ export default function TabLayout() {
           {
             backgroundColor: theme.colors.surface,
             borderTopColor: theme.colors.outlineVariant,
+            // room for icon + label, plus the home-indicator inset on iOS
+            height: 68 + bottom,
+            paddingBottom: bottom + 8,
           },
         ],
         sceneStyle: { backgroundColor: theme.colors.background },
@@ -103,9 +108,8 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
-  // no fixed height: the default one adds the bottom safe-area inset
   bar: {
-    paddingTop: 4,
+    paddingTop: 6,
     borderTopWidth: StyleSheet.hairlineWidth,
     elevation: 12,
     shadowColor: '#000',

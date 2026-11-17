@@ -1,6 +1,6 @@
 import React from 'react'
 import { View, StyleSheet } from 'react-native'
-import { Text, ProgressBar, useTheme } from 'react-native-paper'
+import { Text, useTheme } from 'react-native-paper'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 
@@ -38,11 +38,9 @@ export default function LevelCard({ email }: { email?: string }) {
           </View>
         </View>
 
-        <ProgressBar
-          progress={level.progress}
-          color={Colors.GOLD}
-          style={styles.progress}
-        />
+        <View style={styles.progress}>
+          <View style={[styles.progressFill, { width: `${level.progress * 100}%` }]} />
+        </View>
         <Text style={styles.sub}>
           {level.next
             ? `Още ${level.toNext} т. до „${level.next.title}“`
@@ -106,7 +104,13 @@ const styles = StyleSheet.create({
   kicker: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
   title: { color: '#fff', fontSize: 22, fontWeight: '800' },
   points: { color: Colors.GOLD, fontSize: 26, fontWeight: '900' },
-  progress: { height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.2)' },
+  progress: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  progressFill: { height: '100%', borderRadius: 4, backgroundColor: Colors.GOLD },
   sub: { color: '#fff', fontSize: 13, fontWeight: '600' },
   howto: { color: 'rgba(255,255,255,0.7)', fontSize: 11, lineHeight: 16 },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
