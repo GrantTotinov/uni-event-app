@@ -17,6 +17,7 @@ import Colors from '@/data/Colors'
 import { isSystemAdmin } from '@/context/AuthContext'
 import { useCommentLikes } from '@/hooks/useComments'
 import { styles as baseStyles } from './styles'
+import { roleColor, roleLabel } from '@/utils/roles'
 
 interface Comment {
   id: number
@@ -123,31 +124,6 @@ const PostComments: React.FC<PostCommentsProps> = ({
 
   // Helpers
   const clearCommentSearch = () => setCommentSearchQuery('')
-  const getRoleDisplayText = (userRole?: string | null) => {
-    switch (userRole) {
-      case 'systemadmin':
-        return 'Системен Админ'
-      case 'teacher':
-        return 'Преподавател'
-      case 'user':
-      case 'student':
-      default:
-        return 'Студент'
-    }
-  }
-  const getRoleColor = (userRole?: string | null) => {
-    switch (userRole) {
-      case 'systemadmin':
-        return '#dc3545'
-      case 'teacher':
-        return '#007bff'
-      case 'user':
-      case 'student':
-      default:
-        return Colors.GRAY
-    }
-  }
-
   const handleCommentLike = async (commentId: number) => {
     if (!user?.email || isToggling) return
 
@@ -266,10 +242,10 @@ const PostComments: React.FC<PostCommentsProps> = ({
               <Text
                 style={[
                   localStyles.replyRole,
-                  { color: getRoleColor(reply.user_role) },
+                  { color: roleColor(reply.user_role) },
                 ]}
               >
-                {getRoleDisplayText(reply.user_role)}
+                {roleLabel(reply.user_role)}
               </Text>
               <Text style={localStyles.replyTime}>
                 {reply.created_at_local
@@ -478,10 +454,10 @@ const PostComments: React.FC<PostCommentsProps> = ({
                           <Text
                             style={[
                               localStyles.role,
-                              { color: getRoleColor(c.user_role) },
+                              { color: roleColor(c.user_role) },
                             ]}
                           >
-                            {getRoleDisplayText(c.user_role)}
+                            {roleLabel(c.user_role)}
                           </Text>
                           <Text style={localStyles.commentTime}>
                             {c.created_at_local

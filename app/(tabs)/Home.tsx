@@ -1,46 +1,40 @@
 // File: app/(tabs)/Home.tsx
-import { View, Text, FlatList, RefreshControl } from 'react-native'
-import React, { useState, useCallback } from 'react'
+import { FlatList, RefreshControl, View } from 'react-native'
+import React, { useState, useCallback, useRef } from 'react'
+import { useTheme } from 'react-native-paper'
+import { useQueryClient } from '@tanstack/react-query'
 import Colors from '@/data/Colors'
 import Header from '@/components/Home/Header'
-import LatestPost from '@/components/Home/LatestPost'
-import { useFocusEffect } from 'expo-router'
-import { useAppTheme } from '@/context/ThemeContext'
+import CampusHero from '@/components/Home/CampusHero'
+import PulseStrip from '@/components/Pulse/PulseStrip'
+import LatestPost, { LatestPostRef } from '@/components/Home/LatestPost'
 
 export default function Home() {
-  const { isDarkMode } = useAppTheme()
-  const [search, setSearch] = useState('')
-  const [refreshKey, setRefreshKey] = useState(0)
+  const theme = useTheme()
+  const queryClient = useQueryClient()
+  const feedRef = useRef<LatestPostRef>(null)
   const [refreshing, setRefreshing] = useState(false)
 
-  // Memoized refresh handler following performance guidelines
+  // Pull-to-refresh refetches data in place instead of remounting the screen
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      // Force refresh by updating the key
-      setRefreshKey((prevKey) => prevKey + 1)
-      // Add a small delay for UX feedback
-      await new Promise((resolve) => setTimeout(resolve, 500))
-    } catch (error) {
-      console.error('Error refreshing home:', error)
+      feedRef.current?.refresh()
+      await Promise.all(
+        ['next-event', 'pulse', 'pulse-top', 'notifications'].map((key) =>
+          queryClient.invalidateQueries({ queryKey: [key] })
+        )
+      )
     } finally {
       setRefreshing(false)
     }
-  }, [])
-
-  // Refresh the page when the tab gains focus
-  useFocusEffect(
-    useCallback(() => {
-      console.log('Home tab focused, refreshing...')
-      setRefreshKey((prevKey) => prevKey + 1)
-    }, [])
-  )
+  }, [queryClient])
 
   return (
     <FlatList
-      key={refreshKey} // Use refreshKey to force re-render
-      data={[]} // Replace with actual data if needed
+      data={[]}
       renderItem={null}
+      style={{ backgroundColor: theme.colors.background }}
       showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl
@@ -48,20 +42,20 @@ export default function Home() {
           onRefresh={onRefresh}
           tintColor={Colors.PRIMARY}
           colors={[Colors.PRIMARY]}
-          progressBackgroundColor={isDarkMode ? '#1a1a1a' : '#ffffff'}
+          progressBackgroundColor={theme.colors.surface}
           title="Обновяване..."
-          titleColor={isDarkMode ? '#ffffff' : '#000000'}
+          titleColor={theme.colors.onSurface}
         />
       }
       ListHeaderComponent={
         <View>
           <Header />
-          <LatestPost search={search} key={refreshKey} />
+          <CampusHero />
+          <PulseStrip />
+          <LatestPost ref={feedRef} search="" />
         </View>
       }
-      contentContainerStyle={{
-        flexGrow: 1,
-      }}
+      contentContainerStyle={{ flexGrow: 1 }}
     />
   )
 }

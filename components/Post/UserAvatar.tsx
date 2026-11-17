@@ -6,6 +6,7 @@ import moment from 'moment'
 import 'moment/locale/bg'
 import Colors from '@/data/Colors'
 import { useUser } from '@/hooks/useUser'
+import { roleColor, roleLabel } from '@/utils/roles'
 
 moment.locale('bg')
 
@@ -50,32 +51,6 @@ export default function UserAvatar({
       }
     } catch (error) {
       console.error('Грешка при форматиране на датата:', error)
-    }
-  }
-
-  const getRoleDisplayText = (userRole: string | null | undefined): string => {
-    switch (userRole) {
-      case 'systemadmin':
-        return 'Системен Админ'
-      case 'teacher':
-        return 'Преподавател'
-      case 'user':
-        return 'Студент'
-      default:
-        return 'Студент'
-    }
-  }
-
-  const getRoleColor = (userRole: string | null | undefined): string => {
-    switch (userRole) {
-      case 'systemadmin':
-        return '#dc3545'
-      case 'teacher':
-        return '#007bff'
-      case 'user':
-        return Colors.GRAY
-      default:
-        return Colors.GRAY
     }
   }
 
@@ -167,11 +142,11 @@ export default function UserAvatar({
               style={{
                 fontSize: 10,
                 fontWeight: 'bold',
-                color: getRoleColor(role),
+                color: roleColor(role),
                 textTransform: 'uppercase',
               }}
             >
-              {getRoleDisplayText(role)}
+              {roleLabel(role)}
             </Text>
           </View>
           <Text

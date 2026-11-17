@@ -1,45 +1,32 @@
-import React, {
-  useContext,
-  useEffect,
-  useState,
-  memo,
-  useCallback,
-  useMemo,
-} from 'react'
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Alert,
-  StyleSheet,
-  Dimensions,
-  Platform,
-} from 'react-native'
-import { Entypo, Ionicons, MaterialIcons } from '@expo/vector-icons'
+import React, { useContext, memo, useCallback, useMemo } from 'react'
+import { View, Text, TouchableOpacity, Alert, StyleSheet } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { Image } from 'expo-image'
-import * as FileSystem from 'expo-file-system'
-import * as Sharing from 'expo-sharing'
-import axios from 'axios'
-import moment from 'moment'
-import 'moment/locale/bg'
+import * as Haptics from 'expo-haptics'
 
 import Colors from '@/data/Colors'
-import { AuthContext, isSystemAdmin } from '@/context/AuthContext'
-import { useEvents } from '@/hooks/useEvents'
+import { AuthContext } from '@/context/AuthContext'
+import { useEventMutations } from '@/hooks/useEvents'
 import { useAppTheme } from '@/context/ThemeContext'
 import type { Event } from '@/hooks/useEvents'
-
-moment.locale('bg')
-
-const { width } = Dimensions.get('window')
+import { countdown, eventStart, formatEventDate } from '@/utils/eventDate'
+import { addEventToCalendar, shareEvent } from '@/utils/eventActions'
 
 interface EVENT extends Event {
   onUnregister?: () => void
   onDelete?: () => void
 }
 
-// Memoized component following performance guidelines
+export const TONE_COLORS = {
+  live: Colors.RED,
+  soon: Colors.ACCENT,
+  later: Colors.PRIMARY,
+  past: '#8d99ae',
+} as const
+
+// Counts and flags come straight from props: useEventMutations patches every
+// cached list on success, so the card re-renders with fresh values.
 const EventCard = memo(function EventCard({
   onUnregister,
   onDelete,
@@ -49,22 +36,17 @@ const EventCard = memo(function EventCard({
   const { isDarkMode } = useAppTheme()
   const router = useRouter()
 
-  // Use the events hook for mutations
-  const { registerMutation, unregisterMutation, interestMutation } = useEvents({
-    userEmail: user?.email,
-  })
+  const { registerMutation, unregisterMutation, interestMutation } =
+    useEventMutations()
 
-  // Local state for UI updates - performance optimized
-  const [isRegistered, setIsRegistered] = useState(event.isRegistered ?? false)
-  const [isInterested, setIsInterested] = useState(event.isInterested ?? false)
-  const [registeredCount, setRegisteredCount] = useState(
-    event.registeredCount ?? 0
+  const isRegistered = !!event.isRegistered
+  const isInterested = !!event.isInterested
+  const registeredCount = event.registeredCount ?? 0
+  const interestedCount = event.interestedCount ?? 0
+  const when = useMemo(
+    () => countdown(eventStart(event.event_date, event.event_time)),
+    [event.event_date, event.event_time]
   )
-  const [interestedCount, setInterestedCount] = useState(
-    event.interestedCount ?? 0
-  )
-
-  const canManage = isSystemAdmin(user?.role) || user?.email === event.createdby
 
   // Enhanced theme colors with better light/dark contrast - performance optimized
   const colors = useMemo(
@@ -123,22 +105,41 @@ const EventCard = memo(function EventCard({
           borderWidth: isDarkMode ? 1 : 0,
           borderColor: colors.outline,
         },
-        shareButton: {
+        overlayActions: {
           position: 'absolute',
           top: 12,
           right: 12,
-          backgroundColor: 'rgba(0,0,0,0.7)',
-          borderRadius: 22,
-          width: 44,
-          height: 44,
+          flexDirection: 'row',
+          gap: 8,
+          zIndex: 2,
+        },
+        shareButton: {
+          backgroundColor: 'rgba(0,0,0,0.55)',
+          borderRadius: 20,
+          width: 40,
+          height: 40,
           justifyContent: 'center',
           alignItems: 'center',
+          borderWidth: 1,
+          borderColor: 'rgba(255,255,255,0.25)',
+        },
+        countdownChip: {
+          position: 'absolute',
+          top: 14,
+          left: 14,
           zIndex: 2,
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.3,
-          shadowRadius: 4,
-          elevation: 4,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 4,
+          paddingHorizontal: 10,
+          paddingVertical: 5,
+          borderRadius: 14,
+        },
+        countdownText: {
+          color: '#fff',
+          fontSize: 12,
+          fontWeight: '700',
+          letterSpacing: 0.3,
         },
         imageContainer: {
           position: 'relative',
@@ -300,19 +301,6 @@ const EventCard = memo(function EventCard({
     [colors, isDarkMode]
   )
 
-  // Sync with props when they change - performance optimized
-  useEffect(() => {
-    setIsRegistered(event.isRegistered ?? false)
-    setIsInterested(event.isInterested ?? false)
-    setRegisteredCount(event.registeredCount ?? 0)
-    setInterestedCount(event.interestedCount ?? 0)
-  }, [
-    event.isRegistered,
-    event.isInterested,
-    event.registeredCount,
-    event.interestedCount,
-  ])
-
   // Memoized handlers following performance guidelines
   const openDetails = useCallback(() => {
     try {
@@ -340,9 +328,13 @@ const EventCard = memo(function EventCard({
             },
             {
               onSuccess: () => {
-                setIsRegistered(true)
-                setRegisteredCount((prev) => prev + 1)
-                Alert.alert('Успех!', 'Регистрирахте се успешно!')
+                Haptics.notificationAsync(
+                  Haptics.NotificationFeedbackType.Success
+                ).catch(() => {})
+                Alert.alert('Записахте се! 🎉', 'Искате ли да добавите събитието в календара си?', [
+                  { text: 'Не сега', style: 'cancel' },
+                  { text: 'Добави', onPress: () => addEventToCalendar(event) },
+                ])
               },
               onError: (error) => {
                 console.error('Register error', error)
@@ -354,7 +346,7 @@ const EventCard = memo(function EventCard({
       },
       { text: 'Отказ', style: 'cancel' },
     ])
-  }, [user?.email, event.id, registerMutation])
+  }, [user?.email, event, registerMutation])
 
   const handleUnregister = useCallback(() => {
     if (!user?.email) {
@@ -376,10 +368,8 @@ const EventCard = memo(function EventCard({
               },
               {
                 onSuccess: () => {
-                  setIsRegistered(false)
-                  setRegisteredCount((prev) => Math.max(0, prev - 1))
                   Alert.alert('Готово!', 'Вече не сте записани за събитието.')
-                  onUnregister && onUnregister()
+                  onUnregister?.()
                 },
                 onError: (error) => {
                   console.error('Unregister error', error)
@@ -400,83 +390,25 @@ const EventCard = memo(function EventCard({
       return
     }
 
-    try {
-      interestMutation.mutate(
-        {
-          eventId: event.id,
-          userEmail: user.email,
-          isInterested,
+    Haptics.selectionAsync().catch(() => {})
+    interestMutation.mutate(
+      { eventId: event.id, userEmail: user.email, isInterested },
+      {
+        onError: (error) => {
+          console.error('Interest toggle error', error)
+          Alert.alert('Грешка!', 'Неуспешна операция.')
         },
-        {
-          onSuccess: () => {
-            if (!isInterested) {
-              setIsInterested(true)
-              setInterestedCount((prev) => prev + 1)
-            } else {
-              setIsInterested(false)
-              setInterestedCount((prev) => Math.max(0, prev - 1))
-            }
-          },
-          onError: (error) => {
-            console.error('Interest toggle error', error)
-            Alert.alert('Грешка!', 'Неуспешна операция.')
-          },
-        }
-      )
-    } catch (error) {
-      console.error('Interest toggle error', error)
-      Alert.alert('Грешка!', 'Неуспешна операция.')
-    }
+      }
+    )
   }, [user?.email, event.id, isInterested, interestMutation])
 
-  const handleShare = useCallback(async () => {
-    try {
-      const eventLink = `https://academix.bg/event/${event.id}`
-      const shareText = `🎉 ${event.name}\n\n📅 ${event.event_date} в ${event.event_time}\n📍 ${event.location}\n\n${eventLink}`
+  const handleShare = useCallback(() => shareEvent(event), [event])
+  const handleCalendar = useCallback(() => addEventToCalendar(event), [event])
 
-      const isSharingAvailable = await Sharing.isAvailableAsync()
-
-      if (event.bannerurl && isSharingAvailable) {
-        const downloadResult = await FileSystem.downloadAsync(
-          event.bannerurl,
-          FileSystem.cacheDirectory + `event-${event.id}.jpg`
-        )
-
-        if (Platform.OS === 'ios') {
-          await Sharing.shareAsync(downloadResult.uri, {
-            dialogTitle: `Сподели ${event.name}`,
-            UTI: 'public.jpeg',
-            mimeType: 'image/jpeg',
-          })
-        } else {
-          await Sharing.shareAsync(downloadResult.uri)
-        }
-        return
-      }
-
-      if (isSharingAvailable) {
-        const fileUri = FileSystem.cacheDirectory + 'shared-event.txt'
-        await FileSystem.writeAsStringAsync(fileUri, shareText)
-        await Sharing.shareAsync(fileUri)
-        return
-      }
-
-      // Fallback to clipboard
-      Alert.alert(
-        'Споделяне',
-        'Информацията за събитието е копирана. Можете да я поставите където желаете.',
-        [{ text: 'OK' }]
-      )
-    } catch (error) {
-      console.error('Share error:', error)
-      Alert.alert('Грешка', 'Неуспешно споделяне.')
-    }
-  }, [event])
-
-  // Memoized formatted date - performance optimized
-  const formattedDate = useMemo(() => {
-    return `${event.event_date} в ${event.event_time}`
-  }, [event.event_date, event.event_time])
+  const formattedDate = useMemo(
+    () => formatEventDate(event.event_date, event.event_time),
+    [event.event_date, event.event_time]
+  )
 
   // Memoized loading state - performance optimized
   const isLoading = useMemo(() => {
@@ -512,16 +444,44 @@ const EventCard = memo(function EventCard({
           accessibilityLabel={`Изображение на ${event.name}`}
         />
 
-        {/* Enhanced Share Button Overlay */}
-        <TouchableOpacity
-          style={dynamicStyles.shareButton}
-          onPress={handleShare}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel="Сподели събитие"
-        >
-          <Ionicons name="share-outline" size={22} color="#ffffff" />
-        </TouchableOpacity>
+        {when && (
+          <View
+            style={[
+              dynamicStyles.countdownChip,
+              { backgroundColor: TONE_COLORS[when.tone] },
+            ]}
+          >
+            <Ionicons
+              name={when.tone === 'past' ? 'checkmark-done' : 'time-outline'}
+              size={14}
+              color="#fff"
+            />
+            <Text style={dynamicStyles.countdownText}>{when.label}</Text>
+          </View>
+        )}
+
+        <View style={dynamicStyles.overlayActions}>
+          {when?.tone !== 'past' && (
+            <TouchableOpacity
+              style={dynamicStyles.shareButton}
+              onPress={handleCalendar}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Добави в календара"
+            >
+              <Ionicons name="calendar-outline" size={20} color="#ffffff" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={dynamicStyles.shareButton}
+            onPress={handleShare}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Сподели събитие"
+          >
+            <Ionicons name="share-social-outline" size={20} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Event Content */}
@@ -536,7 +496,7 @@ const EventCard = memo(function EventCard({
         </Text>
 
         {/* Event Date */}
-        <Text style={dynamicStyles.eventDate}>{formattedDate}</Text>
+        <Text style={dynamicStyles.eventDate}>📅 {formattedDate}</Text>
 
         {/* Event Location */}
         <Text

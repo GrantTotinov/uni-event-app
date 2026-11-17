@@ -11,7 +11,6 @@ import {
   FlatList,
   StyleSheet,
   StatusBar,
-  SafeAreaView,
 } from 'react-native'
 import {
   Surface,
@@ -157,7 +156,7 @@ export default function ExploreClubs() {
   }, [GetAllClubs])
 
   return (
-    <SafeAreaView
+    <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
       <StatusBar
@@ -267,7 +266,7 @@ export default function ExploreClubs() {
           })}
         />
       )}
-    </SafeAreaView>
+    </View>
   )
 }
 

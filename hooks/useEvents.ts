@@ -1,10 +1,13 @@
 import {
+  InfiniteData,
   useInfiniteQuery,
   useMutation,
+  useQuery,
   useQueryClient,
-  QueryFunctionContext,
 } from '@tanstack/react-query'
 import axios from 'axios'
+
+const API = process.env.EXPO_PUBLIC_HOST_URL
 
 export interface Event {
   id: number
@@ -23,16 +26,8 @@ export interface Event {
   interestedCount?: number
 }
 
-export interface UseEventsOptions {
-  userEmail?: string
-  filterRegistered?: boolean
-  filterMyEvents?: boolean
-  orderByPopular?: boolean
-  enabled?: boolean
-  eventsPerPage?: number
-  prefetchNextPage?: boolean
-  searchQuery?: string
-}
+/** Server-side list filters, see app/(api)/events+api.tsx */
+export type EventFilter = 'upcoming' | 'registered' | 'mine' | 'popular'
 
 export interface EventsResponse {
   events: Event[]
@@ -41,384 +36,167 @@ export interface EventsResponse {
 
 export function useEvents({
   userEmail,
-  filterRegistered = false,
-  filterMyEvents = false,
-  orderByPopular = false,
+  filter = 'upcoming',
+  searchQuery = '',
   enabled = true,
   eventsPerPage = 10,
-  prefetchNextPage = true,
-  searchQuery = '',
-}: UseEventsOptions = {}) {
+}: {
+  userEmail?: string
+  filter?: EventFilter
+  searchQuery?: string
+  enabled?: boolean
+  eventsPerPage?: number
+} = {}) {
   const queryClient = useQueryClient()
-  const queryKey = [
-    'events',
-    userEmail,
-    filterRegistered,
-    filterMyEvents,
-    orderByPopular,
-    searchQuery,
-  ]
+  const search = searchQuery.trim()
+  const needsUser = filter === 'registered' || filter === 'mine'
 
-  const {
-    data,
-    error,
-    fetchNextPage,
-    hasNextPage,
-    isFetching,
-    isFetchingNextPage,
-    status,
-    refetch,
-  } = useInfiniteQuery<EventsResponse, Error>({
-    queryKey,
-    queryFn: async (context: QueryFunctionContext) => {
-      const pageParam =
-        typeof context.pageParam === 'number' ? context.pageParam : 0
-
-      const baseUrl = `${process.env.EXPO_PUBLIC_HOST_URL}/events`
-      const params: any = {
-        limit: eventsPerPage,
-        offset: pageParam,
-      }
-
-      // Add email parameter if provided for user-specific flags
-      if (userEmail) {
-        params.email = userEmail
-      }
-
-      // Add search query parameter if provided
-      if (searchQuery.trim()) {
-        params.search = searchQuery.trim()
-      }
-
-      // Add ordering parameter for popular events
-      if (orderByPopular) {
-        params.orderBy = 'registeredCount'
-        params.orderDir = 'DESC'
-      }
-
-      const response = await axios.get(baseUrl, { params })
-
-      let events: Event[] = response.data || []
-
-      // Apply client-side filtering if needed
-      if (filterRegistered) {
-        events = events.filter((e) => e.isRegistered)
-      }
-
-      // Filter for user's own created events
-      if (filterMyEvents && userEmail) {
-        events = events.filter((e) => e.createdby === userEmail)
-      }
-
-      // Sort by popularity if requested (backup client-side sorting)
-      if (orderByPopular && !searchQuery.trim()) {
-        events = events.sort(
-          (a, b) => (b.registeredCount || 0) - (a.registeredCount || 0)
-        )
-      }
-
-      // Disable prefetching when searching to avoid unnecessary requests
-      const shouldPrefetch = prefetchNextPage && !searchQuery.trim()
-
-      // Prefetch next page if enabled and we have a full page
-      if (shouldPrefetch && events.length === eventsPerPage) {
-        const nextOffset = pageParam + eventsPerPage
-        queryClient.prefetchInfiniteQuery({
-          queryKey,
-          queryFn: async () => {
-            const nextParams = { ...params, offset: nextOffset }
-            const nextResponse = await axios.get(baseUrl, {
-              params: nextParams,
-            })
-            let nextEvents = nextResponse.data || []
-
-            // Apply same filtering to prefetched data
-            if (filterRegistered) {
-              nextEvents = nextEvents.filter((e: Event) => e.isRegistered)
-            }
-            if (filterMyEvents && userEmail) {
-              nextEvents = nextEvents.filter(
-                (e: Event) => e.createdby === userEmail
-              )
-            }
-            if (orderByPopular && !searchQuery.trim()) {
-              nextEvents = nextEvents.sort(
-                (a: Event, b: Event) =>
-                  (b.registeredCount || 0) - (a.registeredCount || 0)
-              )
-            }
-
-            return {
-              events: nextEvents,
-              nextOffset:
-                nextEvents.length === eventsPerPage
-                  ? nextOffset + eventsPerPage
-                  : undefined,
-            }
-          },
-          initialPageParam: 0,
-          staleTime: 2 * 60 * 1000,
-        })
-      }
-
+  const query = useInfiniteQuery<EventsResponse, Error>({
+    queryKey: ['events', filter, userEmail, search],
+    queryFn: async ({ pageParam }) => {
+      const offset = typeof pageParam === 'number' ? pageParam : 0
+      const { data } = await axios.get<Event[]>(`${API}/events`, {
+        params: {
+          filter,
+          limit: eventsPerPage,
+          offset,
+          email: userEmail || undefined,
+          search: search || undefined,
+        },
+      })
+      const events = Array.isArray(data) ? data : []
       return {
         events,
         nextOffset:
-          events.length === eventsPerPage
-            ? pageParam + eventsPerPage
-            : undefined,
+          events.length === eventsPerPage ? offset + eventsPerPage : undefined,
       }
     },
-    getNextPageParam: (lastPage: EventsResponse) => lastPage.nextOffset,
-    enabled,
-    staleTime: searchQuery.trim() ? 30 * 1000 : 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    retry: 2,
-    refetchOnWindowFocus: false,
+    getNextPageParam: (last) => last.nextOffset,
     initialPageParam: 0,
+    enabled: enabled && (!needsUser || !!userEmail),
+    staleTime: search ? 30 * 1000 : 2 * 60 * 1000,
   })
 
-  // Mutation for event registration
-  const registerMutation = useMutation({
-    mutationFn: async ({
-      eventId,
-      userEmail,
-    }: {
-      eventId: number
-      userEmail: string
-    }) => {
-      return axios.post(`${process.env.EXPO_PUBLIC_HOST_URL}/event-register`, {
-        eventId,
-        userEmail,
-      })
-    },
-    onSuccess: (_, variables) => {
-      // Optimistic update for registration
-      queryClient.setQueryData(queryKey, (oldData: any) => {
-        if (!oldData) return oldData
-
-        return {
-          ...oldData,
-          pages: oldData.pages.map((page: EventsResponse) => ({
-            ...page,
-            events: Array.isArray(page.events)
-              ? page.events.map((event: Event) =>
-                  event.id === variables.eventId
-                    ? {
-                        ...event,
-                        isRegistered: true,
-                        registeredCount: (event.registeredCount || 0) + 1,
-                      }
-                    : event
-                )
-              : [],
-          })),
-        }
-      })
-    },
-  })
-
-  // Mutation for event unregistration
-  const unregisterMutation = useMutation({
-    mutationFn: async ({
-      eventId,
-      userEmail,
-    }: {
-      eventId: number
-      userEmail: string
-    }) => {
-      return axios.delete(
-        `${process.env.EXPO_PUBLIC_HOST_URL}/event-register`,
-        {
-          data: { eventId, userEmail },
-        }
-      )
-    },
-    onSuccess: (_, variables) => {
-      // Optimistic update for unregistration
-      queryClient.setQueryData(queryKey, (oldData: any) => {
-        if (!oldData) return oldData
-
-        return {
-          ...oldData,
-          pages: oldData.pages.map((page: EventsResponse) => ({
-            ...page,
-            events: Array.isArray(page.events)
-              ? page.events.map((event: Event) =>
-                  event.id === variables.eventId
-                    ? {
-                        ...event,
-                        isRegistered: false,
-                        registeredCount: Math.max(
-                          0,
-                          (event.registeredCount || 1) - 1
-                        ),
-                      }
-                    : event
-                )
-              : [],
-          })),
-        }
-      })
-    },
-  })
-
-  // Mutation for event interest
-  const interestMutation = useMutation({
-    mutationFn: async ({
-      eventId,
-      userEmail,
-      isInterested,
-    }: {
-      eventId: number
-      userEmail: string
-      isInterested: boolean
-    }) => {
-      if (isInterested) {
-        return axios.delete(
-          `${process.env.EXPO_PUBLIC_HOST_URL}/event-interest`,
-          {
-            data: { eventId, userEmail },
-          }
-        )
-      } else {
-        return axios.post(
-          `${process.env.EXPO_PUBLIC_HOST_URL}/event-interest`,
-          {
-            eventId,
-            userEmail,
-          }
-        )
-      }
-    },
-    onSuccess: (_, variables) => {
-      // Optimistic update for interest toggle
-      queryClient.setQueryData(queryKey, (oldData: any) => {
-        if (!oldData) return oldData
-
-        return {
-          ...oldData,
-          pages: oldData.pages.map((page: EventsResponse) => ({
-            ...page,
-            events: Array.isArray(page.events)
-              ? page.events.map((event: Event) =>
-                  event.id === variables.eventId
-                    ? {
-                        ...event,
-                        isInterested: !variables.isInterested,
-                        interestedCount: variables.isInterested
-                          ? Math.max(0, (event.interestedCount || 1) - 1)
-                          : (event.interestedCount || 0) + 1,
-                      }
-                    : event
-                )
-              : [],
-          })),
-        }
-      })
-    },
-  })
-
-  // Function to invalidate events cache when needed
-  const invalidateEvents = () => {
-    queryClient.invalidateQueries({ queryKey: ['events'] })
-  }
-
-  // Combine all pages into a single array
-  const events =
-    data?.pages?.flatMap((page: EventsResponse) =>
-      Array.isArray(page.events) ? page.events : []
-    ) ?? []
+  const events = query.data?.pages.flatMap((p) => p.events) ?? []
 
   return {
     events,
-    error,
-    isLoading: status === 'pending',
-    isLoadingMore: isFetchingNextPage,
-    hasMore: !!hasNextPage,
-    fetchNextPage,
-    refetch,
-    registerMutation,
-    unregisterMutation,
-    interestMutation,
-    invalidateEvents,
+    error: query.error,
+    isLoading: query.status === 'pending' && query.fetchStatus !== 'idle',
+    isRefetching: query.isRefetching && !query.isFetchingNextPage,
+    isLoadingMore: query.isFetchingNextPage,
+    hasMore: !!query.hasNextPage,
+    fetchNextPage: query.fetchNextPage,
+    refetch: query.refetch,
+    invalidateEvents: () =>
+      queryClient.invalidateQueries({ queryKey: ['events'] }),
   }
 }
 
-// Hook for all events with search capability
-export function useAllEvents(userEmail?: string, searchQuery?: string) {
-  return useEvents({
-    userEmail,
-    filterRegistered: false,
-    filterMyEvents: false,
-    orderByPopular: false,
-    enabled: true,
-    prefetchNextPage: true,
-    searchQuery,
+/**
+ * Register / interest mutations. Kept apart from useEvents so cards and the
+ * details page don't each subscribe to a list query just to get mutations.
+ * On success every cached list + the details entry is patched in place.
+ */
+export function useEventMutations() {
+  const queryClient = useQueryClient()
+
+  const patch = (eventId: number, fn: (e: Event) => Event) => {
+    queryClient.setQueriesData<InfiniteData<EventsResponse>>(
+      { queryKey: ['events'] },
+      (old) =>
+        old && {
+          ...old,
+          pages: old.pages.map((p) => ({
+            ...p,
+            events: p.events.map((e) => (e.id === eventId ? fn(e) : e)),
+          })),
+        }
+    )
+    queryClient.setQueriesData<Event | null>(
+      { queryKey: ['event-details', String(eventId)] },
+      (old) => (old ? fn(old) : old)
+    )
+    // home hero + notifications reminders depend on registrations
+    queryClient.invalidateQueries({ queryKey: ['next-event'] })
+  }
+
+  type Vars = { eventId: number; userEmail: string }
+
+  const registerMutation = useMutation({
+    mutationFn: ({ eventId, userEmail }: Vars) =>
+      axios.post(`${API}/event-register`, { eventId, userEmail }),
+    onSuccess: (_, { eventId }) =>
+      patch(eventId, (e) =>
+        e.isRegistered
+          ? e
+          : { ...e, isRegistered: true, registeredCount: (e.registeredCount ?? 0) + 1 }
+      ),
   })
+
+  const unregisterMutation = useMutation({
+    mutationFn: ({ eventId, userEmail }: Vars) =>
+      axios.delete(`${API}/event-register`, { data: { eventId, userEmail } }),
+    onSuccess: (_, { eventId }) =>
+      patch(eventId, (e) =>
+        e.isRegistered
+          ? {
+              ...e,
+              isRegistered: false,
+              registeredCount: Math.max(0, (e.registeredCount ?? 1) - 1),
+            }
+          : e
+      ),
+  })
+
+  const interestMutation = useMutation({
+    mutationFn: ({ eventId, userEmail, isInterested }: Vars & { isInterested: boolean }) =>
+      isInterested
+        ? axios.delete(`${API}/event-interest`, { data: { eventId, userEmail } })
+        : axios.post(`${API}/event-interest`, { eventId, userEmail }),
+    onSuccess: (_, { eventId, isInterested }) =>
+      patch(eventId, (e) =>
+        !!e.isInterested !== isInterested
+          ? e
+          : {
+              ...e,
+              isInterested: !isInterested,
+              interestedCount: Math.max(
+                0,
+                (e.interestedCount ?? 0) + (isInterested ? -1 : 1)
+              ),
+            }
+      ),
+  })
+
+  return { registerMutation, unregisterMutation, interestMutation }
 }
 
-// Hook for registered events only with search capability
-export function useRegisteredEvents(userEmail?: string, searchQuery?: string) {
-  return useEvents({
-    userEmail,
-    filterRegistered: true,
-    filterMyEvents: false,
-    orderByPopular: false,
-    enabled: !!userEmail,
-    prefetchNextPage: true,
-    searchQuery,
-  })
-}
-
-// Hook for user's own created events with search capability
-export function useMyEvents(userEmail?: string, searchQuery?: string) {
-  return useEvents({
-    userEmail,
-    filterRegistered: false,
-    filterMyEvents: true,
-    orderByPopular: false,
-    enabled: !!userEmail,
-    prefetchNextPage: true,
-    searchQuery,
-  })
-}
-
-// Hook for popular events (ordered by registration count) with search capability
-export function usePopularEvents(userEmail?: string, searchQuery?: string) {
-  return useEvents({
-    userEmail,
-    filterRegistered: false,
-    filterMyEvents: false,
-    orderByPopular: true,
-    enabled: true,
-    prefetchNextPage: true,
-    searchQuery,
-  })
-}
-
-// Hook for single event details
 export function useEventDetails(eventId?: string, userEmail?: string) {
-  return useInfiniteQuery<Event, Error>({
+  return useQuery<Event | null, Error>({
     queryKey: ['event-details', eventId, userEmail],
     queryFn: async () => {
-      if (!eventId) throw new Error('Event ID is required')
-
-      const url = `${
-        process.env.EXPO_PUBLIC_HOST_URL
-      }/events?id=${encodeURIComponent(eventId)}`
-      const finalUrl = userEmail
-        ? `${url}&email=${encodeURIComponent(userEmail)}`
-        : url
-
-      const { data } = await axios.get(finalUrl)
-      return data
+      const { data } = await axios.get(`${API}/events`, {
+        params: { id: eventId, email: userEmail || undefined },
+      })
+      return data ?? null
     },
     enabled: !!eventId,
-    staleTime: 2 * 60 * 1000,
-    retry: 2,
-    refetchOnWindowFocus: false,
-    initialPageParam: 0,
-    getNextPageParam: () => undefined,
+    staleTime: 60 * 1000,
+  })
+}
+
+/** Closest upcoming event the user is registered for (home hero). */
+export function useNextRegisteredEvent(userEmail?: string) {
+  return useQuery<Event | null, Error>({
+    queryKey: ['next-event', userEmail],
+    queryFn: async () => {
+      const { data } = await axios.get<Event[]>(`${API}/events`, {
+        params: { filter: 'registered', upcomingOnly: 1, limit: 1, email: userEmail },
+      })
+      return data?.[0] ?? null
+    },
+    enabled: !!userEmail,
+    staleTime: 60 * 1000,
   })
 }

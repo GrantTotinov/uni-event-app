@@ -3,7 +3,7 @@ import { View, Text, ActivityIndicator } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
-import UserProfilePage from '@/app/user-page/UserProfilePage'
+import UserProfilePage from '@/components/User/UserProfilePage'
 import Colors from '@/data/Colors'
 import Button from '@/components/Shared/Button'
 

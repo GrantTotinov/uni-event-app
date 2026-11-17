@@ -226,7 +226,7 @@ const LandingScreen = React.memo(function LandingScreen() {
               { color: theme.colors.onSurfaceVariant },
             ]}
           >
-            © 2024 AcademiX
+            © {new Date().getFullYear()} AcademiX
           </Text>
         </View>
       </Surface>
